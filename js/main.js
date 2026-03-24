@@ -24,12 +24,14 @@ class AlphaColorMatch {
         this.bindEvents();
         this.loadHistory();
         this.uiRenderer.initCreatorTable();
-        
-        // ✅ ÚNICA LÍNEA: exponer la instancia completa
         window.app = this;
-        
-        // ⚠️ NO redefinir métodos aquí. Los métodos ya están disponibles en this.
-        // Elimina cualquier línea como: window.app.showReplaceConfirm = ...
+    }
+    
+    showLoading(show) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.style.display = show ? 'flex' : 'none';
+        }
     }
     
     bindEvents() {
@@ -61,18 +63,28 @@ class AlphaColorMatch {
     
     async loadPrimaryFile(file) {
         if (!file) return;
-        const data = await this.fileHandler.parseTxtFile(file);
-        this.primaryData = data;
-        this.updateFileInfo('primary', file.name, data.length);
-        this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
+        this.showLoading(true);
+        try {
+            const data = await this.fileHandler.parseTxtFile(file);
+            this.primaryData = data;
+            this.updateFileInfo('primary', file.name, data.length);
+            this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
+        } finally {
+            this.showLoading(false);
+        }
     }
     
     async loadSecondaryFile(file) {
         if (!file) return;
-        const data = await this.fileHandler.parseTxtFile(file);
-        this.secondaryData = data;
-        this.updateFileInfo('secondary', file.name, data.length);
-        this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
+        this.showLoading(true);
+        try {
+            const data = await this.fileHandler.parseTxtFile(file);
+            this.secondaryData = data;
+            this.updateFileInfo('secondary', file.name, data.length);
+            this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
+        } finally {
+            this.showLoading(false);
+        }
     }
     
     updateFileInfo(type, filename, count) {
@@ -98,18 +110,27 @@ class AlphaColorMatch {
             return;
         }
         
-        this.actionHistory = [];
-        this.actionCounter = 0;
+        this.showLoading(true);
         
-        this.comparisonResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
-        
-        const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
-        this.updateStats(stats);
-        
-        this.saveToHistory(stats);
-        this.filterResults();
-        
-        this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias encontradas, ${stats.missing} colores no encontrados`, 'info');
+        setTimeout(() => {
+            try {
+                this.actionHistory = [];
+                this.actionCounter = 0;
+                
+                this.comparisonResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
+                
+                const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
+                this.updateStats(stats);
+                this.updateStatsBar(stats);
+                
+                this.saveToHistory(stats);
+                this.filterResults();
+                
+                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias encontradas, ${stats.missing} colores no encontrados`, 'info');
+            } finally {
+                this.showLoading(false);
+            }
+        }, 100);
     }
     
     updateStats(stats) {
@@ -118,6 +139,28 @@ class AlphaColorMatch {
         document.getElementById('diffCountDisplay').textContent = stats.differences;
         document.getElementById('missingCount').textContent = stats.missing;
         document.getElementById('diffCount').textContent = stats.differences;
+    }
+    
+    updateStatsBar(stats) {
+        const container = document.getElementById('statsBarContainer');
+        const fill = document.getElementById('statsBarFill');
+        const matchPercent = document.getElementById('matchPercent');
+        const diffPercent = document.getElementById('diffPercent');
+        const missingPercent = document.getElementById('missingPercent');
+        
+        if (stats.total > 0) {
+            container.style.display = 'block';
+            const matchPct = (stats.matches / stats.total * 100).toFixed(0);
+            const diffPct = (stats.differences / stats.total * 100).toFixed(0);
+            const missingPct = (stats.missing / stats.total * 100).toFixed(0);
+            
+            matchPercent.textContent = matchPct;
+            diffPercent.textContent = diffPct;
+            missingPercent.textContent = missingPct;
+            fill.style.width = `${matchPct}%`;
+        } else {
+            container.style.display = 'none';
+        }
     }
     
     filterResults() {
@@ -137,7 +180,6 @@ class AlphaColorMatch {
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
-    // ========== MÉTODOS PARA ACCIONES (NO REASIGNAR EN WINDOW) ==========
     showReplaceConfirm(colorId) {
         const color = this.comparisonResults.find(c => c.id === colorId);
         if (!color) return;
@@ -353,6 +395,7 @@ class AlphaColorMatch {
             document.getElementById('primaryCount').textContent = '0';
             document.getElementById('secondaryCount').textContent = '0';
             document.getElementById('searchInput').value = '';
+            document.getElementById('statsBarContainer').style.display = 'none';
             document.querySelectorAll('.filter-tab').forEach(tab => {
                 if (tab.dataset.filter === 'all') tab.classList.add('active');
                 else tab.classList.remove('active');
