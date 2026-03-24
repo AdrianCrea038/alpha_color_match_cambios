@@ -11,11 +11,11 @@
         <!-- Sidebar vertical izquierdo -->
         <aside class="sidebar">
             <div class="logo-area">
-                <!-- LOGO AGREGADO -->
                 <div class="logo-container">
                     <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="logo-image" onerror="this.style.display='none'">
                 </div>
-             <p>Comparación profesional de colores CMYK</p>
+                <h2 class="school-bus-title">ALPHA COLOR MATCH</h2>
+                <p>Comparación profesional de colores CMYK</p>
             </div>
             
             <nav class="nav-menu">
@@ -39,11 +39,27 @@
                     <div>🔄 Secundario: <span id="secondaryCount">0</span></div>
                     <div>⚠️ Diferencias: <span id="diffCount">0</span></div>
                 </div>
+                <div class="stats-bar-container" id="statsBarContainer" style="display: none;">
+                    <div class="stats-bar">
+                        <div class="stats-bar-fill" id="statsBarFill" style="width: 0%"></div>
+                    </div>
+                    <div class="stats-labels">
+                        <span>✅ <span id="matchPercent">0</span>%</span>
+                        <span>⚠️ <span id="diffPercent">0</span>%</span>
+                        <span>❌ <span id="missingPercent">0</span>%</span>
+                    </div>
+                </div>
             </div>
         </aside>
 
-        <!-- Contenido principal (resto igual) -->
+        <!-- Contenido principal -->
         <main class="main-content">
+            <!-- Loading Overlay -->
+            <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                <div class="spinner"></div>
+                <p>Procesando archivos...</p>
+            </div>
+
             <!-- Vista Comparador -->
             <div class="view-panel active" id="comparatorView">
                 <div class="upload-section">
@@ -103,17 +119,18 @@
                     <div class="table-wrapper">
                         <table class="data-table" id="comparisonTable">
                             <thead>
-                                32<th style="width: 60px">#</th>
+                                32<th style="width: 50px">#</th>
+                                    <th style="min-width: 60px">Muestra</th>
                                     <th style="min-width: 200px">Nombre del Color</th>
                                     <th style="min-width: 280px">CMYK (Principal vs Secundario)</th>
                                     <th style="min-width: 200px">LAB</th>
-                                    <th style="min-width: 180px">Estado</th>
+                                    <th style="min-width: 150px">Estado</th>
                                     <th style="min-width: 200px">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
                                 <tr>
-                                    <td colspan="6" class="empty-state">
+                                    <td colspan="7" class="empty-state">
                                         <div class="empty-icon">📂</div>
                                         <p>Cargue los archivos principal y secundario para comenzar la comparación</p>
                                     </td>
