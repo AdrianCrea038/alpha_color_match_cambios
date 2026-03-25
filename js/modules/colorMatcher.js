@@ -311,35 +311,3 @@ export class ColorMatcher {
         return stats;
     }
 }
-normalizeBaseName(name) {
-    if (!name) return '';
-    
-    // Eliminar espacios múltiples
-    let normalized = name.trim().replace(/\s+/g, ' ');
-    
-    // Buscar en el mapa de unificación
-    for (let [original, mapped] of this.nameMapping) {
-        const normalizedOriginal = original.trim().replace(/\s+/g, ' ');
-        if (normalized === normalizedOriginal) {
-            return mapped;
-        }
-    }
-    
-    return normalized;
-}
-normalizeBaseName(name) {
-    if (!name) return '';
-    
-    // Eliminar espacios múltiples
-    let normalized = name.trim().replace(/\s+/g, ' ');
-    
-    // Buscar en el mapa de unificación
-    for (let [original, mapped] of this.nameMapping) {
-        const normalizedOriginal = original.trim().replace(/\s+/g, ' ');
-        if (normalized === normalizedOriginal) {
-            return mapped;
-        }
-    }
-    
-    return normalized;
-}
