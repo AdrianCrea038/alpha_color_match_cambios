@@ -214,6 +214,23 @@ class AlphaColorMatch {
         console.log(`🗑️ Estado eliminado: ${colorId}`);
     }
     
+    // ✅ ACTUALIZAR UN SOLO COLOR EN LA VISTA (sin recargar toda la tabla)
+    updateSingleColorInView(colorId, actionTaken, reason = '') {
+        // Actualizar el resultado en memory
+        const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
+        if (resultIndex !== -1) {
+            this.comparisonResults[resultIndex] = {
+                ...this.comparisonResults[resultIndex],
+                actionTaken: actionTaken,
+                actionReason: reason,
+                actionTimestamp: new Date().toISOString()
+            };
+        }
+        
+        // Actualizar la vista completa (para mantener filtros y búsqueda)
+        this.filterResults();
+    }
+    
     replaceAllColors() {
         const diffColors = this.comparisonResults.filter(item => 
             item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(item.id)
@@ -265,7 +282,6 @@ class AlphaColorMatch {
                                 lab: color.labSecondary ? [...color.labSecondary] : (color.labPrimary || [0, 0, 0])
                             };
                             
-                            // ✅ GUARDAR ESTADO
                             this.saveActionState(color.id, 'replace', 'Reemplazo masivo');
                             replacedCount++;
                         }
@@ -341,16 +357,16 @@ class AlphaColorMatch {
                 lab: item.labSecondary ? [...item.labSecondary] : (item.labPrimary || [0, 0, 0])
             };
             
-            // ✅ GUARDAR ESTADO
             this.saveActionState(item.id, 'replace', reason);
-            
             this.compareFiles();
             this.saveActionToHistory('replace', item.id, item.name, reason);
             this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado`, 'success');
         }
     }
     
+    // ✅ MÉTODO CORREGIDO: Guarda el estado inmediatamente y actualiza la vista
     keepColor(item, reason = '') {
+        // 1. Guardar en historial de acciones
         const actionId = `action_${this.actionCounter++}`;
         this.actionHistory.push({
             id: actionId,
@@ -362,14 +378,27 @@ class AlphaColorMatch {
             reason: reason
         });
         
-        // ✅ GUARDAR ESTADO (NO MODIFICA DATOS, SOLO MARCA COMO "MANTENIDO")
+        // 2. ✅ GUARDAR ESTADO INMEDIATAMENTE EN EL MAPA
         this.saveActionState(item.id, 'keep', reason);
         
-        this.saveActionToHistory('keep', item.id, item.name, reason);
+        // 3. ✅ ACTUALIZAR EL RESULTADO EN MEMORIA
+        const resultIndex = this.comparisonResults.findIndex(r => r.id === item.id);
+        if (resultIndex !== -1) {
+            this.comparisonResults[resultIndex] = {
+                ...this.comparisonResults[resultIndex],
+                actionTaken: 'keep',
+                actionReason: reason,
+                actionTimestamp: new Date().toISOString()
+            };
+        }
         
-        // ✅ ACTUALIZAR VISTA SIN PERDER EL ESTADO
+        // 4. ✅ ACTUALIZAR LA VISTA INMEDIATAMENTE (sin recargar toda la comparación)
         this.filterResults();
         
+        // 5. Guardar en historial persistente
+        this.saveActionToHistory('keep', item.id, item.name, reason);
+        
+        // 6. Mostrar toast con opción de deshacer
         this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}". Puedes deshacer si fue un error.`, 'undo');
     }
     
@@ -393,9 +422,7 @@ class AlphaColorMatch {
         });
         this.primaryData.push(newColor);
         
-        // ✅ GUARDAR ESTADO
         this.saveActionState(item.id, 'add', reason);
-        
         this.compareFiles();
         this.saveActionToHistory('add', item.id, item.name, reason);
         this.uiRenderer.showToast(`✅ Color "${item.name}" agregado`, 'success');
@@ -426,11 +453,21 @@ class AlphaColorMatch {
         // ✅ ELIMINAR ESTADO DEL MAPA
         this.removeActionState(colorId);
         
+        // ✅ Actualizar el resultado en memoria
+        const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
+        if (resultIndex !== -1) {
+            delete this.comparisonResults[resultIndex].actionTaken;
+            delete this.comparisonResults[resultIndex].actionReason;
+            delete this.comparisonResults[resultIndex].actionTimestamp;
+        }
+        
         const actionIndex = this.actionHistory.findIndex(a => a.id === action.id);
         if (actionIndex !== -1) this.actionHistory.splice(actionIndex, 1);
         
         this.saveActionToHistory('undo', colorId, action.colorName, `Se deshizo acción de ${actionType}. Motivo: ${reason}`);
-        this.compareFiles();
+        
+        // ✅ Actualizar vista sin recargar toda la comparación
+        this.filterResults();
         
         this.uiRenderer.showToast(`↩️ Se deshizo ${actionType === 'keep' ? 'mantener' : actionType === 'replace' ? 'reemplazo' : 'adición'} para "${action.colorName}"`, 'success');
     }
