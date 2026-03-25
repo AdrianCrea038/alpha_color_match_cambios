@@ -1,6 +1,6 @@
 /**
  * Módulo ColorMatcher - Comparación inteligente de colores
- * Versión mejorada: Solo comparación CMYK con ambas fórmulas visibles
+ * Versión mejorada: Mantiene ambos nombres para colores equivalentes
  */
 
 export class ColorMatcher {
@@ -10,7 +10,7 @@ export class ColorMatcher {
             euclidean: 8.0
         };
         
-        // ✅ Tabla de unificación para nombres base (sin NK)
+        // Tabla de unificación para nombres base (sin NK)
         this.nameMapping = new Map([
             ["10FTM White", "10A White"],
             ["03sTM Black", "00A Black"],
@@ -60,25 +60,20 @@ export class ColorMatcher {
         ]);
     }
 
-    // ✅ Función para extraer el código NK
     extractNKCode(name) {
         const match = name.match(/NK\d+$/);
         return match ? match[0] : null;
     }
     
-    // ✅ Función para eliminar el código NK
     removeNKCode(name) {
         return name.replace(/\s+NK\d+$/, '').trim();
     }
     
-    // ✅ Función para normalizar el nombre base según la tabla
     normalizeBaseName(name) {
         if (!name) return '';
         
-        // Eliminar espacios múltiples
         let normalized = name.trim().replace(/\s+/g, ' ');
         
-        // Buscar en el mapa de unificación
         for (let [original, mapped] of this.nameMapping) {
             const normalizedOriginal = original.trim().replace(/\s+/g, ' ').toLowerCase();
             const normalizedName = normalized.toLowerCase();
@@ -91,21 +86,38 @@ export class ColorMatcher {
         return normalized;
     }
     
-    // ✅ Función principal de normalización para comparación
     normalizeNameForComparison(name) {
         if (!name) return '';
         
-        // Extraer y guardar el NK
         const nkCode = this.extractNKCode(name);
-        
-        // Eliminar NK para normalizar
         let nameWithoutNK = this.removeNKCode(name);
-        
-        // Normalizar el nombre base
         let normalizedBase = this.normalizeBaseName(nameWithoutNK);
         
-        // Devolver solo el nombre base normalizado (sin NK para comparación)
         return normalizedBase.toLowerCase().trim();
+    }
+    
+    // ✅ NUEVO: Obtener el nombre unificado según la tabla
+    getUnifiedName(name) {
+        if (!name) return '';
+        
+        let nameWithoutNK = this.removeNKCode(name);
+        nameWithoutNK = nameWithoutNK.trim().replace(/\s+/g, ' ');
+        
+        for (let [original, mapped] of this.nameMapping) {
+            const normalizedOriginal = original.trim().replace(/\s+/g, ' ');
+            if (nameWithoutNK === normalizedOriginal) {
+                return mapped;
+            }
+        }
+        
+        return nameWithoutNK;
+    }
+    
+    // ✅ NUEVO: Verificar si dos nombres son equivalentes según la tabla
+    areEquivalentNames(name1, name2) {
+        const unified1 = this.getUnifiedName(name1);
+        const unified2 = this.getUnifiedName(name2);
+        return unified1 === unified2;
     }
 
     smartCompare(primaryData, secondaryData) {
@@ -129,7 +141,6 @@ export class ColorMatcher {
         };
         
         for (const item of primaryData) {
-            // ✅ Usar nombre normalizado sin NK para comparación
             const normalizedName = this.normalizeNameForComparison(item.name);
             index.byNormalizedName.set(normalizedName, item);
             index.byId.set(item.id, item);
@@ -145,17 +156,19 @@ export class ColorMatcher {
     }
     
     compareSingleColor(secondary, primaryIndex, primaryData) {
-        // ✅ Usar nombre normalizado sin NK para comparación
         const normalizedName = this.normalizeNameForComparison(secondary.name);
         
         let match = primaryIndex.byNormalizedName.get(normalizedName);
+        let matchType = 'name_match';
         
         if (!match) {
             match = primaryIndex.byId.get(secondary.id);
+            if (match) matchType = 'id_match';
         }
         
         if (!match) {
             match = this.fuzzySearchByCmyk(secondary.cmyk, primaryData);
+            if (match) matchType = 'cmyk_match';
         }
         
         if (match) {
@@ -163,16 +176,27 @@ export class ColorMatcher {
             const hasDifferences = differences.some(d => Math.abs(d) > 0.01);
             const diffPercentage = this.calculateDifferencePercentage(match.cmyk, secondary.cmyk);
             
+            // ✅ Obtener nombres unificados
+            const unifiedName = this.getUnifiedName(secondary.name);
+            const primaryUnifiedName = this.getUnifiedName(match.name);
+            
+            // ✅ Verificar si son equivalentes (mismo color según tabla)
+            const areEquivalent = this.areEquivalentNames(match.name, secondary.name);
+            
             return {
                 id: secondary.id,
                 name: secondary.name,
+                primaryName: match.name,  // ✅ Guardar el nombre del principal
+                secondaryName: secondary.name,  // ✅ Guardar el nombre del secundario
+                unifiedName: unifiedName,  // ✅ Nombre unificado para referencia
                 cmykPrimary: match.cmyk,
                 cmykSecondary: secondary.cmyk,
                 labPrimary: match.lab,
                 labSecondary: secondary.lab,
                 status: hasDifferences ? 'diff' : 'match',
                 matchFound: true,
-                matchType: this.getMatchType(match, secondary),
+                matchType: matchType,
+                areEquivalent: areEquivalent,  // ✅ Indica si son equivalentes según tabla
                 differences: differences,
                 diffPercentage: diffPercentage,
                 originalName: match.name,
@@ -184,6 +208,7 @@ export class ColorMatcher {
         return {
             id: secondary.id,
             name: secondary.name,
+            secondaryName: secondary.name,
             cmykSecondary: secondary.cmyk,
             labSecondary: secondary.lab,
             cmykPrimary: null,
@@ -191,6 +216,7 @@ export class ColorMatcher {
             status: 'missing',
             matchFound: false,
             matchType: 'none',
+            areEquivalent: false,
             message: `❌ No se encontró el color "${secondary.name}" en el archivo principal`,
             recommendation: 'Agregar este color a la referencia principal'
         };
