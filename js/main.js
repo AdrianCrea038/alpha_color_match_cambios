@@ -20,6 +20,10 @@ class AlphaColorMatch {
         
         this.actionStateMap = new Map();
         
+        // Almacenar colores faltantes para mostrar
+        this.missingInPrimary = [];
+        this.missingInSecondary = [];
+        
         this.init();
     }
     
@@ -121,13 +125,11 @@ class AlphaColorMatch {
         return normalizedBase;
     }
     
-    // Extraer código NK del nombre
     extractNKCode(fullName) {
         const match = fullName.match(/NK\d+$/);
         return match ? match[0] : null;
     }
     
-    // Extraer nombre base sin NK
     extractBaseName(fullName) {
         return fullName.replace(/\s+NK\d+$/, '').trim();
     }
@@ -201,29 +203,10 @@ class AlphaColorMatch {
                 
                 if (this.primaryData.length > 0 && this.secondaryData.length > 0) {
                     console.log('🔄 Regenerando comparación con datos guardados...');
-                    const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
-                    
-                    this.comparisonResults = rawResults.map(result => {
-                        const uniqueId = this.getUniqueColorId(result);
-                        const savedStateItem = this.actionStateMap.get(uniqueId);
-                        if (savedStateItem) {
-                            return {
-                                ...result,
-                                actionTaken: savedStateItem.actionTaken,
-                                actionReason: savedStateItem.reason,
-                                actionTimestamp: savedStateItem.timestamp
-                            };
-                        }
-                        return result;
-                    });
-                    
-                    const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
-                    this.updateStats(stats);
-                    this.updateStatsBar(stats);
-                    this.saveToHistory(stats);
-                    this.filterResults();
-                    this.uiRenderer.showToast(`💾 Datos recuperados: ${this.primaryData.length} colores`, 'success');
+                    this.updateMissingColors();
+                    this.performComparison();
                 } else if (hasData) {
+                    this.updateMissingColors();
                     this.uiRenderer.showToast(`📂 Datos cargados: ${this.primaryData.length} colores en referencia`, 'info');
                     this.filterResults();
                 }
@@ -247,8 +230,9 @@ class AlphaColorMatch {
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
             this.saveFullState();
+            this.updateMissingColors();
             if (this.secondaryData.length > 0) {
-                this.compareFiles();
+                this.performComparison();
             } else {
                 this.filterResults();
             }
@@ -269,8 +253,9 @@ class AlphaColorMatch {
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
             this.saveFullState();
+            this.updateMissingColors();
             if (this.primaryData.length > 0) {
-                this.compareFiles();
+                this.performComparison();
             }
         } catch (error) {
             console.error('Error al cargar archivo secundario:', error);
@@ -280,176 +265,191 @@ class AlphaColorMatch {
         }
     }
     
-    compareFiles() {
-        if (this.primaryData.length === 0) {
-            this.uiRenderer.showToast('⚠️ Por favor, cargue el archivo principal primero', 'warning');
-            return;
-        }
-        if (this.secondaryData.length === 0) {
-            this.uiRenderer.showToast('⚠️ Por favor, cargue el archivo secundario para comparar', 'warning');
+    // Método para detectar colores faltantes en ambos archivos
+    updateMissingColors() {
+        this.missingInPrimary = [];
+        this.missingInSecondary = [];
+        
+        if (this.primaryData.length === 0 || this.secondaryData.length === 0) {
             return;
         }
         
-        this.showLoading(true);
+        // Crear mapas por ID y por nombre unificado
+        const primaryById = new Map();
+        const primaryByUnifiedName = new Map();
+        const secondaryById = new Map();
+        const secondaryByUnifiedName = new Map();
         
-        setTimeout(() => {
-            try {
-                // Crear mapas por ID y por nombre unificado
-                const primaryById = new Map();
-                const primaryByUnifiedName = new Map();
-                const secondaryById = new Map();
-                const secondaryByUnifiedName = new Map();
-                
-                for (const color of this.primaryData) {
-                    primaryById.set(color.id, color);
-                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
-                    if (!primaryByUnifiedName.has(unifiedName)) {
-                        primaryByUnifiedName.set(unifiedName, []);
-                    }
-                    primaryByUnifiedName.get(unifiedName).push(color);
-                }
-                
-                for (const color of this.secondaryData) {
-                    secondaryById.set(color.id, color);
-                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
-                    if (!secondaryByUnifiedName.has(unifiedName)) {
-                        secondaryByUnifiedName.set(unifiedName, []);
-                    }
-                    secondaryByUnifiedName.get(unifiedName).push(color);
-                }
-                
-                // Detectar colores que faltan en secundario (por ID)
-                const missingInSecondaryById = [];
-                for (const [id, color] of primaryById) {
-                    if (!secondaryById.has(id)) {
-                        missingInSecondaryById.push(color.name);
-                    }
-                }
-                
-                // Detectar colores que faltan en principal (por ID)
-                const missingInPrimaryById = [];
-                for (const [id, color] of secondaryById) {
-                    if (!primaryById.has(id)) {
-                        missingInPrimaryById.push(color.name);
-                    }
-                }
-                
-                // También detectar por nombre equivalente (por si hay nombres diferentes pero equivalentes)
-                const missingInSecondaryByName = [];
-                const missingInPrimaryByName = [];
-                
-                // Para cada color en principal, verificar si hay un equivalente en secundario
-                for (const color of this.primaryData) {
-                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
-                    const hasEquivalent = secondaryByUnifiedName.has(unifiedName);
-                    
-                    if (!hasEquivalent && !secondaryById.has(color.id)) {
-                        missingInSecondaryByName.push(color.name);
-                    }
-                }
-                
-                // Para cada color en secundario, verificar si hay un equivalente en principal
-                for (const color of this.secondaryData) {
-                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
-                    const hasEquivalent = primaryByUnifiedName.has(unifiedName);
-                    
-                    if (!hasEquivalent && !primaryById.has(color.id)) {
-                        missingInPrimaryByName.push(color.name);
-                    }
-                }
-                
-                // Combinar resultados (evitar duplicados)
-                const missingInSecondary = [...new Set([...missingInSecondaryById, ...missingInSecondaryByName])];
-                const missingInPrimary = [...new Set([...missingInPrimaryById, ...missingInPrimaryByName])];
-                
-                // Mostrar en consola los colores faltantes
-                if (missingInSecondary.length > 0) {
-                    console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO SECUNDARIO ⚠️⚠️⚠️`);
-                    console.warn(`Total: ${missingInSecondary.length} colores`);
-                    missingInSecondary.forEach(name => console.warn(`   ❌ ${name}`));
-                    
-                    let message = `❌ FALTAN en SECUNDARIO: ${missingInSecondary.length} colores`;
-                    this.uiRenderer.showToast(message, 'warning');
-                    this.showMissingColorsAlert('secundario', missingInSecondary);
-                }
-                
-                if (missingInPrimary.length > 0) {
-                    console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO PRINCIPAL ⚠️⚠️⚠️`);
-                    console.warn(`Total: ${missingInPrimary.length} colores`);
-                    missingInPrimary.forEach(name => console.warn(`   ❌ ${name}`));
-                    
-                    let message = `❌ FALTAN en PRINCIPAL: ${missingInPrimary.length} colores`;
-                    this.uiRenderer.showToast(message, 'warning');
-                    this.showMissingColorsAlert('principal', missingInPrimary);
-                }
-                
-                if (missingInSecondary.length === 0 && missingInPrimary.length === 0) {
-                    this.uiRenderer.showToast('✅ Todos los colores tienen su pareja en ambos archivos', 'success');
-                }
-                
-                // Actualizar estadísticas para mostrar en la interfaz
-                const stats = {
-                    total: this.comparisonResults.length,
-                    matches: this.comparisonResults.filter(r => r.status === 'match').length,
-                    differences: this.comparisonResults.filter(r => r.status === 'diff').length,
-                    missing: missingInSecondary.length + missingInPrimary.length
-                };
-                
-                this.updateStats(stats);
-                this.updateStatsBar(stats);
-                
-                const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
-                
-                // Filtrar resultados: solo mantener los que tienen pareja
-                const filteredResults = rawResults.filter(result => {
-                    if (result.status === 'missing') return false;
-                    return true;
-                });
-                
-                this.comparisonResults = filteredResults.map(result => {
-                    const uniqueId = this.getUniqueColorId(result);
-                    const savedState = this.actionStateMap.get(uniqueId);
-                    if (savedState) {
-                        return {
-                            ...result,
-                            actionTaken: savedState.actionTaken,
-                            actionReason: savedState.reason,
-                            actionTimestamp: savedState.timestamp
-                        };
-                    }
-                    return result;
-                });
-                
-                this.saveToHistory(stats);
-                this.filterResults();
-                this.saveFullState();
-                
-                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.matches} coincidencias`, 'info');
-            } catch (error) {
-                console.error('Error al comparar archivos:', error);
-                this.uiRenderer.showToast('❌ Error al comparar los archivos', 'error');
-            } finally {
-                this.showLoading(false);
+        for (const color of this.primaryData) {
+            primaryById.set(color.id, color);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            if (!primaryByUnifiedName.has(unifiedName)) {
+                primaryByUnifiedName.set(unifiedName, []);
             }
-        }, 100);
+            primaryByUnifiedName.get(unifiedName).push(color);
+        }
+        
+        for (const color of this.secondaryData) {
+            secondaryById.set(color.id, color);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            if (!secondaryByUnifiedName.has(unifiedName)) {
+                secondaryByUnifiedName.set(unifiedName, []);
+            }
+            secondaryByUnifiedName.get(unifiedName).push(color);
+        }
+        
+        // Detectar colores que faltan en secundario (por ID y por nombre equivalente)
+        for (const color of this.primaryData) {
+            const hasById = secondaryById.has(color.id);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            const hasEquivalent = secondaryByUnifiedName.has(unifiedName);
+            
+            if (!hasById && !hasEquivalent) {
+                this.missingInSecondary.push({
+                    id: color.id,
+                    name: color.name,
+                    reason: 'No existe en secundario'
+                });
+            } else if (!hasById && hasEquivalent) {
+                // Tiene equivalente pero con diferente ID/nombre
+                this.missingInSecondary.push({
+                    id: color.id,
+                    name: color.name,
+                    reason: 'Tiene nombre equivalente pero ID diferente'
+                });
+            }
+        }
+        
+        // Detectar colores que faltan en principal (por ID y por nombre equivalente)
+        for (const color of this.secondaryData) {
+            const hasById = primaryById.has(color.id);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            const hasEquivalent = primaryByUnifiedName.has(unifiedName);
+            
+            if (!hasById && !hasEquivalent) {
+                this.missingInPrimary.push({
+                    id: color.id,
+                    name: color.name,
+                    reason: 'No existe en principal'
+                });
+            } else if (!hasById && hasEquivalent) {
+                this.missingInPrimary.push({
+                    id: color.id,
+                    name: color.name,
+                    reason: 'Tiene nombre equivalente pero ID diferente'
+                });
+            }
+        }
+        
+        // Mostrar en consola
+        if (this.missingInSecondary.length > 0) {
+            console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO SECUNDARIO ⚠️⚠️⚠️`);
+            console.warn(`Total: ${this.missingInSecondary.length} colores`);
+            this.missingInSecondary.forEach(m => console.warn(`   ❌ ID:${m.id} - ${m.name} (${m.reason})`));
+        }
+        
+        if (this.missingInPrimary.length > 0) {
+            console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO PRINCIPAL ⚠️⚠️⚠️`);
+            console.warn(`Total: ${this.missingInPrimary.length} colores`);
+            this.missingInPrimary.forEach(m => console.warn(`   ❌ ID:${m.id} - ${m.name} (${m.reason})`));
+        }
+        
+        // Actualizar estadísticas en la interfaz
+        this.updateStatsDisplay();
     }
     
-    // Método para mostrar alerta de colores faltantes en la interfaz
-    showMissingColorsAlert(archivo, colores) {
+    updateStatsDisplay() {
+        const totalMissing = this.missingInPrimary.length + this.missingInSecondary.length;
+        const missingEl = document.getElementById('missingCount');
+        if (missingEl) missingEl.textContent = totalMissing;
+        
+        const totalEl = document.getElementById('totalCount');
+        if (totalEl) totalEl.textContent = this.comparisonResults.length;
+        
+        const matchEl = document.getElementById('matchCount');
+        if (matchEl) matchEl.textContent = this.comparisonResults.filter(r => r.status === 'match').length;
+        
+        const diffDisplayEl = document.getElementById('diffCountDisplay');
+        if (diffDisplayEl) diffDisplayEl.textContent = this.comparisonResults.filter(r => r.status === 'diff').length;
+        
+        const diffCountEl = document.getElementById('diffCount');
+        if (diffCountEl) diffCountEl.textContent = this.comparisonResults.filter(r => r.status === 'diff').length;
+        
+        // Actualizar barra de estadísticas
+        const container = document.getElementById('statsBarContainer');
+        const fill = document.getElementById('statsBarFill');
+        const matchPercent = document.getElementById('matchPercent');
+        const diffPercent = document.getElementById('diffPercent');
+        const missingPercent = document.getElementById('missingPercent');
+        
+        const totalCompared = this.comparisonResults.length;
+        if (totalCompared > 0 && container) {
+            container.style.display = 'block';
+            const matches = this.comparisonResults.filter(r => r.status === 'match').length;
+            const diffs = this.comparisonResults.filter(r => r.status === 'diff').length;
+            const matchPct = (matches / totalCompared * 100).toFixed(0);
+            const diffPct = (diffs / totalCompared * 100).toFixed(0);
+            const missingPct = (totalMissing / (totalCompared + totalMissing) * 100).toFixed(0);
+            
+            if (matchPercent) matchPercent.textContent = matchPct;
+            if (diffPercent) diffPercent.textContent = diffPct;
+            if (missingPercent) missingPercent.textContent = missingPct;
+            if (fill) fill.style.width = `${matchPct}%`;
+        }
+        
+        // Mostrar alerta si hay colores faltantes
+        if (this.missingInSecondary.length > 0 || this.missingInPrimary.length > 0) {
+            this.showMissingColorsSummary();
+        }
+    }
+    
+    showMissingColorsSummary() {
+        // Crear un resumen en la interfaz (toast con resumen)
+        let message = '';
+        if (this.missingInSecondary.length > 0) {
+            message += `❌ Faltan en SECUNDARIO: ${this.missingInSecondary.length} colores. `;
+        }
+        if (this.missingInPrimary.length > 0) {
+            message += `❌ Faltan en PRINCIPAL: ${this.missingInPrimary.length} colores. `;
+        }
+        if (message) {
+            this.uiRenderer.showToast(message, 'warning');
+        }
+    }
+    
+    showMissingColorsDetail(archivo) {
+        const colores = archivo === 'secundario' ? this.missingInSecondary : this.missingInPrimary;
         if (colores.length === 0) return;
         
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-content" style="max-width: 600px;">
                 <div class="modal-header" style="background: #991b1b; border-bottom: none;">
-                    <h3 style="color: white;">⚠️ Colores faltantes en archivo ${archivo === 'principal' ? 'PRINCIPAL' : 'SECUNDARIO'}</h3>
+                    <h3 style="color: white;">⚠️ Colores faltantes en archivo ${archivo === 'secundario' ? 'SECUNDARIO' : 'PRINCIPAL'}</h3>
                     <button class="modal-close" style="color: white;">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Los siguientes colores <strong>NO tienen pareja</strong> en el archivo ${archivo === 'principal' ? 'principal' : 'secundario'}:</p>
-                    <div style="max-height: 350px; overflow-y: auto; background: #1e1e2c; border-radius: 0.5rem; padding: 0.75rem; margin-top: 1rem; font-family: monospace;">
-                        ${colores.map(name => `<div style="padding: 0.5rem; border-bottom: 1px solid #2d3748; font-size: 0.8rem;">❌ ${name}</div>`).join('')}
+                    <p>Los siguientes colores <strong>NO tienen pareja</strong> en el archivo ${archivo === 'secundario' ? 'secundario' : 'principal'}:</p>
+                    <div style="max-height: 400px; overflow-y: auto; background: #1e1e2c; border-radius: 0.5rem; margin-top: 1rem;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #2d3748;">
+                                    <th style="padding: 0.5rem; text-align: left;">ID</th>
+                                    <th style="padding: 0.5rem; text-align: left;">Nombre</th>
+                                    <th style="padding: 0.5rem; text-align: left;">Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${colores.map(c => `
+                                    <tr style="border-bottom: 1px solid #2d3748;">
+                                        <td style="padding: 0.5rem;">${c.id}</td>
+                                        <td style="padding: 0.5rem; font-family: monospace;">${c.name}</td>
+                                        <td style="padding: 0.5rem; color: #fbbf24;">${c.reason}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
                     </div>
                     <p style="margin-top: 1rem; color: #fbbf24; background: rgba(251, 191, 36, 0.1); padding: 0.75rem; border-radius: 0.5rem;">
                         ⚠️ Estos colores <strong>NO se exportarán</strong> porque no tienen su par en el otro archivo.
@@ -476,41 +476,65 @@ class AlphaColorMatch {
         };
     }
     
-    updateStats(stats) {
-        const totalEl = document.getElementById('totalCount');
-        const matchEl = document.getElementById('matchCount');
-        const diffDisplayEl = document.getElementById('diffCountDisplay');
-        const missingEl = document.getElementById('missingCount');
-        const diffCountEl = document.getElementById('diffCount');
-        
-        if (totalEl) totalEl.textContent = stats.total || 0;
-        if (matchEl) matchEl.textContent = stats.matches || 0;
-        if (diffDisplayEl) diffDisplayEl.textContent = stats.differences || 0;
-        if (missingEl) missingEl.textContent = stats.missing || 0;
-        if (diffCountEl) diffCountEl.textContent = stats.differences || 0;
+    performComparison() {
+        try {
+            const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
+            
+            // Filtrar resultados: solo mantener los que tienen pareja
+            const filteredResults = rawResults.filter(result => {
+                if (result.status === 'missing') return false;
+                return true;
+            });
+            
+            this.comparisonResults = filteredResults.map(result => {
+                const uniqueId = this.getUniqueColorId(result);
+                const savedState = this.actionStateMap.get(uniqueId);
+                if (savedState) {
+                    return {
+                        ...result,
+                        actionTaken: savedState.actionTaken,
+                        actionReason: savedState.reason,
+                        actionTimestamp: savedState.timestamp
+                    };
+                }
+                return result;
+            });
+            
+            this.updateStatsDisplay();
+            this.filterResults();
+            this.saveFullState();
+            
+            const stats = {
+                total: this.comparisonResults.length,
+                matches: this.comparisonResults.filter(r => r.status === 'match').length,
+                differences: this.comparisonResults.filter(r => r.status === 'diff').length,
+                missing: this.missingInPrimary.length + this.missingInSecondary.length
+            };
+            this.saveToHistory(stats);
+            
+            this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.matches} coincidencias`, 'info');
+        } catch (error) {
+            console.error('Error al comparar archivos:', error);
+            this.uiRenderer.showToast('❌ Error al comparar los archivos', 'error');
+        }
     }
     
-    updateStatsBar(stats) {
-        const container = document.getElementById('statsBarContainer');
-        const fill = document.getElementById('statsBarFill');
-        const matchPercent = document.getElementById('matchPercent');
-        const diffPercent = document.getElementById('diffPercent');
-        const missingPercent = document.getElementById('missingPercent');
-        
-        const total = (stats.matches || 0) + (stats.differences || 0);
-        if (total > 0 && container) {
-            container.style.display = 'block';
-            const matchPct = ((stats.matches || 0) / total * 100).toFixed(0);
-            const diffPct = ((stats.differences || 0) / total * 100).toFixed(0);
-            const missingPct = ((stats.missing || 0) / (stats.missing + total) * 100).toFixed(0);
-            
-            if (matchPercent) matchPercent.textContent = matchPct;
-            if (diffPercent) diffPercent.textContent = diffPct;
-            if (missingPercent) missingPercent.textContent = missingPct;
-            if (fill) fill.style.width = `${matchPct}%`;
-        } else if (container) {
-            container.style.display = 'none';
+    compareFiles() {
+        if (this.primaryData.length === 0) {
+            this.uiRenderer.showToast('⚠️ Por favor, cargue el archivo principal primero', 'warning');
+            return;
         }
+        if (this.secondaryData.length === 0) {
+            this.uiRenderer.showToast('⚠️ Por favor, cargue el archivo secundario para comparar', 'warning');
+            return;
+        }
+        
+        this.showLoading(true);
+        setTimeout(() => {
+            this.updateMissingColors();
+            this.performComparison();
+            this.showLoading(false);
+        }, 100);
     }
     
     filterResults() {
@@ -819,7 +843,7 @@ class AlphaColorMatch {
             return;
         }
         
-        // Crear mapas por ID para encontrar colores que tienen pareja
+        // Crear mapas por ID
         const primaryById = new Map();
         const secondaryById = new Map();
         
@@ -858,24 +882,20 @@ class AlphaColorMatch {
         if (excludedPrimary.length > 0) {
             console.warn(`🚫 EXCLUIDOS de exportación (solo en PRINCIPAL): ${excludedPrimary.length}`);
             excludedPrimary.forEach(name => console.warn(`   - ${name}`));
-            this.showMissingColorsAlert('principal (excluidos)', excludedPrimary);
         }
         
         if (excludedSecondary.length > 0) {
             console.warn(`🚫 EXCLUIDOS de exportación (solo en SECUNDARIO): ${excludedSecondary.length}`);
             excludedSecondary.forEach(name => console.warn(`   - ${name}`));
-            this.showMissingColorsAlert('secundario (excluidos)', excludedSecondary);
         }
         
         // Mapa para valores sincronizados por ID
         const syncedValuesMap = new Map();
         
-        // Determinar valores sincronizados para cada ID común
         for (const id of commonIds) {
             const primaryColor = primaryById.get(id);
             const secondaryColor = secondaryById.get(id);
             
-            // Buscar decisión del usuario
             let decisionCmyk = null;
             let decisionLab = null;
             
@@ -901,11 +921,10 @@ class AlphaColorMatch {
             }
         }
         
-        // Construir lista de colores a exportar (solo con IDs comunes)
+        // Construir lista de colores a exportar
         const colorsToExport = [];
         const processedIds = new Set();
         
-        // Procesar cada ID común
         for (const id of commonIds) {
             const primaryColor = primaryById.get(id);
             const secondaryColor = secondaryById.get(id);
@@ -913,7 +932,6 @@ class AlphaColorMatch {
             
             if (!syncedValues) continue;
             
-            // Verificar si los nombres son equivalentes según la tabla
             const areEquivalent = primaryColor && secondaryColor && 
                 this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
             
@@ -929,7 +947,6 @@ class AlphaColorMatch {
                 processedIds.add(`${id}_${primaryColor.name}`);
             }
             
-            // Si son equivalentes (nombres diferentes según tabla) y tienen secundario, agregar el secundario también
             if (secondaryColor && areEquivalent && !isSameName && !processedIds.has(`${id}_${secondaryColor.name}`)) {
                 colorsToExport.push({
                     name: secondaryColor.name,
@@ -940,16 +957,14 @@ class AlphaColorMatch {
             }
         }
         
-        // Ordenar por ID numérico (extrayendo el número del nombre o usando el ID)
         colorsToExport.sort((a, b) => {
             const numA = parseInt(a.name.match(/^(\d+)/)?.[1] || '0');
             const numB = parseInt(b.name.match(/^(\d+)/)?.[1] || '0');
             return numA - numB;
         });
         
-        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con IDs comunes en ambos archivos)`);
+        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con IDs comunes)`);
         
-        // Generar contenido del archivo con números correlativos
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -1038,6 +1053,8 @@ class AlphaColorMatch {
             this.actionHistory = [];
             this.actionStateMap.clear();
             this.searchTerm = '';
+            this.missingInPrimary = [];
+            this.missingInSecondary = [];
             
             this.clearFullState();
             
