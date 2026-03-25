@@ -647,60 +647,101 @@ class AlphaColorMatch {
         }
     }
     
-    // MÉTODO EXPORTAR CORREGIDO - Mantiene un registro por color con valores sincronizados
+    // ✅ MÉTODO EXPORTAR CORREGIDO - Exporta AMBOS registros con valores sincronizados
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
-        // Mapa para rastrear qué colores ya hemos agregado (por ID)
-        const addedIds = new Set();
-        const allColorsToExport = [];
+        // Mapa para almacenar los valores sincronizados por grupo equivalente
+        const syncedValuesMap = new Map(); // clave = unifiedName, valor = { cmyk, lab }
         
-        // Primero, agregar todos los colores del archivo principal (con sus valores actuales)
-        for (const color of this.primaryData) {
-            if (!addedIds.has(color.id)) {
-                allColorsToExport.push({
-                    id: color.id,
-                    name: color.name,
-                    cmyk: [...color.cmyk],
-                    lab: [...color.lab]
-                });
-                addedIds.add(color.id);
-            }
-        }
-        
-        // Luego, agregar colores del secundario que NO estén ya en el principal
-        for (const color of this.secondaryData) {
-            if (!addedIds.has(color.id)) {
-                // Buscar si este color es equivalente a algún color ya agregado
-                let isEquivalent = false;
-                let equivalentColor = null;
+        // Primero, determinar qué valores sincronizados usar para cada grupo equivalente
+        for (const result of this.comparisonResults) {
+            if (result.areEquivalent && result.unifiedName) {
+                const unifiedKey = result.unifiedName;
                 
-                for (const existing of allColorsToExport) {
-                    if (this.colorMatcher.areEquivalentNames(existing.name, color.name)) {
-                        isEquivalent = true;
-                        equivalentColor = existing;
+                // Verificar si el usuario tomó una decisión sobre este color
+                let decisionCmyk = null;
+                let decisionLab = null;
+                
+                // Buscar en actionStateMap por el colorId
+                for (const [uniqueId, state] of this.actionStateMap) {
+                    if (state.colorId === result.id) {
+                        if (state.actionTaken === 'replace') {
+                            decisionCmyk = [...result.cmykSecondary];
+                            decisionLab = [...result.labSecondary];
+                        } else if (state.actionTaken === 'keep') {
+                            decisionCmyk = [...result.cmykPrimary];
+                            decisionLab = [...result.labPrimary];
+                        }
                         break;
                     }
                 }
                 
-                if (isEquivalent && equivalentColor) {
-                    // Si es equivalente, NO lo agregamos como nuevo registro
-                    // Solo registramos en consola para depuración
-                    console.log(`🔗 Color equivalente omitido: "${color.name}" es equivalente a "${equivalentColor.name}" (valores sincronizados)`);
-                } else {
-                    // Si no es equivalente, agregarlo como nuevo color
-                    allColorsToExport.push({
-                        id: color.id,
-                        name: color.name,
-                        cmyk: [...color.cmyk],
-                        lab: [...color.lab]
+                // Si hay decisión del usuario, usar esos valores
+                if (decisionCmyk) {
+                    syncedValuesMap.set(unifiedKey, {
+                        cmyk: decisionCmyk,
+                        lab: decisionLab
                     });
-                    addedIds.add(color.id);
+                } 
+                // Si no hay decisión, usar los valores del principal por defecto
+                else if (result.cmykPrimary) {
+                    syncedValuesMap.set(unifiedKey, {
+                        cmyk: [...result.cmykPrimary],
+                        lab: [...result.labPrimary]
+                    });
+                }
+                // Si no hay principal, usar los del secundario
+                else if (result.cmykSecondary) {
+                    syncedValuesMap.set(unifiedKey, {
+                        cmyk: [...result.cmykSecondary],
+                        lab: [...result.labSecondary]
+                    });
                 }
             }
+        }
+        
+        // Colección de todos los colores a exportar (AMBOS archivos)
+        const allColorsToExport = [];
+        const addedIds = new Set();
+        
+        // Función para obtener el unifiedName de un color
+        const getUnifiedKey = (color) => {
+            return this.colorMatcher.getUnifiedName(color.name);
+        };
+        
+        // Agregar TODOS los colores del archivo principal
+        for (const color of this.primaryData) {
+            const unifiedKey = getUnifiedKey(color);
+            const syncedValues = syncedValuesMap.get(unifiedKey);
+            
+            allColorsToExport.push({
+                id: color.id,
+                name: color.name,
+                cmyk: syncedValues ? [...syncedValues.cmyk] : [...color.cmyk],
+                lab: syncedValues ? [...syncedValues.lab] : [...color.lab],
+                unifiedKey: unifiedKey
+            });
+            addedIds.add(color.id);
+        }
+        
+        // Agregar TODOS los colores del archivo secundario
+        for (const color of this.secondaryData) {
+            const unifiedKey = getUnifiedKey(color);
+            const syncedValues = syncedValuesMap.get(unifiedKey);
+            
+            // Siempre agregar el color secundario (no importa si ya existe el principal)
+            allColorsToExport.push({
+                id: color.id,
+                name: color.name,
+                cmyk: syncedValues ? [...syncedValues.cmyk] : [...color.cmyk],
+                lab: syncedValues ? [...syncedValues.lab] : [...color.lab],
+                unifiedKey: unifiedKey,
+                isSecondary: true
+            });
         }
         
         // Ordenar por ID
@@ -710,7 +751,23 @@ class AlphaColorMatch {
             return numA - numB;
         });
         
-        console.log(`📤 Exportando ${allColorsToExport.length} colores únicos`);
+        // Mostrar en consola qué sincronizaciones se hicieron
+        console.log(`📤 Exportando ${allColorsToExport.length} colores totales (Principal: ${this.primaryData.length}, Secundario: ${this.secondaryData.length})`);
+        
+        // Mostrar grupos sincronizados
+        const syncGroups = new Map();
+        for (const color of allColorsToExport) {
+            if (!syncGroups.has(color.unifiedKey)) {
+                syncGroups.set(color.unifiedKey, []);
+            }
+            syncGroups.get(color.unifiedKey).push(color.name);
+        }
+        
+        for (const [unifiedKey, names] of syncGroups) {
+            if (names.length > 1) {
+                console.log(`   🔗 Grupo "${unifiedKey}": ${names.join(', ')} → todos con los mismos valores CMYK`);
+            }
+        }
         
         // Generar contenido del archivo
         let content = 'CGATS.17\n';
@@ -739,7 +796,7 @@ class AlphaColorMatch {
         a.click();
         URL.revokeObjectURL(url);
         
-        this.uiRenderer.showToast(`📥 Exportados ${allColorsToExport.length} colores`, 'success');
+        this.uiRenderer.showToast(`📥 Exportados ${allColorsToExport.length} colores (${syncGroups.size} grupos sincronizados)`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
