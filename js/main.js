@@ -36,17 +36,33 @@ class AlphaColorMatch {
             btn.addEventListener('click', (e) => this.switchView(btn.dataset.view));
         });
         
-        document.getElementById('primaryFileInput').addEventListener('change', (e) => this.loadPrimaryFile(e.target.files[0]));
-        document.getElementById('secondaryFileInput').addEventListener('change', (e) => this.loadSecondaryFile(e.target.files[0]));
+        const primaryInput = document.getElementById('primaryFileInput');
+        const secondaryInput = document.getElementById('secondaryFileInput');
         
-        document.getElementById('compareBtn').addEventListener('click', () => this.compareFiles());
-        document.getElementById('replaceAllBtn')?.addEventListener('click', () => this.replaceAllColors());
-        document.getElementById('exportResultsBtn').addEventListener('click', () => this.exportResults());
-        document.getElementById('clearAllBtn').addEventListener('click', () => this.clearAll());
-        document.getElementById('clearHistoryBtn')?.addEventListener('click', () => this.clearHistory());
-        document.getElementById('downloadTxtBtn')?.addEventListener('click', () => this.downloadCreatorFile());
-        document.getElementById('addColorRowBtn')?.addEventListener('click', () => this.uiRenderer.addCreatorRow());
-        document.getElementById('resetCreatorBtn')?.addEventListener('click', () => this.uiRenderer.resetCreatorTable());
+        if (primaryInput) {
+            primaryInput.addEventListener('change', (e) => this.loadPrimaryFile(e.target.files[0]));
+        }
+        if (secondaryInput) {
+            secondaryInput.addEventListener('change', (e) => this.loadSecondaryFile(e.target.files[0]));
+        }
+        
+        const compareBtn = document.getElementById('compareBtn');
+        const replaceAllBtn = document.getElementById('replaceAllBtn');
+        const exportResultsBtn = document.getElementById('exportResultsBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+        const addColorRowBtn = document.getElementById('addColorRowBtn');
+        const resetCreatorBtn = document.getElementById('resetCreatorBtn');
+        
+        if (compareBtn) compareBtn.addEventListener('click', () => this.compareFiles());
+        if (replaceAllBtn) replaceAllBtn.addEventListener('click', () => this.replaceAllColors());
+        if (exportResultsBtn) exportResultsBtn.addEventListener('click', () => this.exportResults());
+        if (clearAllBtn) clearAllBtn.addEventListener('click', () => this.clearAll());
+        if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+        if (downloadTxtBtn) downloadTxtBtn.addEventListener('click', () => this.downloadCreatorFile());
+        if (addColorRowBtn) addColorRowBtn.addEventListener('click', () => this.uiRenderer.addCreatorRow());
+        if (resetCreatorBtn) resetCreatorBtn.addEventListener('click', () => this.uiRenderer.resetCreatorTable());
         
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
@@ -78,17 +94,22 @@ class AlphaColorMatch {
     updateFileInfo(type, filename, count) {
         const infoDiv = document.getElementById(`${type}FileInfo`);
         if (infoDiv) {
-            infoDiv.querySelector('.filename').textContent = filename;
-            infoDiv.querySelector('.record-count').textContent = `${count} registro${count !== 1 ? 's' : ''}`;
+            const filenameSpan = infoDiv.querySelector('.filename');
+            const recordCountSpan = infoDiv.querySelector('.record-count');
+            if (filenameSpan) filenameSpan.textContent = filename;
+            if (recordCountSpan) recordCountSpan.textContent = `${count} registro${count !== 1 ? 's' : ''}`;
         }
         if (type === 'primary') {
-            document.getElementById('primaryCount').textContent = count;
+            const primaryCount = document.getElementById('primaryCount');
+            if (primaryCount) primaryCount.textContent = count;
         } else {
-            document.getElementById('secondaryCount').textContent = count;
+            const secondaryCount = document.getElementById('secondaryCount');
+            if (secondaryCount) secondaryCount.textContent = count;
         }
     }
     
     getUniqueColorId(color) {
+        if (!color) return '';
         const normalizedName = this.colorMatcher.normalizeNameForComparison(color.name);
         return `${color.id}_${normalizedName}`;
     }
@@ -103,7 +124,7 @@ class AlphaColorMatch {
     saveFullState() {
         try {
             const searchInput = document.getElementById('searchInput');
-            const currentSearchTerm = searchInput ? searchInput.value : '';
+            const currentSearchTerm = searchInput ? searchInput.value : this.searchTerm || '';
             
             const fullState = {
                 primaryData: this.primaryData,
@@ -214,11 +235,15 @@ class AlphaColorMatch {
             this.primaryData = data;
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
-            this.actionStateMap.clear();
             this.saveFullState();
             if (this.secondaryData.length > 0) {
                 this.compareFiles();
+            } else {
+                this.filterResults();
             }
+        } catch (error) {
+            console.error('Error al cargar archivo principal:', error);
+            this.uiRenderer.showToast('❌ Error al cargar el archivo principal', 'error');
         } finally {
             this.showLoading(false);
         }
@@ -236,6 +261,9 @@ class AlphaColorMatch {
             if (this.primaryData.length > 0) {
                 this.compareFiles();
             }
+        } catch (error) {
+            console.error('Error al cargar archivo secundario:', error);
+            this.uiRenderer.showToast('❌ Error al cargar el archivo secundario', 'error');
         } finally {
             this.showLoading(false);
         }
@@ -279,6 +307,9 @@ class AlphaColorMatch {
                 this.saveFullState();
                 
                 this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.missing} no encontrados`, 'info');
+            } catch (error) {
+                console.error('Error al comparar archivos:', error);
+                this.uiRenderer.showToast('❌ Error al comparar los archivos', 'error');
             } finally {
                 this.showLoading(false);
             }
@@ -323,24 +354,27 @@ class AlphaColorMatch {
     
     filterResults() {
         let filtered = [...this.comparisonResults];
+        
         if (this.currentFilter !== 'all') {
             filtered = filtered.filter(item => item.status === this.currentFilter);
         }
         
-        const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
-        if (searchTerm) {
+        const currentSearchTerm = this.searchTerm || (document.getElementById('searchInput')?.value || '');
+        if (currentSearchTerm) {
+            const searchLower = currentSearchTerm.toLowerCase();
             filtered = filtered.filter(item => {
-                return item.name.toLowerCase().includes(searchTerm) ||
-                       item.id.includes(searchTerm) ||
-                       (item.cmykPrimary && item.cmykPrimary.some(v => v.toString().includes(searchTerm))) ||
-                       (item.cmykSecondary && item.cmykSecondary.some(v => v.toString().includes(searchTerm)));
+                return (item.name && item.name.toLowerCase().includes(searchLower)) ||
+                       (item.id && item.id.includes(searchLower)) ||
+                       (item.cmykPrimary && item.cmykPrimary.some(v => v.toString().includes(searchLower))) ||
+                       (item.cmykSecondary && item.cmykSecondary.some(v => v.toString().includes(searchLower)));
             });
         }
+        
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
     saveActionState(colorId, actionTaken, reason = '') {
-        const color = this.comparisonResults.find(c => c.id === colorId);
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (color) {
             const uniqueId = this.getUniqueColorId(color);
             this.actionStateMap.set(uniqueId, {
@@ -351,32 +385,31 @@ class AlphaColorMatch {
                 colorName: color.name
             });
             console.log(`✅ Estado guardado: ${uniqueId} -> ${actionTaken}`);
+            this.saveFullState();
         } else {
             console.warn(`⚠️ No se encontró color con ID: ${colorId}`);
         }
-        this.saveFullState();
     }
     
     removeActionState(colorId) {
-        const color = this.comparisonResults.find(c => c.id === colorId);
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (color) {
             const uniqueId = this.getUniqueColorId(color);
             this.actionStateMap.delete(uniqueId);
             console.log(`🗑️ Estado eliminado: ${uniqueId}`);
+            this.saveFullState();
         }
-        this.saveFullState();
     }
     
     showReplaceConfirm(colorId) {
         console.log(`🔍 Buscando color con ID: ${colorId} para reemplazar`);
-        const color = this.comparisonResults.find(c => c.id === colorId);
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color) {
             console.error(`❌ No se encontró color con ID: ${colorId}`);
             this.uiRenderer.showToast('Error: No se encontró el color', 'error');
             return;
         }
         console.log(`✅ Color encontrado: ${color.name} (ID: ${color.id})`);
-        console.log(`   CMYK Secundario: ${color.cmykSecondary.join(', ')}`);
         this.uiRenderer.showReplaceConfirm(colorId, (reason) => {
             this.replaceColor(color, reason);
         });
@@ -384,7 +417,7 @@ class AlphaColorMatch {
     
     showKeepConfirm(colorId) {
         console.log(`🔍 Buscando color con ID: ${colorId} para mantener`);
-        const color = this.comparisonResults.find(c => c.id === colorId);
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color) {
             console.error(`❌ No se encontró color con ID: ${colorId}`);
             this.uiRenderer.showToast('Error: No se encontró el color', 'error');
@@ -397,7 +430,7 @@ class AlphaColorMatch {
     }
     
     showAddConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c.id === colorId);
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color) return;
         this.uiRenderer.showAddConfirm(colorId, color.name, (reason) => {
             this.addMissingColor(color, reason);
@@ -412,7 +445,6 @@ class AlphaColorMatch {
     
     replaceColor(item, reason = '') {
         console.log(`🔄 Reemplazando color: ${item.name} (ID: ${item.id})`);
-        console.log(`   CMYK a aplicar: ${item.cmykSecondary.join(', ')}`);
         
         const normalizedItemName = this.colorMatcher.normalizeNameForComparison(item.name);
         
@@ -429,8 +461,6 @@ class AlphaColorMatch {
         
         const originalColor = this.primaryData[index];
         console.log(`✅ Color encontrado en primaryData: ${originalColor.name}`);
-        console.log(`   CMYK original: ${originalColor.cmyk.join(', ')}`);
-        console.log(`   CMYK nuevo: ${item.cmykSecondary.join(', ')}`);
         
         const previousState = {
             id: originalColor.id,
@@ -457,9 +487,6 @@ class AlphaColorMatch {
             lab: item.labSecondary ? [...item.labSecondary] : (originalColor.lab || [0, 0, 0])
         };
         
-        console.log(`✅ Color reemplazado exitosamente`);
-        console.log(`   Nuevos valores: ${this.primaryData[index].cmyk.join(', ')}`);
-        
         this.saveActionState(item.id, 'replace', reason);
         this.saveFullState();
         this.compareFiles();
@@ -483,7 +510,7 @@ class AlphaColorMatch {
         
         this.saveActionState(item.id, 'keep', reason);
         
-        const resultIndex = this.comparisonResults.findIndex(r => r.id === item.id);
+        const resultIndex = this.comparisonResults.findIndex(r => r && r.id === item.id);
         if (resultIndex !== -1) {
             this.comparisonResults[resultIndex] = {
                 ...this.comparisonResults[resultIndex],
@@ -540,7 +567,7 @@ class AlphaColorMatch {
                     cmyk: [...action.previousState.cmyk],
                     lab: [...action.previousState.lab]
                 };
-                console.log(`↩️ Color restaurado a valores anteriores: ${action.previousState.cmyk.join(', ')}`);
+                console.log(`↩️ Color restaurado a valores anteriores`);
             }
         } else if (action.type === 'add') {
             const index = this.primaryData.findIndex(p => p.id === colorId);
@@ -549,7 +576,7 @@ class AlphaColorMatch {
         
         this.removeActionState(colorId);
         
-        const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
+        const resultIndex = this.comparisonResults.findIndex(r => r && r.id === colorId);
         if (resultIndex !== -1) {
             delete this.comparisonResults[resultIndex].actionTaken;
             delete this.comparisonResults[resultIndex].actionReason;
@@ -567,7 +594,7 @@ class AlphaColorMatch {
     
     replaceAllColors() {
         const diffColors = this.comparisonResults.filter(item => 
-            item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(this.getUniqueColorId(item))
+            item && item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(this.getUniqueColorId(item))
         );
         
         if (diffColors.length === 0) {
@@ -698,11 +725,6 @@ class AlphaColorMatch {
         
         console.log(`📤 Exportando ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`);
         
-        for (const [canonicalName, data] of groupMap) {
-            const namesList = Array.from(data.names.values()).map(n => n.name).join(', ');
-            console.log(`   Grupo "${canonicalName}": ${data.names.size} nombres - ${namesList}`);
-        }
-        
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -749,8 +771,10 @@ class AlphaColorMatch {
     }
     
     saveToHistory(stats) {
-        const primaryFilename = document.getElementById('primaryFileInfo')?.querySelector('.filename')?.textContent || 'Desconocido';
-        const secondaryFilename = document.getElementById('secondaryFileInfo')?.querySelector('.filename')?.textContent || 'Desconocido';
+        const primaryInfo = document.getElementById('primaryFileInfo');
+        const secondaryInfo = document.getElementById('secondaryFileInfo');
+        const primaryFilename = primaryInfo?.querySelector('.filename')?.textContent || 'Desconocido';
+        const secondaryFilename = secondaryInfo?.querySelector('.filename')?.textContent || 'Desconocido';
         
         const historyItem = {
             id: Date.now(),
@@ -800,18 +824,27 @@ class AlphaColorMatch {
             if (primaryInput) primaryInput.value = '';
             if (secondaryInput) secondaryInput.value = '';
             if (primaryInfo) {
-                primaryInfo.querySelector('.filename').textContent = 'Ningún archivo cargado';
-                primaryInfo.querySelector('.record-count').textContent = '';
+                const filenameSpan = primaryInfo.querySelector('.filename');
+                const recordCountSpan = primaryInfo.querySelector('.record-count');
+                if (filenameSpan) filenameSpan.textContent = 'Ningún archivo cargado';
+                if (recordCountSpan) recordCountSpan.textContent = '';
             }
             if (secondaryInfo) {
-                secondaryInfo.querySelector('.filename').textContent = 'Ningún archivo cargado';
-                secondaryInfo.querySelector('.record-count').textContent = '';
+                const filenameSpan = secondaryInfo.querySelector('.filename');
+                const recordCountSpan = secondaryInfo.querySelector('.record-count');
+                if (filenameSpan) filenameSpan.textContent = 'Ningún archivo cargado';
+                if (recordCountSpan) recordCountSpan.textContent = '';
             }
             
-            document.getElementById('primaryCount').textContent = '0';
-            document.getElementById('secondaryCount').textContent = '0';
+            const primaryCount = document.getElementById('primaryCount');
+            const secondaryCount = document.getElementById('secondaryCount');
+            if (primaryCount) primaryCount.textContent = '0';
+            if (secondaryCount) secondaryCount.textContent = '0';
             
-            if (searchInput) searchInput.value = '';
+            if (searchInput) {
+                searchInput.value = '';
+                this.searchTerm = '';
+            }
             if (statsContainer) statsContainer.style.display = 'none';
             
             document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -819,6 +852,19 @@ class AlphaColorMatch {
                 else tab.classList.remove('active');
             });
             this.currentFilter = 'all';
+            
+            const totalCount = document.getElementById('totalCount');
+            const matchCount = document.getElementById('matchCount');
+            const diffCountDisplay = document.getElementById('diffCountDisplay');
+            const missingCount = document.getElementById('missingCount');
+            const diffCount = document.getElementById('diffCount');
+            
+            if (totalCount) totalCount.textContent = '0';
+            if (matchCount) matchCount.textContent = '0';
+            if (diffCountDisplay) diffCountDisplay.textContent = '0';
+            if (missingCount) missingCount.textContent = '0';
+            if (diffCount) diffCount.textContent = '0';
+            
             this.filterResults();
             this.uiRenderer.showToast('Todos los datos han sido limpiados', 'info');
         }
