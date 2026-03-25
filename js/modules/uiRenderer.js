@@ -88,7 +88,11 @@ export class UIRenderer {
                 else diffSeverityClass = 'diff-severity-high';
             }
             
-            // Swatch de color basado en CMYK (usar el valor principal si existe, si no el secundario)
+            // ✅ CORRECCIÓN: Definir diffHighlight correctamente
+            const diffHighlight = item.status === 'diff' ? 'diff-highlight' : 
+                                 (item.status === 'missing' ? 'missing-highlight' : '');
+            
+            // Swatch de color basado en CMYK
             const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
             const swatchColor = cmykForSwatch ? this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : '#2d3748';
             
