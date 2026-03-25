@@ -292,8 +292,8 @@ class AlphaColorMatch {
                 this.missingInSecondary.push({
                     id: color.id,
                     name: color.name,
-                    cmyk: color.cmyk,
-                    lab: color.lab,
+                    cmyk: color.cmyk ? [...color.cmyk] : [0, 0, 0, 0],
+                    lab: color.lab ? [...color.lab] : [0, 0, 0],
                     reason: 'No existe en secundario'
                 });
             }
@@ -305,8 +305,8 @@ class AlphaColorMatch {
                 this.missingInPrimary.push({
                     id: color.id,
                     name: color.name,
-                    cmyk: color.cmyk,
-                    lab: color.lab,
+                    cmyk: color.cmyk ? [...color.cmyk] : [0, 0, 0, 0],
+                    lab: color.lab ? [...color.lab] : [0, 0, 0],
                     reason: 'No existe en principal'
                 });
             }
@@ -330,7 +330,7 @@ class AlphaColorMatch {
     buildComparisonResults() {
         const results = [];
         
-        // Primero, comparar colores que existen en ambos archivos (por ID)
+        // Crear mapas por ID
         const primaryById = new Map();
         const secondaryById = new Map();
         
@@ -378,13 +378,14 @@ class AlphaColorMatch {
             });
         }
         
-        // Agregar colores que faltan en secundario (solo en principal)
+        // ✅ Agregar colores que faltan en secundario (solo en principal)
+        console.log(`📝 Agregando ${this.missingInSecondary.length} colores faltantes en SECUNDARIO`);
         for (const missing of this.missingInSecondary) {
             results.push({
                 id: missing.id,
                 name: missing.name,
-                cmykPrimary: missing.cmyk,
-                labPrimary: missing.lab,
+                cmykPrimary: missing.cmyk ? [...missing.cmyk] : [0, 0, 0, 0],
+                labPrimary: missing.lab ? [...missing.lab] : [0, 0, 0],
                 cmykSecondary: null,
                 labSecondary: null,
                 status: 'missing',
@@ -394,15 +395,16 @@ class AlphaColorMatch {
             });
         }
         
-        // Agregar colores que faltan en principal (solo en secundario)
+        // ✅ Agregar colores que faltan en principal (solo en secundario)
+        console.log(`📝 Agregando ${this.missingInPrimary.length} colores faltantes en PRINCIPAL`);
         for (const missing of this.missingInPrimary) {
             results.push({
                 id: missing.id,
                 name: missing.name,
                 cmykPrimary: null,
                 labPrimary: null,
-                cmykSecondary: missing.cmyk,
-                labSecondary: missing.lab,
+                cmykSecondary: missing.cmyk ? [...missing.cmyk] : [0, 0, 0, 0],
+                labSecondary: missing.lab ? [...missing.lab] : [0, 0, 0],
                 status: 'missing',
                 matchFound: false,
                 message: `❌ No se encontró en el archivo principal`,
@@ -416,6 +418,8 @@ class AlphaColorMatch {
             const numB = parseInt(b.id) || 0;
             return numA - numB;
         });
+        
+        console.log(`📊 Total resultados: ${results.length} (comunes: ${commonIds.size}, faltantes: ${this.missingInSecondary.length + this.missingInPrimary.length})`);
         
         return results;
     }
@@ -535,7 +539,7 @@ class AlphaColorMatch {
                     ` : ''}
                     
                     <p style="margin-top: 1rem; color: #fbbf24; background: rgba(251, 191, 36, 0.1); padding: 0.75rem; border-radius: 0.5rem;">
-                        ⚠️ Estos colores aparecen como <strong>"NO ENCONTRADOS"</strong> en la tabla y <strong>NO se exportarán</strong>.
+                        ⚠️ Estos colores aparecen como <strong>"NO ENCONTRADOS"</strong> en la tabla.
                     </p>
                 </div>
                 <div class="modal-buttons" style="padding: 1rem; border-top: 1px solid #2d3748;">
