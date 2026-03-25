@@ -17,6 +17,9 @@ class AlphaColorMatch {
         this.actionHistory = [];
         this.actionCounter = 0;
         
+        // ✅ NUEVO: Mapa para persistir el estado de las acciones
+        this.actionStateMap = new Map(); // key: colorId, value: { actionTaken, reason, timestamp }
+        
         this.init();
     }
     
@@ -70,6 +73,8 @@ class AlphaColorMatch {
             this.primaryData = data;
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
+            // ✅ Limpiar estado de acciones al cargar nuevo archivo
+            this.actionStateMap.clear();
         } finally {
             this.showLoading(false);
         }
@@ -83,6 +88,8 @@ class AlphaColorMatch {
             this.secondaryData = data;
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
+            // ✅ Limpiar estado de acciones al cargar nuevo archivo
+            this.actionStateMap.clear();
         } finally {
             this.showLoading(false);
         }
@@ -115,10 +122,22 @@ class AlphaColorMatch {
         
         setTimeout(() => {
             try {
-                this.actionHistory = [];
-                this.actionCounter = 0;
+                // Generar nuevos resultados de comparación
+                const newResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
-                this.comparisonResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
+                // ✅ RESTAURAR el estado de acciones persistido
+                this.comparisonResults = newResults.map(result => {
+                    const savedState = this.actionStateMap.get(result.id);
+                    if (savedState) {
+                        return {
+                            ...result,
+                            actionTaken: savedState.actionTaken,
+                            actionReason: savedState.reason,
+                            actionTimestamp: savedState.timestamp
+                        };
+                    }
+                    return result;
+                });
                 
                 const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
                 this.updateStats(stats);
@@ -181,10 +200,23 @@ class AlphaColorMatch {
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
-    // ✅ NUEVO MÉTODO: Reemplazar todos los colores con diferencias
+    // ✅ MÉTODO PARA PERSISTIR EL ESTADO DE UNA ACCIÓN
+    persistActionState(colorId, actionTaken, reason = '') {
+        this.actionStateMap.set(colorId, {
+            actionTaken: actionTaken,
+            reason: reason,
+            timestamp: new Date().toISOString()
+        });
+    }
+    
+    // ✅ MÉTODO PARA ELIMINAR EL ESTADO DE UNA ACCIÓN (al deshacer)
+    removeActionState(colorId) {
+        this.actionStateMap.delete(colorId);
+    }
+    
     replaceAllColors() {
         const diffColors = this.comparisonResults.filter(item => 
-            item.status === 'diff' && !item.actionTaken
+            item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(item.id)
         );
         
         if (diffColors.length === 0) {
@@ -233,9 +265,8 @@ class AlphaColorMatch {
                                 lab: color.labSecondary ? [...color.labSecondary] : (color.labPrimary || [0, 0, 0])
                             };
                             
-                            const resultItem = this.comparisonResults.find(r => r.id === color.id);
-                            if (resultItem) resultItem.actionTaken = 'replace';
-                            
+                            // ✅ PERSISTIR ESTADO
+                            this.persistActionState(color.id, 'replace', 'Reemplazo masivo');
                             replacedCount++;
                         }
                     }
@@ -309,8 +340,10 @@ class AlphaColorMatch {
                 cmyk: [...item.cmykSecondary],
                 lab: item.labSecondary ? [...item.labSecondary] : (item.labPrimary || [0, 0, 0])
             };
-            const resultItem = this.comparisonResults.find(r => r.id === item.id);
-            if (resultItem) resultItem.actionTaken = 'replace';
+            
+            // ✅ PERSISTIR ESTADO
+            this.persistActionState(item.id, 'replace', reason);
+            
             this.compareFiles();
             this.saveActionToHistory('replace', item.id, item.name, reason);
             this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado con valores del secundario`, 'success');
@@ -328,10 +361,15 @@ class AlphaColorMatch {
             previousState: null,
             reason: reason
         });
-        const resultItem = this.comparisonResults.find(r => r.id === item.id);
-        if (resultItem) resultItem.actionTaken = 'keep';
-        this.filterResults();
+        
+        // ✅ PERSISTIR ESTADO - IMPORTANTE: No modifica datos, solo marca como "mantenido"
+        this.persistActionState(item.id, 'keep', reason);
+        
         this.saveActionToHistory('keep', item.id, item.name, reason);
+        
+        // ✅ Actualizar la vista SIN perder el estado
+        this.filterResults();
+        
         this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}". Puedes deshacer si fue un error.`, 'undo');
     }
     
@@ -354,8 +392,10 @@ class AlphaColorMatch {
             reason: reason
         });
         this.primaryData.push(newColor);
-        const resultItem = this.comparisonResults.find(r => r.id === item.id);
-        if (resultItem) resultItem.actionTaken = 'add';
+        
+        // ✅ PERSISTIR ESTADO
+        this.persistActionState(item.id, 'add', reason);
+        
         this.compareFiles();
         this.saveActionToHistory('add', item.id, item.name, reason);
         this.uiRenderer.showToast(`✅ Color "${item.name}" agregado a la referencia principal`, 'success');
@@ -367,6 +407,7 @@ class AlphaColorMatch {
             this.uiRenderer.showToast('❌ No se pudo deshacer la acción', 'error');
             return;
         }
+        
         if (action.type === 'replace' && action.previousState) {
             const index = this.primaryData.findIndex(p => p.id === colorId);
             if (index !== -1) {
@@ -378,18 +419,23 @@ class AlphaColorMatch {
                 };
             }
         } else if (action.type === 'keep') {
-            const resultItem = this.comparisonResults.find(r => r.id === colorId);
-            if (resultItem) delete resultItem.actionTaken;
+            // ✅ Solo eliminar el estado, no hay datos que revertir
+            this.removeActionState(colorId);
         } else if (action.type === 'add') {
             const index = this.primaryData.findIndex(p => p.id === colorId);
             if (index !== -1) this.primaryData.splice(index, 1);
-            const resultItem = this.comparisonResults.find(r => r.id === colorId);
-            if (resultItem) delete resultItem.actionTaken;
+            this.removeActionState(colorId);
         }
+        
+        // ✅ Eliminar el estado persistido
+        this.removeActionState(colorId);
+        
         const actionIndex = this.actionHistory.findIndex(a => a.id === action.id);
         if (actionIndex !== -1) this.actionHistory.splice(actionIndex, 1);
+        
         this.saveActionToHistory('undo', colorId, action.colorName, `Se deshizo acción de ${actionType}. Motivo: ${reason}`);
         this.compareFiles();
+        
         this.uiRenderer.showToast(`↩️ Se ha deshecho la acción de ${actionType === 'keep' ? 'mantener' : actionType === 'replace' ? 'reemplazar' : 'agregar'} para "${action.colorName}"`, 'success');
     }
     
@@ -459,6 +505,8 @@ class AlphaColorMatch {
             this.comparisonResults = [];
             this.currentFilter = 'all';
             this.actionHistory = [];
+            this.actionStateMap.clear(); // ✅ Limpiar estado persistido
+            
             document.getElementById('primaryFileInput').value = '';
             document.getElementById('secondaryFileInput').value = '';
             document.getElementById('primaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
