@@ -295,48 +295,72 @@ class AlphaColorMatch {
         setTimeout(() => {
             try {
                 // Primero, identificar colores que faltan en cada archivo (por NK)
-                const primaryNKs = new Set();
-                const secondaryNKs = new Set();
+                const primaryByNK = new Map();
+                const secondaryByNK = new Map();
                 
                 for (const color of this.primaryData) {
                     const nk = this.extractNKCode(color.name);
-                    if (nk) primaryNKs.add(nk);
+                    if (nk) {
+                        if (!primaryByNK.has(nk)) primaryByNK.set(nk, []);
+                        primaryByNK.get(nk).push(color);
+                    }
                 }
                 
                 for (const color of this.secondaryData) {
                     const nk = this.extractNKCode(color.name);
-                    if (nk) secondaryNKs.add(nk);
+                    if (nk) {
+                        if (!secondaryByNK.has(nk)) secondaryByNK.set(nk, []);
+                        secondaryByNK.get(nk).push(color);
+                    }
                 }
                 
                 // Colores que faltan en secundario (solo en principal)
                 const missingInSecondary = [];
-                for (const color of this.primaryData) {
-                    const nk = this.extractNKCode(color.name);
-                    if (nk && !secondaryNKs.has(nk)) {
-                        missingInSecondary.push(color.name);
+                for (const [nk, colors] of primaryByNK) {
+                    if (!secondaryByNK.has(nk)) {
+                        for (const color of colors) {
+                            missingInSecondary.push(color.name);
+                        }
                     }
                 }
                 
                 // Colores que faltan en principal (solo en secundario)
                 const missingInPrimary = [];
-                for (const color of this.secondaryData) {
-                    const nk = this.extractNKCode(color.name);
-                    if (nk && !primaryNKs.has(nk)) {
-                        missingInPrimary.push(color.name);
+                for (const [nk, colors] of secondaryByNK) {
+                    if (!primaryByNK.has(nk)) {
+                        for (const color of colors) {
+                            missingInPrimary.push(color.name);
+                        }
                     }
                 }
                 
-                // Mostrar advertencias
+                // Mostrar advertencias en consola y toast
                 if (missingInSecondary.length > 0) {
-                    console.warn(`⚠️ Colores solo en PRINCIPAL (no tienen pareja en secundario): ${missingInSecondary.length}`);
-                    missingInSecondary.forEach(name => console.warn(`   - ${name}`));
-                    this.uiRenderer.showToast(`⚠️ ${missingInSecondary.length} colores solo en PRINCIPAL (sin pareja en secundario)`, 'warning');
+                    console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO SECUNDARIO ⚠️⚠️⚠️`);
+                    console.warn(`Total: ${missingInSecondary.length} colores`);
+                    missingInSecondary.forEach(name => console.warn(`   ❌ ${name}`));
+                    
+                    let message = `❌ FALTAN en SECUNDARIO: ${missingInSecondary.length} colores`;
+                    this.uiRenderer.showToast(message, 'warning');
+                    
+                    // Mostrar en la interfaz (opcional)
+                    this.showMissingColorsAlert('secundario', missingInSecondary);
                 }
                 
                 if (missingInPrimary.length > 0) {
-                    console.warn(`⚠️ Colores solo en SECUNDARIO (no tienen pareja en principal): ${missingInPrimary.length}`);
-                    missingInPrimary.forEach(name => console.warn(`   - ${name}`));
-                    this.uiRenderer.showToast(`⚠️ ${missingInPrimary.length} colores solo en SECUNDARIO (sin pareja en principal)`, 'warning');
+                    console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO PRINCIPAL ⚠️⚠️⚠️`);
+                    console.warn(`Total: ${missingInPrimary.length} colores`);
+                    missingInPrimary.forEach(name => console.warn(`   ❌ ${name}`));
+                    
+                    let message = `❌ FALTAN en PRINCIPAL: ${missingInPrimary.length} colores`;
+                    this.uiRenderer.showToast(message, 'warning');
+                    
+                    // Mostrar en la interfaz (opcional)
+                    this.showMissingColorsAlert('principal', missingInPrimary);
+                }
+                
+                if (missingInSecondary.length === 0 && missingInPrimary.length === 0) {
+                    this.uiRenderer.showToast('✅ Todos los NK coinciden en ambos archivos', 'success');
                 }
                 
                 const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
@@ -382,6 +406,45 @@ class AlphaColorMatch {
                 this.showLoading(false);
             }
         }, 100);
+    }
+    
+    // Método para mostrar alerta de colores faltantes en la interfaz
+    showMissingColorsAlert(archivo, colores) {
+        // Crear un modal o panel para mostrar los colores faltantes
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header" style="background: #991b1b;">
+                    <h3>⚠️ Colores faltantes en archivo ${archivo === 'principal' ? 'PRINCIPAL' : 'SECUNDARIO'}</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Los siguientes colores <strong>NO tienen pareja</strong> en el archivo ${archivo === 'principal' ? 'principal' : 'secundario'} (mismo NK):</p>
+                    <div style="max-height: 300px; overflow-y: auto; background: #1e1e2c; border-radius: 0.5rem; padding: 0.5rem; margin-top: 1rem;">
+                        ${colores.map(name => `<div style="padding: 0.25rem; font-family: monospace; font-size: 0.8rem;">❌ ${name}</div>`).join('')}
+                    </div>
+                    <p style="margin-top: 1rem; color: #fbbf24;">⚠️ Estos colores NO se exportarán porque no tienen su par en el otro archivo.</p>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn btn-primary close-modal">Entendido</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        setTimeout(() => modal.classList.add('active'), 10);
+        
+        const closeModal = () => {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 300);
+        };
+        
+        modal.querySelector('.modal-close').onclick = closeModal;
+        modal.querySelector('.close-modal').onclick = closeModal;
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal();
+        };
     }
     
     updateStats(stats) {
@@ -720,7 +783,7 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ MÉTODO EXPORTAR CORREGIDO
+    // ✅ MÉTODO EXPORTAR CORREGIDO - Con orden por grupos equivalentes
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
@@ -776,13 +839,13 @@ class AlphaColorMatch {
         if (excludedPrimary.length > 0) {
             console.warn(`🚫 EXCLUIDOS de exportación (solo en PRINCIPAL): ${excludedPrimary.length}`);
             excludedPrimary.forEach(name => console.warn(`   - ${name}`));
-            this.uiRenderer.showToast(`🚫 ${excludedPrimary.length} colores solo en PRINCIPAL no se exportarán`, 'warning');
+            this.showMissingColorsAlert('principal (excluidos)', excludedPrimary);
         }
         
         if (excludedSecondary.length > 0) {
             console.warn(`🚫 EXCLUIDOS de exportación (solo en SECUNDARIO): ${excludedSecondary.length}`);
             excludedSecondary.forEach(name => console.warn(`   - ${name}`));
-            this.uiRenderer.showToast(`🚫 ${excludedSecondary.length} colores solo en SECUNDARIO no se exportarán`, 'warning');
+            this.showMissingColorsAlert('secundario (excluidos)', excludedSecondary);
         }
         
         // Mapa para valores sincronizados por NK + nombre unificado
@@ -822,70 +885,119 @@ class AlphaColorMatch {
             }
         }
         
-        // Construir lista de colores a exportar (solo con NK comunes)
-        const colorsToExport = [];
-        const processedNKNames = new Set(); // Para evitar duplicados dentro del mismo NK y nombre
+        // Construir lista de colores a exportar, organizada por grupos equivalentes
+        const colorGroups = []; // Cada grupo: { nk, unifiedName, primaryColor, secondaryColor, syncedValues }
         
         for (const nk of commonNKs) {
             const primaryColors = primaryByNK.get(nk) || [];
             const secondaryColors = secondaryByNK.get(nk) || [];
             
+            // Crear mapa de colores secundarios por nombre base
+            const secondaryByBaseName = new Map();
+            for (const sc of secondaryColors) {
+                const baseName = this.extractBaseName(sc.name);
+                secondaryByBaseName.set(baseName, sc);
+            }
+            
             // Procesar cada color del principal
             for (const primaryColor of primaryColors) {
-                const baseName = this.extractBaseName(primaryColor.name);
+                const primaryBaseName = this.extractBaseName(primaryColor.name);
                 const unifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
                 const mapKey = `${nk}_${unifiedName}`;
                 const syncedValues = syncedValuesMap.get(mapKey);
                 
-                const uniqueKey = `${nk}_${baseName}`;
-                if (!processedNKNames.has(uniqueKey)) {
-                    colorsToExport.push({
-                        name: primaryColor.name,
-                        cmyk: syncedValues ? [...syncedValues.cmyk] : [...primaryColor.cmyk],
-                        lab: syncedValues ? [...syncedValues.lab] : [...primaryColor.lab]
-                    });
-                    processedNKNames.add(uniqueKey);
-                }
-            }
-            
-            // Procesar colores del secundario que tengan nombres equivalentes diferentes
-            for (const secondaryColor of secondaryColors) {
-                const baseName = this.extractBaseName(secondaryColor.name);
-                const unifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
-                
-                // Verificar si este nombre ya fue agregado desde el principal
-                let alreadyAdded = false;
-                for (const primaryColor of primaryColors) {
-                    const primaryBaseName = this.extractBaseName(primaryColor.name);
-                    const primaryUnified = this.colorMatcher.getUnifiedName(primaryColor.name);
-                    
-                    // Si es el mismo nombre base o son equivalentes
-                    if (primaryBaseName === baseName || primaryUnified === unifiedName) {
-                        alreadyAdded = true;
+                // Buscar si hay un color secundario equivalente
+                let secondaryColor = null;
+                for (const sc of secondaryColors) {
+                    const scBaseName = this.extractBaseName(sc.name);
+                    const scUnified = this.colorMatcher.getUnifiedName(sc.name);
+                    if (scBaseName === primaryBaseName || scUnified === unifiedName) {
+                        secondaryColor = sc;
                         break;
                     }
                 }
                 
-                // Si no se agregó y tiene el mismo NK, agregarlo
-                if (!alreadyAdded) {
-                    const uniqueKey = `${nk}_${baseName}`;
-                    if (!processedNKNames.has(uniqueKey)) {
-                        const mapKey = `${nk}_${unifiedName}`;
-                        const syncedValues = syncedValuesMap.get(mapKey);
-                        
-                        colorsToExport.push({
-                            name: secondaryColor.name,
-                            cmyk: syncedValues ? [...syncedValues.cmyk] : [...secondaryColor.cmyk],
-                            lab: syncedValues ? [...syncedValues.lab] : [...secondaryColor.lab]
-                        });
-                        processedNKNames.add(uniqueKey);
+                const isEquivalent = secondaryColor && primaryBaseName !== this.extractBaseName(secondaryColor.name);
+                
+                colorGroups.push({
+                    nk,
+                    unifiedName,
+                    primaryColor,
+                    secondaryColor,
+                    syncedValues,
+                    isEquivalent
+                });
+            }
+            
+            // Agregar colores secundarios que no tienen equivalente en principal
+            for (const secondaryColor of secondaryColors) {
+                const secondaryBaseName = this.extractBaseName(secondaryColor.name);
+                const unifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
+                
+                let hasEquivalent = false;
+                for (const pg of colorGroups) {
+                    if (pg.nk === nk && pg.unifiedName === unifiedName) {
+                        hasEquivalent = true;
+                        break;
                     }
+                }
+                
+                if (!hasEquivalent) {
+                    const mapKey = `${nk}_${unifiedName}`;
+                    const syncedValues = syncedValuesMap.get(mapKey);
+                    
+                    colorGroups.push({
+                        nk,
+                        unifiedName,
+                        primaryColor: null,
+                        secondaryColor,
+                        syncedValues,
+                        isEquivalent: false
+                    });
                 }
             }
         }
         
-        // Ordenar por nombre para consistencia
-        colorsToExport.sort((a, b) => a.name.localeCompare(b.name));
+        // Ordenar grupos: primero por NK, luego priorizar los que tienen equivalente para que salgan juntos
+        colorGroups.sort((a, b) => {
+            if (a.nk !== b.nk) return a.nk.localeCompare(b.nk);
+            // Los que tienen equivalente deben ir juntos
+            if (a.isEquivalent && !b.isEquivalent) return -1;
+            if (!a.isEquivalent && b.isEquivalent) return 1;
+            return 0;
+        });
+        
+        // Construir lista final de colores a exportar (con orden correcto)
+        const colorsToExport = [];
+        
+        for (const group of colorGroups) {
+            const cmyk = group.syncedValues ? [...group.syncedValues.cmyk] : 
+                        (group.primaryColor ? [...group.primaryColor.cmyk] : [...group.secondaryColor.cmyk]);
+            const lab = group.syncedValues ? [...group.syncedValues.lab] :
+                       (group.primaryColor ? [...group.primaryColor.lab] : [...group.secondaryColor.lab]);
+            
+            if (group.primaryColor) {
+                colorsToExport.push({
+                    name: group.primaryColor.name,
+                    cmyk: cmyk,
+                    lab: lab
+                });
+            }
+            
+            if (group.secondaryColor && group.isEquivalent) {
+                colorsToExport.push({
+                    name: group.secondaryColor.name,
+                    cmyk: cmyk,
+                    lab: lab
+                });
+            } else if (group.secondaryColor && !group.primaryColor) {
+                colorsToExport.push({
+                    name: group.secondaryColor.name,
+                    cmyk: cmyk,
+                    lab: lab
+                });
+            }
+        }
         
         console.log(`📤 Exportando ${colorsToExport.length} colores (solo con NK comunes en ambos archivos)`);
         
