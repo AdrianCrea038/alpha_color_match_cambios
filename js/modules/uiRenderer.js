@@ -46,16 +46,11 @@ export class UIRenderer {
         }
         
         tbody.innerHTML = results.map((item, idx) => {
-            // ============================================================
-            // ✅ DEFINICIÓN DE VARIABLES ANTES DE USARLAS
-            // ============================================================
-            
-            // ✅ Estado de acción - CRÍTICO: detectar 'keep', 'replace', 'add'
+            // Estado de acción
             const hasActionTaken = item.actionTaken === 'keep' || 
                                    item.actionTaken === 'replace' || 
                                    item.actionTaken === 'add';
             
-            // ✅ Texto de acción tomada
             let actionTakenText = '';
             if (item.actionTaken === 'keep') {
                 actionTakenText = '🔒 Valor principal mantenido';
@@ -65,7 +60,7 @@ export class UIRenderer {
                 actionTakenText = '➕ Color agregado';
             }
             
-            // ✅ Clase de estado
+            // Clase de estado
             let statusClass = '';
             let statusText = '';
             if (item.status === 'match') {
@@ -79,7 +74,7 @@ export class UIRenderer {
                 statusText = '❌ NO ENCONTRADO';
             }
             
-            // ✅ Clase de resaltado
+            // Resaltado
             let diffHighlight = '';
             if (item.status === 'diff') {
                 diffHighlight = 'diff-highlight';
@@ -87,7 +82,7 @@ export class UIRenderer {
                 diffHighlight = 'missing-highlight';
             }
             
-            // ✅ Severidad de diferencia
+            // Severidad
             let diffSeverityClass = '';
             if (item.status === 'diff' && item.diffPercentage) {
                 const diffPct = parseFloat(item.diffPercentage);
@@ -96,13 +91,22 @@ export class UIRenderer {
                 else diffSeverityClass = 'diff-severity-high';
             }
             
-            // ✅ Swatch de color
+            // Swatch de color
             const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
             const swatchColor = cmykForSwatch ? 
                 this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : 
                 '#2d3748';
             
-            // ✅ CMYK Display
+            // ✅ NUEVO: Mostrar ambos nombres si son diferentes
+            let nameDisplay = `<strong>${item.name}</strong>`;
+            if (item.originalName && item.originalName !== item.name) {
+                nameDisplay = `
+                    <strong>${item.name}</strong>
+                    <br><small style="color:#888;">↳ Original: ${item.originalName}</small>
+                `;
+            }
+            
+            // CMYK Display
             let cmykDisplay = '';
             if (item.status === 'missing') {
                 cmykDisplay = `
@@ -131,7 +135,7 @@ export class UIRenderer {
                 `;
             }
             
-            // ✅ LAB Display
+            // LAB Display
             let labDisplay = '';
             if (item.status !== 'missing' && item.labPrimary && item.labSecondary) {
                 labDisplay = `
@@ -152,7 +156,6 @@ export class UIRenderer {
                 `;
             }
             
-            // ✅ Detalles de diferencia
             const diffDetails = item.diffDetails && !hasActionTaken ? 
                 `<div class="diff-details">
                     📊 Diferencia: C:${item.diffDetails.cyan} | M:${item.diffDetails.magenta} | Y:${item.diffDetails.yellow} | K:${item.diffDetails.black}
@@ -165,10 +168,9 @@ export class UIRenderer {
             const actionTakenHtml = actionTakenText ? 
                 `<div class="action-taken">${actionTakenText}</div>` : '';
             
-            // ✅ BOTONES DE ACCIÓN - CRÍTICO: Si ya se tomó acción, solo mostrar "Deshacer"
             let actions = '';
+            
             if (hasActionTaken) {
-                // ✅ Si ya hay acción tomada, solo mostrar botón deshacer
                 actions = `
                     <div class="action-buttons-cell">
                         <button class="small-btn btn-undo" onclick="window.app.showUndoDialog('${item.id}', '${item.actionTaken}')">
@@ -177,7 +179,6 @@ export class UIRenderer {
                     </div>
                 `;
             } else if (item.status === 'diff') {
-                // ✅ Si hay diferencias y no hay acción, mostrar ambos botones
                 actions = `
                     <div class="action-buttons-cell">
                         <button class="small-btn btn-replace" onclick="window.app.showReplaceConfirm('${item.id}')">
@@ -198,7 +199,6 @@ export class UIRenderer {
                 `;
             }
             
-            // ✅ RENDERIZAR FILA
             return `
                 <tr class="${diffHighlight} ${diffSeverityClass}" data-color-id="${item.id}">
                     <td><strong>${item.id}</strong></td>
@@ -207,11 +207,7 @@ export class UIRenderer {
                              data-tooltip="CMYK: ${cmykForSwatch ? cmykForSwatch.map(v => v.toFixed(1)).join(', ') : 'N/A'}">
                         </div>
                     </td>
-                    <td>
-                        <strong>${item.name}</strong>
-                        ${item.originalName && item.originalName !== item.name ? 
-                            `<br><small style="color:#888;">Coincide con: ${item.originalName}</small>` : ''}
-                    </td>
+                    <td>${nameDisplay}</td>
                     <td>${cmykDisplay}</td>
                     <td>${labDisplay}</td>
                     <td>
@@ -475,7 +471,7 @@ export class UIRenderer {
         `).join('');
     }
     
-    // Métodos del creador de archivos (sin cambios)
+    // Métodos del creador de archivos
     initCreatorTable() {
         this.resetCreatorTable();
     }
