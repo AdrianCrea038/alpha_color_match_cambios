@@ -644,10 +644,10 @@ class AlphaColorMatch {
             return;
         }
         
-        // Crear un mapa para agrupar por nombre canónico
-        const groupMap = new Map(); // key: nombreCanonico, value: { cmyk, lab, names: [{id, name}] }
+        // Mapa para agrupar por nombre canónico
+        const groupMap = new Map();
         
-        // 1. Agregar todos los colores del archivo PRINCIPAL
+        // 1. Procesar TODOS los colores del archivo PRINCIPAL
         for (const color of this.primaryData) {
             const canonicalName = this.getCanonicalName(color.name);
             
@@ -655,7 +655,7 @@ class AlphaColorMatch {
                 groupMap.set(canonicalName, {
                     cmyk: [...color.cmyk],
                     lab: [...color.lab],
-                    names: new Map() // Map para evitar duplicados por ID
+                    names: new Map()
                 });
             }
             
@@ -665,7 +665,7 @@ class AlphaColorMatch {
             }
         }
         
-        // 2. Agregar todos los colores del archivo SECUNDARIO
+        // 2. Procesar TODOS los colores del archivo SECUNDARIO
         for (const color of this.secondaryData) {
             const canonicalName = this.getCanonicalName(color.name);
             
@@ -683,11 +683,10 @@ class AlphaColorMatch {
             }
         }
         
-        // 3. Construir lista de colores para exportar (UN REGISTRO POR CADA NOMBRE ORIGINAL)
+        // 3. Construir lista de colores para exportar
         const colorsToExport = [];
         
         for (const [canonicalName, data] of groupMap) {
-            // Por cada nombre original en este grupo, crear un registro
             for (const [id, name] of data.names) {
                 colorsToExport.push({
                     id: id,
@@ -706,7 +705,12 @@ class AlphaColorMatch {
         });
         
         console.log(`📤 Exportando ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`);
-        console.log('Grupos unificados:', Array.from(groupMap.keys()).slice(0, 10));
+        
+        // Mostrar los grupos en consola para depuración
+        for (const [canonicalName, data] of groupMap) {
+            const namesList = Array.from(data.names.values()).join(', ');
+            console.log(`   Grupo "${canonicalName}": ${data.names.size} nombres - ${namesList}`);
+        }
         
         // Generar contenido del archivo TXT
         let content = 'CGATS.17\n';
