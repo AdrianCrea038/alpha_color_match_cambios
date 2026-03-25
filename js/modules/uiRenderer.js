@@ -61,9 +61,31 @@ export class UIRenderer {
         }
         
         tbody.innerHTML = results.map((item, idx) => {
-            const statusClass = item.status === 'match' ? 'status-match' : 
-                               (item.status === 'diff' ? 'status-diff' : 'status-missing');
+            // ============================================================
+            // ✅ CRÍTICO: Definir todas las variables ANTES de usarlas
+            // ============================================================
             
+            // 1. Definir diffHighlight PRIMERO
+            let diffHighlight = '';
+            if (item.status === 'diff') {
+                diffHighlight = 'diff-highlight';
+            } else if (item.status === 'missing') {
+                diffHighlight = 'missing-highlight';
+            } else {
+                diffHighlight = '';
+            }
+            
+            // 2. Definir statusClass
+            let statusClass = '';
+            if (item.status === 'match') {
+                statusClass = 'status-match';
+            } else if (item.status === 'diff') {
+                statusClass = 'status-diff';
+            } else {
+                statusClass = 'status-missing';
+            }
+            
+            // 3. Definir statusText
             let statusText = '';
             if (item.status === 'match') {
                 statusText = '✅ Coincidencia exacta';
@@ -73,29 +95,41 @@ export class UIRenderer {
                 statusText = '❌ NO ENCONTRADO';
             }
             
-            // ✅ CORRECCIÓN: Incluir 'add' en hasActionTaken
-            const hasActionTaken = item.actionTaken === 'keep' || item.actionTaken === 'replace' || item.actionTaken === 'add';
-            const actionTakenText = item.actionTaken === 'keep' ? '🔒 Valor principal mantenido' : 
-                                   (item.actionTaken === 'replace' ? '🔄 Valor actualizado' : 
-                                   (item.actionTaken === 'add' ? '➕ Color agregado' : ''));
+            // 4. hasActionTaken - incluye 'keep', 'replace', 'add'
+            const hasActionTaken = item.actionTaken === 'keep' || 
+                                   item.actionTaken === 'replace' || 
+                                   item.actionTaken === 'add';
             
-            // Determinar severidad de la diferencia
+            // 5. actionTakenText
+            let actionTakenText = '';
+            if (item.actionTaken === 'keep') {
+                actionTakenText = '🔒 Valor principal mantenido';
+            } else if (item.actionTaken === 'replace') {
+                actionTakenText = '🔄 Valor actualizado';
+            } else if (item.actionTaken === 'add') {
+                actionTakenText = '➕ Color agregado';
+            }
+            
+            // 6. Determinar severidad de la diferencia
             let diffSeverityClass = '';
             if (item.status === 'diff' && item.diffPercentage) {
                 const diffPct = parseFloat(item.diffPercentage);
-                if (diffPct < 5) diffSeverityClass = 'diff-severity-low';
-                else if (diffPct < 15) diffSeverityClass = 'diff-severity-medium';
-                else diffSeverityClass = 'diff-severity-high';
+                if (diffPct < 5) {
+                    diffSeverityClass = 'diff-severity-low';
+                } else if (diffPct < 15) {
+                    diffSeverityClass = 'diff-severity-medium';
+                } else {
+                    diffSeverityClass = 'diff-severity-high';
+                }
             }
             
-            // ✅ CORRECCIÓN: Definir diffHighlight correctamente
-            const diffHighlight = item.status === 'diff' ? 'diff-highlight' : 
-                                 (item.status === 'missing' ? 'missing-highlight' : '');
-            
-            // Swatch de color basado en CMYK
+            // 7. Swatch de color
             const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
-            const swatchColor = cmykForSwatch ? this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : '#2d3748';
+            const swatchColor = cmykForSwatch ? 
+                this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : 
+                '#2d3748';
             
+            // 8. CMYK Display
             let cmykDisplay = '';
             if (item.status === 'missing') {
                 cmykDisplay = `
@@ -124,6 +158,7 @@ export class UIRenderer {
                 `;
             }
             
+            // 9. LAB Display
             let labDisplay = '';
             if (item.status !== 'missing' && item.labPrimary && item.labSecondary) {
                 labDisplay = `
@@ -144,20 +179,23 @@ export class UIRenderer {
                 `;
             }
             
+            // 10. Diff Details
             const diffDetails = item.diffDetails && !hasActionTaken ? 
                 `<div class="diff-details">
                     📊 Diferencia: C:${item.diffDetails.cyan} | M:${item.diffDetails.magenta} | Y:${item.diffDetails.yellow} | K:${item.diffDetails.black}
                     <br>📈 Total: ${item.diffDetails.total}%
                 </div>` : '';
             
+            // 11. Mensaje de error
             const message = item.message ? 
                 `<div class="error-message">${item.message}</div>` : '';
             
+            // 12. Acción tomada
             const actionTakenHtml = actionTakenText ? 
                 `<div class="action-taken">${actionTakenText}</div>` : '';
             
+            // 13. Botones de acción
             let actions = '';
-            
             if (hasActionTaken) {
                 actions = `
                     <div class="action-buttons-cell">
@@ -187,6 +225,9 @@ export class UIRenderer {
                 `;
             }
             
+            // ============================================================
+            // ✅ AHORA SÍ: Usar diffHighlight (ya está definida)
+            // ============================================================
             return `
                 <tr class="${diffHighlight} ${diffSeverityClass}" data-color-id="${item.id}">
                     <td><strong>${item.id}</strong></td>
