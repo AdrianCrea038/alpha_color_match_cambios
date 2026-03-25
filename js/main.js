@@ -17,8 +17,8 @@ class AlphaColorMatch {
         this.actionHistory = [];
         this.actionCounter = 0;
         
-        // ✅ NUEVO: Mapa para persistir el estado de las acciones
-        this.actionStateMap = new Map(); // key: colorId, value: { actionTaken, reason, timestamp }
+        // ✅ MAPA PARA PERSISTIR EL ESTADO DE CADA COLOR
+        this.actionStateMap = new Map();
         
         this.init();
     }
@@ -73,7 +73,6 @@ class AlphaColorMatch {
             this.primaryData = data;
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
-            // ✅ Limpiar estado de acciones al cargar nuevo archivo
             this.actionStateMap.clear();
         } finally {
             this.showLoading(false);
@@ -88,7 +87,6 @@ class AlphaColorMatch {
             this.secondaryData = data;
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
-            // ✅ Limpiar estado de acciones al cargar nuevo archivo
             this.actionStateMap.clear();
         } finally {
             this.showLoading(false);
@@ -123,10 +121,10 @@ class AlphaColorMatch {
         setTimeout(() => {
             try {
                 // Generar nuevos resultados de comparación
-                const newResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
+                const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
-                // ✅ RESTAURAR el estado de acciones persistido
-                this.comparisonResults = newResults.map(result => {
+                // ✅ RESTAURAR EL ESTADO DE CADA COLOR DESDE EL MAPA
+                this.comparisonResults = rawResults.map(result => {
                     const savedState = this.actionStateMap.get(result.id);
                     if (savedState) {
                         return {
@@ -200,18 +198,20 @@ class AlphaColorMatch {
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
-    // ✅ MÉTODO PARA PERSISTIR EL ESTADO DE UNA ACCIÓN
-    persistActionState(colorId, actionTaken, reason = '') {
+    // ✅ GUARDAR ESTADO DE UNA ACCIÓN EN EL MAPA
+    saveActionState(colorId, actionTaken, reason = '') {
         this.actionStateMap.set(colorId, {
             actionTaken: actionTaken,
             reason: reason,
             timestamp: new Date().toISOString()
         });
+        console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
     }
     
-    // ✅ MÉTODO PARA ELIMINAR EL ESTADO DE UNA ACCIÓN (al deshacer)
+    // ✅ ELIMINAR ESTADO DEL MAPA (AL DESHACER)
     removeActionState(colorId) {
         this.actionStateMap.delete(colorId);
+        console.log(`🗑️ Estado eliminado: ${colorId}`);
     }
     
     replaceAllColors() {
@@ -224,7 +224,7 @@ class AlphaColorMatch {
             return;
         }
         
-        const confirmMsg = `¿Reemplazar TODOS los ${diffColors.length} colores con diferencias por los valores del archivo secundario?\n\nEsta acción se aplicará a todos los colores que tienen diferencias.`;
+        const confirmMsg = `¿Reemplazar TODOS los ${diffColors.length} colores con diferencias por los valores del archivo secundario?`;
         
         if (confirm(confirmMsg)) {
             this.showLoading(true);
@@ -255,7 +255,7 @@ class AlphaColorMatch {
                                 colorName: color.name,
                                 timestamp: new Date().toISOString(),
                                 previousState: previousState,
-                                reason: 'Reemplazo masivo de todos los colores'
+                                reason: 'Reemplazo masivo'
                             });
                             
                             this.primaryData[index] = {
@@ -265,16 +265,16 @@ class AlphaColorMatch {
                                 lab: color.labSecondary ? [...color.labSecondary] : (color.labPrimary || [0, 0, 0])
                             };
                             
-                            // ✅ PERSISTIR ESTADO
-                            this.persistActionState(color.id, 'replace', 'Reemplazo masivo');
+                            // ✅ GUARDAR ESTADO
+                            this.saveActionState(color.id, 'replace', 'Reemplazo masivo');
                             replacedCount++;
                         }
                     }
                     
-                    this.saveActionToHistory('replace_all', 'all', `${replacedCount} colores`, `Reemplazo masivo de ${replacedCount} colores con diferencias`);
+                    this.saveActionToHistory('replace_all', 'all', `${replacedCount} colores`, `Reemplazo masivo`);
                     this.compareFiles();
                     
-                    this.uiRenderer.showToast(`⚡ Se reemplazaron ${replacedCount} colores con valores del secundario`, 'success');
+                    this.uiRenderer.showToast(`⚡ Se reemplazaron ${replacedCount} colores`, 'success');
                 } finally {
                     this.showLoading(false);
                 }
@@ -341,12 +341,12 @@ class AlphaColorMatch {
                 lab: item.labSecondary ? [...item.labSecondary] : (item.labPrimary || [0, 0, 0])
             };
             
-            // ✅ PERSISTIR ESTADO
-            this.persistActionState(item.id, 'replace', reason);
+            // ✅ GUARDAR ESTADO
+            this.saveActionState(item.id, 'replace', reason);
             
             this.compareFiles();
             this.saveActionToHistory('replace', item.id, item.name, reason);
-            this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado con valores del secundario`, 'success');
+            this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado`, 'success');
         }
     }
     
@@ -362,12 +362,12 @@ class AlphaColorMatch {
             reason: reason
         });
         
-        // ✅ PERSISTIR ESTADO - IMPORTANTE: No modifica datos, solo marca como "mantenido"
-        this.persistActionState(item.id, 'keep', reason);
+        // ✅ GUARDAR ESTADO (NO MODIFICA DATOS, SOLO MARCA COMO "MANTENIDO")
+        this.saveActionState(item.id, 'keep', reason);
         
         this.saveActionToHistory('keep', item.id, item.name, reason);
         
-        // ✅ Actualizar la vista SIN perder el estado
+        // ✅ ACTUALIZAR VISTA SIN PERDER EL ESTADO
         this.filterResults();
         
         this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}". Puedes deshacer si fue un error.`, 'undo');
@@ -393,12 +393,12 @@ class AlphaColorMatch {
         });
         this.primaryData.push(newColor);
         
-        // ✅ PERSISTIR ESTADO
-        this.persistActionState(item.id, 'add', reason);
+        // ✅ GUARDAR ESTADO
+        this.saveActionState(item.id, 'add', reason);
         
         this.compareFiles();
         this.saveActionToHistory('add', item.id, item.name, reason);
-        this.uiRenderer.showToast(`✅ Color "${item.name}" agregado a la referencia principal`, 'success');
+        this.uiRenderer.showToast(`✅ Color "${item.name}" agregado`, 'success');
     }
     
     undoAction(colorId, actionType, reason = '') {
@@ -418,16 +418,12 @@ class AlphaColorMatch {
                     lab: [...action.previousState.lab]
                 };
             }
-        } else if (action.type === 'keep') {
-            // ✅ Solo eliminar el estado, no hay datos que revertir
-            this.removeActionState(colorId);
         } else if (action.type === 'add') {
             const index = this.primaryData.findIndex(p => p.id === colorId);
             if (index !== -1) this.primaryData.splice(index, 1);
-            this.removeActionState(colorId);
         }
         
-        // ✅ Eliminar el estado persistido
+        // ✅ ELIMINAR ESTADO DEL MAPA
         this.removeActionState(colorId);
         
         const actionIndex = this.actionHistory.findIndex(a => a.id === action.id);
@@ -436,7 +432,7 @@ class AlphaColorMatch {
         this.saveActionToHistory('undo', colorId, action.colorName, `Se deshizo acción de ${actionType}. Motivo: ${reason}`);
         this.compareFiles();
         
-        this.uiRenderer.showToast(`↩️ Se ha deshecho la acción de ${actionType === 'keep' ? 'mantener' : actionType === 'replace' ? 'reemplazar' : 'agregar'} para "${action.colorName}"`, 'success');
+        this.uiRenderer.showToast(`↩️ Se deshizo ${actionType === 'keep' ? 'mantener' : actionType === 'replace' ? 'reemplazo' : 'adición'} para "${action.colorName}"`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
@@ -468,7 +464,7 @@ class AlphaColorMatch {
         a.download = `alpha_comparison_${new Date().toISOString().slice(0,19)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        this.uiRenderer.showToast('📥 Resultados exportados exitosamente', 'success');
+        this.uiRenderer.showToast('📥 Resultados exportados', 'success');
     }
     
     saveToHistory(stats) {
@@ -505,7 +501,7 @@ class AlphaColorMatch {
             this.comparisonResults = [];
             this.currentFilter = 'all';
             this.actionHistory = [];
-            this.actionStateMap.clear(); // ✅ Limpiar estado persistido
+            this.actionStateMap.clear();
             
             document.getElementById('primaryFileInput').value = '';
             document.getElementById('secondaryFileInput').value = '';
@@ -539,7 +535,7 @@ class AlphaColorMatch {
         a.download = `alpha_color_data_${new Date().toISOString().slice(0,19)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        this.uiRenderer.showToast('✨ Archivo TXT generado exitosamente', 'success');
+        this.uiRenderer.showToast('✨ Archivo TXT generado', 'success');
     }
     
     switchView(view) {
