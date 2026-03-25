@@ -121,6 +121,17 @@ class AlphaColorMatch {
         return normalizedBase;
     }
     
+    // Extraer código NK del nombre
+    extractNKCode(fullName) {
+        const match = fullName.match(/NK\d+$/);
+        return match ? match[0] : null;
+    }
+    
+    // Extraer nombre base sin NK
+    extractBaseName(fullName) {
+        return fullName.replace(/\s+NK\d+$/, '').trim();
+    }
+    
     saveFullState() {
         try {
             const searchInput = document.getElementById('searchInput');
@@ -283,9 +294,66 @@ class AlphaColorMatch {
         
         setTimeout(() => {
             try {
+                // Primero, identificar colores que faltan en cada archivo (por NK)
+                const primaryNKs = new Set();
+                const secondaryNKs = new Set();
+                
+                for (const color of this.primaryData) {
+                    const nk = this.extractNKCode(color.name);
+                    if (nk) primaryNKs.add(nk);
+                }
+                
+                for (const color of this.secondaryData) {
+                    const nk = this.extractNKCode(color.name);
+                    if (nk) secondaryNKs.add(nk);
+                }
+                
+                // Colores que faltan en secundario (solo en principal)
+                const missingInSecondary = [];
+                for (const color of this.primaryData) {
+                    const nk = this.extractNKCode(color.name);
+                    if (nk && !secondaryNKs.has(nk)) {
+                        missingInSecondary.push(color.name);
+                    }
+                }
+                
+                // Colores que faltan en principal (solo en secundario)
+                const missingInPrimary = [];
+                for (const color of this.secondaryData) {
+                    const nk = this.extractNKCode(color.name);
+                    if (nk && !primaryNKs.has(nk)) {
+                        missingInPrimary.push(color.name);
+                    }
+                }
+                
+                // Mostrar advertencias
+                if (missingInSecondary.length > 0) {
+                    console.warn(`⚠️ Colores solo en PRINCIPAL (no tienen pareja en secundario): ${missingInSecondary.length}`);
+                    missingInSecondary.forEach(name => console.warn(`   - ${name}`));
+                    this.uiRenderer.showToast(`⚠️ ${missingInSecondary.length} colores solo en PRINCIPAL (sin pareja en secundario)`, 'warning');
+                }
+                
+                if (missingInPrimary.length > 0) {
+                    console.warn(`⚠️ Colores solo en SECUNDARIO (no tienen pareja en principal): ${missingInPrimary.length}`);
+                    missingInPrimary.forEach(name => console.warn(`   - ${name}`));
+                    this.uiRenderer.showToast(`⚠️ ${missingInPrimary.length} colores solo en SECUNDARIO (sin pareja en principal)`, 'warning');
+                }
+                
                 const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
-                this.comparisonResults = rawResults.map(result => {
+                // Filtrar resultados: solo mantener los que tienen pareja (mismo NK en ambos)
+                const filteredResults = rawResults.filter(result => {
+                    // Si es missing, no tiene pareja, lo filtramos
+                    if (result.status === 'missing') return false;
+                    
+                    const nkPrimary = this.extractNKCode(result.primaryName || result.name);
+                    const nkSecondary = this.extractNKCode(result.secondaryName || result.name);
+                    
+                    // Solo mantener si ambos NK existen y son iguales
+                    return nkPrimary && nkSecondary && nkPrimary === nkSecondary;
+                });
+                
+                this.comparisonResults = filteredResults.map(result => {
                     const uniqueId = this.getUniqueColorId(result);
                     const savedState = this.actionStateMap.get(uniqueId);
                     if (savedState) {
@@ -306,7 +374,7 @@ class AlphaColorMatch {
                 this.filterResults();
                 this.saveFullState();
                 
-                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.missing} no encontrados`, 'info');
+                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.matches} coincidencias`, 'info');
             } catch (error) {
                 console.error('Error al comparar archivos:', error);
                 this.uiRenderer.showToast('❌ Error al comparar los archivos', 'error');
@@ -439,10 +507,12 @@ class AlphaColorMatch {
     
     replaceColor(item, reason = '') {
         const normalizedItemName = this.colorMatcher.normalizeNameForComparison(item.name);
+        const itemNK = this.extractNKCode(item.name);
         
         const index = this.primaryData.findIndex(p => {
             const normalizedPName = this.colorMatcher.normalizeNameForComparison(p.name);
-            return p.id === item.id || normalizedPName === normalizedItemName;
+            const pNK = this.extractNKCode(p.name);
+            return (p.id === item.id || normalizedPName === normalizedItemName) && pNK === itemNK;
         });
         
         if (index === -1) {
@@ -600,9 +670,12 @@ class AlphaColorMatch {
                     
                     for (const color of diffColors) {
                         const normalizedColorName = this.colorMatcher.normalizeNameForComparison(color.name);
+                        const colorNK = this.extractNKCode(color.name);
+                        
                         const index = this.primaryData.findIndex(p => {
                             const normalizedPName = this.colorMatcher.normalizeNameForComparison(p.name);
-                            return p.id === color.id || normalizedPName === normalizedColorName;
+                            const pNK = this.extractNKCode(p.name);
+                            return (p.id === color.id || normalizedPName === normalizedColorName) && pNK === colorNK;
                         });
                         
                         if (index !== -1) {
@@ -647,26 +720,86 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ MÉTODO EXPORTAR CORREGIDO - Exporta ambos registros solo cuando son equivalentes pero diferentes
-exportResults() {
-    if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
-        this.uiRenderer.showToast('No hay datos para exportar', 'warning');
-        return;
-    }
-    
-    // Mapa para almacenar los valores sincronizados por grupo equivalente
-    const syncedValuesMap = new Map(); // clave = unifiedName, valor = { cmyk, lab }
-    
-    // Primero, determinar qué valores sincronizados usar para cada grupo equivalente
-    for (const result of this.comparisonResults) {
-        if (result.areEquivalent && result.unifiedName) {
-            const unifiedKey = result.unifiedName;
+    // ✅ MÉTODO EXPORTAR CORREGIDO
+    exportResults() {
+        if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
+            this.uiRenderer.showToast('No hay datos para exportar', 'warning');
+            return;
+        }
+        
+        // Primero, identificar qué NK tienen pareja en ambos archivos
+        const primaryByNK = new Map();
+        const secondaryByNK = new Map();
+        
+        for (const color of this.primaryData) {
+            const nk = this.extractNKCode(color.name);
+            if (nk) {
+                if (!primaryByNK.has(nk)) primaryByNK.set(nk, []);
+                primaryByNK.get(nk).push(color);
+            }
+        }
+        
+        for (const color of this.secondaryData) {
+            const nk = this.extractNKCode(color.name);
+            if (nk) {
+                if (!secondaryByNK.has(nk)) secondaryByNK.set(nk, []);
+                secondaryByNK.get(nk).push(color);
+            }
+        }
+        
+        // Encontrar NK que existen en AMBOS archivos
+        const commonNKs = new Set();
+        for (const nk of primaryByNK.keys()) {
+            if (secondaryByNK.has(nk)) {
+                commonNKs.add(nk);
+            }
+        }
+        
+        // Mostrar advertencias de colores que se excluyen
+        const excludedPrimary = [];
+        const excludedSecondary = [];
+        
+        for (const color of this.primaryData) {
+            const nk = this.extractNKCode(color.name);
+            if (nk && !commonNKs.has(nk)) {
+                excludedPrimary.push(color.name);
+            }
+        }
+        
+        for (const color of this.secondaryData) {
+            const nk = this.extractNKCode(color.name);
+            if (nk && !commonNKs.has(nk)) {
+                excludedSecondary.push(color.name);
+            }
+        }
+        
+        if (excludedPrimary.length > 0) {
+            console.warn(`🚫 EXCLUIDOS de exportación (solo en PRINCIPAL): ${excludedPrimary.length}`);
+            excludedPrimary.forEach(name => console.warn(`   - ${name}`));
+            this.uiRenderer.showToast(`🚫 ${excludedPrimary.length} colores solo en PRINCIPAL no se exportarán`, 'warning');
+        }
+        
+        if (excludedSecondary.length > 0) {
+            console.warn(`🚫 EXCLUIDOS de exportación (solo en SECUNDARIO): ${excludedSecondary.length}`);
+            excludedSecondary.forEach(name => console.warn(`   - ${name}`));
+            this.uiRenderer.showToast(`🚫 ${excludedSecondary.length} colores solo en SECUNDARIO no se exportarán`, 'warning');
+        }
+        
+        // Mapa para valores sincronizados por NK + nombre unificado
+        const syncedValuesMap = new Map(); // clave = `${nk}_${unifiedName}`
+        
+        // Determinar valores sincronizados para cada grupo (NK + nombre unificado)
+        for (const result of this.comparisonResults) {
+            const nk = this.extractNKCode(result.name);
+            if (!nk || !commonNKs.has(nk)) continue;
             
-            // Verificar si el usuario tomó una decisión sobre este color
+            const unifiedKey = result.unifiedName || this.colorMatcher.getUnifiedName(result.name);
+            const mapKey = `${nk}_${unifiedKey}`;
+            
+            // Buscar decisión del usuario
             let decisionCmyk = null;
             let decisionLab = null;
             
-            // Buscar en actionStateMap por el colorId
             for (const [uniqueId, state] of this.actionStateMap) {
                 if (state.colorId === result.id) {
                     if (state.actionTaken === 'replace') {
@@ -680,188 +813,258 @@ exportResults() {
                 }
             }
             
-            // Si hay decisión del usuario, usar esos valores
             if (decisionCmyk) {
-                syncedValuesMap.set(unifiedKey, {
-                    cmyk: decisionCmyk,
-                    lab: decisionLab
-                });
-            } 
-            // Si no hay decisión, usar los valores del principal por defecto
-            else if (result.cmykPrimary) {
-                syncedValuesMap.set(unifiedKey, {
-                    cmyk: [...result.cmykPrimary],
-                    lab: [...result.labPrimary]
-                });
-            }
-            // Si no hay principal, usar los del secundario
-            else if (result.cmykSecondary) {
-                syncedValuesMap.set(unifiedKey, {
-                    cmyk: [...result.cmykSecondary],
-                    lab: [...result.labSecondary]
-                });
-            }
-        }
-    }
-    
-    // Colección de todos los colores a exportar
-    const allColorsToExport = [];
-    const addedKeys = new Set(); // Usar clave compuesta: id + nombre normalizado
-    
-    // Función para obtener el unifiedName de un color
-    const getUnifiedKey = (color) => {
-        return this.colorMatcher.getUnifiedName(color.name);
-    };
-    
-    // Función para generar una clave única para evitar duplicados exactos
-    const getUniqueExportKey = (color) => {
-        // Para colores que son equivalentes, usamos unifiedKey + nombre original
-        // Para colores que no son equivalentes, usamos id
-        const unifiedKey = getUnifiedKey(color);
-        
-        // Buscar si este color tiene un equivalente
-        let hasEquivalent = false;
-        for (const result of this.comparisonResults) {
-            if (result.areEquivalent && result.unifiedName === unifiedKey && result.id !== color.id) {
-                hasEquivalent = true;
-                break;
+                syncedValuesMap.set(mapKey, { cmyk: decisionCmyk, lab: decisionLab });
+            } else if (result.cmykPrimary) {
+                syncedValuesMap.set(mapKey, { cmyk: [...result.cmykPrimary], lab: [...result.labPrimary] });
+            } else if (result.cmykSecondary) {
+                syncedValuesMap.set(mapKey, { cmyk: [...result.cmykSecondary], lab: [...result.labSecondary] });
             }
         }
         
-        if (hasEquivalent) {
-            // Si tiene equivalentes, usar unifiedKey + nombre original como clave
-            // Esto permite que colores equivalentes con diferentes nombres aparezcan ambos
-            return `${unifiedKey}_${color.name}`;
-        } else {
-            // Si no tiene equivalentes, usar solo el ID para evitar duplicados exactos
-            return color.id;
-        }
-    };
-    
-    // Agregar TODOS los colores del archivo principal (sin duplicados por ID)
-    for (const color of this.primaryData) {
-        const uniqueKey = color.id; // Por ID para principal
-        if (!addedKeys.has(uniqueKey)) {
-            const unifiedKey = getUnifiedKey(color);
-            const syncedValues = syncedValuesMap.get(unifiedKey);
+        // Construir lista de colores a exportar (solo con NK comunes)
+        const colorsToExport = [];
+        const processedNKNames = new Set(); // Para evitar duplicados dentro del mismo NK y nombre
+        
+        for (const nk of commonNKs) {
+            const primaryColors = primaryByNK.get(nk) || [];
+            const secondaryColors = secondaryByNK.get(nk) || [];
             
-            allColorsToExport.push({
-                id: color.id,
-                name: color.name,
-                cmyk: syncedValues ? [...syncedValues.cmyk] : [...color.cmyk],
-                lab: syncedValues ? [...syncedValues.lab] : [...color.lab],
-                unifiedKey: unifiedKey
-            });
-            addedKeys.add(uniqueKey);
-        }
-    }
-    
-    // Agregar colores del archivo secundario SOLO si:
-    // 1. No tienen el mismo ID que algún color ya agregado
-    // 2. O si son equivalentes a algún color del principal (para mostrar ambos nombres)
-    for (const color of this.secondaryData) {
-        const unifiedKey = getUnifiedKey(color);
-        
-        // Verificar si este color ya fue agregado por ID
-        const alreadyAddedById = addedKeys.has(color.id);
-        
-        // Verificar si este color es equivalente a algún color del principal
-        let isEquivalentToPrimary = false;
-        let equivalentPrimaryColor = null;
-        
-        for (const primaryColor of this.primaryData) {
-            if (this.colorMatcher.areEquivalentNames(primaryColor.name, color.name)) {
-                isEquivalentToPrimary = true;
-                equivalentPrimaryColor = primaryColor;
-                break;
-            }
-        }
-        
-        // Verificar si ya existe un color con el mismo nombre exacto (para evitar duplicados exactos)
-        const sameNameExists = allColorsToExport.some(c => c.name === color.name);
-        
-        // Decidir si agregar este color
-        let shouldAdd = false;
-        
-        if (!alreadyAddedById) {
-            if (isEquivalentToPrimary && equivalentPrimaryColor) {
-                // Si es equivalente al principal, agregarlo (para mostrar ambos nombres)
-                // Pero solo si no es el mismo nombre exacto
-                if (color.name !== equivalentPrimaryColor.name) {
-                    shouldAdd = true;
+            // Procesar cada color del principal
+            for (const primaryColor of primaryColors) {
+                const baseName = this.extractBaseName(primaryColor.name);
+                const unifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
+                const mapKey = `${nk}_${unifiedName}`;
+                const syncedValues = syncedValuesMap.get(mapKey);
+                
+                const uniqueKey = `${nk}_${baseName}`;
+                if (!processedNKNames.has(uniqueKey)) {
+                    colorsToExport.push({
+                        name: primaryColor.name,
+                        cmyk: syncedValues ? [...syncedValues.cmyk] : [...primaryColor.cmyk],
+                        lab: syncedValues ? [...syncedValues.lab] : [...primaryColor.lab]
+                    });
+                    processedNKNames.add(uniqueKey);
                 }
-            } else if (!sameNameExists) {
-                // Si no es equivalente y no hay mismo nombre, agregarlo
-                shouldAdd = true;
+            }
+            
+            // Procesar colores del secundario que tengan nombres equivalentes diferentes
+            for (const secondaryColor of secondaryColors) {
+                const baseName = this.extractBaseName(secondaryColor.name);
+                const unifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
+                
+                // Verificar si este nombre ya fue agregado desde el principal
+                let alreadyAdded = false;
+                for (const primaryColor of primaryColors) {
+                    const primaryBaseName = this.extractBaseName(primaryColor.name);
+                    const primaryUnified = this.colorMatcher.getUnifiedName(primaryColor.name);
+                    
+                    // Si es el mismo nombre base o son equivalentes
+                    if (primaryBaseName === baseName || primaryUnified === unifiedName) {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+                
+                // Si no se agregó y tiene el mismo NK, agregarlo
+                if (!alreadyAdded) {
+                    const uniqueKey = `${nk}_${baseName}`;
+                    if (!processedNKNames.has(uniqueKey)) {
+                        const mapKey = `${nk}_${unifiedName}`;
+                        const syncedValues = syncedValuesMap.get(mapKey);
+                        
+                        colorsToExport.push({
+                            name: secondaryColor.name,
+                            cmyk: syncedValues ? [...syncedValues.cmyk] : [...secondaryColor.cmyk],
+                            lab: syncedValues ? [...syncedValues.lab] : [...secondaryColor.lab]
+                        });
+                        processedNKNames.add(uniqueKey);
+                    }
+                }
             }
         }
         
-        if (shouldAdd) {
-            const syncedValues = syncedValuesMap.get(unifiedKey);
-            
-            allColorsToExport.push({
-                id: color.id,
-                name: color.name,
-                cmyk: syncedValues ? [...syncedValues.cmyk] : [...color.cmyk],
-                lab: syncedValues ? [...syncedValues.lab] : [...color.lab],
-                unifiedKey: unifiedKey,
-                isSecondary: true
+        // Ordenar por nombre para consistencia
+        colorsToExport.sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con NK comunes en ambos archivos)`);
+        
+        // Generar contenido del archivo con números correlativos
+        let content = 'CGATS.17\n';
+        content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
+        content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
+        content += 'NUMBER_OF_FIELDS\t9\n';
+        content += 'BEGIN_DATA_FORMAT\n';
+        content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
+        content += 'END_DATA_FORMAT\n';
+        content += `NUMBER_OF_SETS\t${colorsToExport.length}\n`;
+        content += 'BEGIN_DATA\n\n';
+        
+        let counter = 1;
+        colorsToExport.forEach(item => {
+            content += `${counter} "${item.name}" `;
+            content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
+            content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
+            counter++;
+        });
+        
+        content += '\nEND_DATA\n';
+        
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `alpha_color_export_${new Date().toISOString().slice(0,19)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (solo con NK comunes)`, 'success');
+    }
+    
+    saveActionToHistory(actionType, colorId, colorName, reason) {
+        const history = this.dataManager.getHistory();
+        if (history.length > 0) {
+            const lastHistory = history[0];
+            if (!lastHistory.actionsLog) lastHistory.actionsLog = [];
+            lastHistory.actionsLog.push({
+                type: actionType,
+                colorId: colorId,
+                colorName: colorName,
+                reason: reason,
+                timestamp: new Date().toISOString()
             });
-            addedKeys.add(color.id);
+            this.dataManager.saveToHistory(lastHistory);
         }
     }
     
-    // Ordenar por ID
-    allColorsToExport.sort((a, b) => {
-        const numA = parseInt(a.id) || 0;
-        const numB = parseInt(b.id) || 0;
-        return numA - numB;
-    });
-    
-    // Mostrar en consola qué sincronizaciones se hicieron
-    console.log(`📤 Exportando ${allColorsToExport.length} colores totales`);
-    
-    // Mostrar grupos sincronizados
-    const syncGroups = new Map();
-    for (const color of allColorsToExport) {
-        if (!syncGroups.has(color.unifiedKey)) {
-            syncGroups.set(color.unifiedKey, []);
-        }
-        syncGroups.get(color.unifiedKey).push(color.name);
+    saveToHistory(stats) {
+        const primaryInfo = document.getElementById('primaryFileInfo');
+        const secondaryInfo = document.getElementById('secondaryFileInfo');
+        const primaryFilename = primaryInfo?.querySelector('.filename')?.textContent || 'Desconocido';
+        const secondaryFilename = secondaryInfo?.querySelector('.filename')?.textContent || 'Desconocido';
+        
+        const historyItem = {
+            id: Date.now(),
+            date: new Date().toISOString(),
+            primaryFile: primaryFilename,
+            secondaryFile: secondaryFilename,
+            stats: { ...stats },
+            actionsLog: [],
+            results: this.comparisonResults.slice(0, 10)
+        };
+        this.dataManager.saveToHistory(historyItem);
+        this.loadHistory();
     }
     
-    for (const [unifiedKey, names] of syncGroups) {
-        if (names.length > 1) {
-            console.log(`   🔗 Grupo "${unifiedKey}": ${names.join(', ')} → todos con los mismos valores CMYK`);
+    loadHistory() {
+        const history = this.dataManager.getHistory();
+        this.uiRenderer.renderHistory(history);
+    }
+    
+    clearHistory() {
+        if (confirm('¿Eliminar todo el historial de comparaciones?')) {
+            this.dataManager.clearHistory();
+            this.loadHistory();
+            this.uiRenderer.showToast('Historial limpiado', 'success');
         }
     }
     
-    // Generar contenido del archivo
-    let content = 'CGATS.17\n';
-    content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
-    content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
-    content += 'NUMBER_OF_FIELDS\t9\n';
-    content += 'BEGIN_DATA_FORMAT\n';
-    content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
-    content += 'END_DATA_FORMAT\n';
-    content += `NUMBER_OF_SETS\t${allColorsToExport.length}\n`;
-    content += 'BEGIN_DATA\n\n';
+    clearAll() {
+        if (confirm('¿Limpiar todos los datos cargados? Esta acción eliminará los datos guardados.')) {
+            this.primaryData = [];
+            this.secondaryData = [];
+            this.comparisonResults = [];
+            this.currentFilter = 'all';
+            this.actionHistory = [];
+            this.actionStateMap.clear();
+            this.searchTerm = '';
+            
+            this.clearFullState();
+            
+            const primaryInput = document.getElementById('primaryFileInput');
+            const secondaryInput = document.getElementById('secondaryFileInput');
+            const primaryInfo = document.getElementById('primaryFileInfo');
+            const secondaryInfo = document.getElementById('secondaryFileInfo');
+            const searchInput = document.getElementById('searchInput');
+            const statsContainer = document.getElementById('statsBarContainer');
+            
+            if (primaryInput) primaryInput.value = '';
+            if (secondaryInput) secondaryInput.value = '';
+            if (primaryInfo) {
+                const filenameSpan = primaryInfo.querySelector('.filename');
+                const recordCountSpan = primaryInfo.querySelector('.record-count');
+                if (filenameSpan) filenameSpan.textContent = 'Ningún archivo cargado';
+                if (recordCountSpan) recordCountSpan.textContent = '';
+            }
+            if (secondaryInfo) {
+                const filenameSpan = secondaryInfo.querySelector('.filename');
+                const recordCountSpan = secondaryInfo.querySelector('.record-count');
+                if (filenameSpan) filenameSpan.textContent = 'Ningún archivo cargado';
+                if (recordCountSpan) recordCountSpan.textContent = '';
+            }
+            
+            const primaryCount = document.getElementById('primaryCount');
+            const secondaryCount = document.getElementById('secondaryCount');
+            if (primaryCount) primaryCount.textContent = '0';
+            if (secondaryCount) secondaryCount.textContent = '0';
+            
+            if (searchInput) {
+                searchInput.value = '';
+                this.searchTerm = '';
+            }
+            if (statsContainer) statsContainer.style.display = 'none';
+            
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                if (tab.dataset.filter === 'all') tab.classList.add('active');
+                else tab.classList.remove('active');
+            });
+            this.currentFilter = 'all';
+            
+            const totalCount = document.getElementById('totalCount');
+            const matchCount = document.getElementById('matchCount');
+            const diffCountDisplay = document.getElementById('diffCountDisplay');
+            const missingCount = document.getElementById('missingCount');
+            const diffCount = document.getElementById('diffCount');
+            
+            if (totalCount) totalCount.textContent = '0';
+            if (matchCount) matchCount.textContent = '0';
+            if (diffCountDisplay) diffCountDisplay.textContent = '0';
+            if (missingCount) missingCount.textContent = '0';
+            if (diffCount) diffCount.textContent = '0';
+            
+            this.filterResults();
+            this.uiRenderer.showToast('Todos los datos han sido limpiados', 'info');
+        }
+    }
     
-    allColorsToExport.forEach(item => {
-        content += `${item.id} "${item.name}" `;
-        content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
-        content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
-    });
+    downloadCreatorFile() {
+        const creatorData = this.uiRenderer.getCreatorData();
+        if (creatorData.length === 0) {
+            this.uiRenderer.showToast('No hay datos para exportar', 'warning');
+            return;
+        }
+        const content = this.fileHandler.generateTxtFromData(creatorData);
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `alpha_color_data_${new Date().toISOString().slice(0,19)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.uiRenderer.showToast('✨ Archivo TXT generado', 'success');
+    }
     
-    content += '\nEND_DATA\n';
-    
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `alpha_color_export_${new Date().toISOString().slice(0,19)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    this.uiRenderer.showToast(`📥 Exportados ${allColorsToExport.length} colores (${syncGroups.size} grupos sincronizados)`, 'success');
+    switchView(view) {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.view === view) btn.classList.add('active');
+        });
+        document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
+        const targetView = document.getElementById(`${view}View`);
+        if (targetView) targetView.classList.add('active');
+        if (view === 'history') this.loadHistory();
+        else if (view === 'creator') this.uiRenderer.initCreatorTable();
+    }
 }
+
+const app = new AlphaColorMatch();
