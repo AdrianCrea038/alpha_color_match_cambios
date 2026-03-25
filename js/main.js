@@ -93,19 +93,17 @@ class AlphaColorMatch {
     }
     
     // ============================================================
-    // ✅ NUEVO: GUARDAR ESTADO COMPLETO
+    // ✅ GUARDAR ESTADO COMPLETO
     // ============================================================
     
     saveFullState() {
         try {
-            // Obtener el valor actual del campo de búsqueda
             const searchInput = document.getElementById('searchInput');
             const currentSearchTerm = searchInput ? searchInput.value : '';
             
             const fullState = {
                 primaryData: this.primaryData,
                 secondaryData: this.secondaryData,
-                comparisonResults: this.comparisonResults,
                 actionStateMap: Array.from(this.actionStateMap.entries()),
                 currentFilter: this.currentFilter,
                 searchTerm: currentSearchTerm,
@@ -115,7 +113,7 @@ class AlphaColorMatch {
             localStorage.setItem('alpha_color_match_full_state', JSON.stringify(fullState));
             console.log('💾 Estado completo guardado:', {
                 colores: this.primaryData.length,
-                comparados: this.comparisonResults.length,
+                secundarios: this.secondaryData.length,
                 acciones: this.actionStateMap.size,
                 filtro: this.currentFilter
             });
@@ -124,41 +122,40 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ NUEVO: CARGAR ESTADO COMPLETO
+    // ✅ CARGAR ESTADO COMPLETO Y REGENERAR COMPARACIÓN
     loadFullState() {
         try {
             const savedState = localStorage.getItem('alpha_color_match_full_state');
             if (savedState) {
                 const state = JSON.parse(savedState);
+                console.log('📂 Cargando estado guardado...', state);
+                
+                let hasData = false;
                 
                 // Restaurar primaryData
                 if (state.primaryData && state.primaryData.length > 0) {
                     this.primaryData = state.primaryData;
                     this.updateFileInfo('primary', 'Datos guardados', this.primaryData.length);
-                    this.uiRenderer.showToast(`📂 Cargados ${this.primaryData.length} colores de referencia`, 'success');
+                    hasData = true;
                 }
                 
-                // Restaurar secondaryData (si existe)
+                // Restaurar secondaryData
                 if (state.secondaryData && state.secondaryData.length > 0) {
                     this.secondaryData = state.secondaryData;
                     this.updateFileInfo('secondary', 'Datos guardados', this.secondaryData.length);
-                }
-                
-                // Restaurar comparisonResults
-                if (state.comparisonResults && state.comparisonResults.length > 0) {
-                    this.comparisonResults = state.comparisonResults;
+                    hasData = true;
                 }
                 
                 // Restaurar actionStateMap
                 if (state.actionStateMap && state.actionStateMap.length > 0) {
                     this.actionStateMap = new Map(state.actionStateMap);
                     console.log(`✅ Estado restaurado: ${this.actionStateMap.size} colores marcados`);
+                    hasData = true;
                 }
                 
                 // Restaurar filtro
                 if (state.currentFilter) {
                     this.currentFilter = state.currentFilter;
-                    // Actualizar el tab activo
                     document.querySelectorAll('.filter-tab').forEach(tab => {
                         if (tab.dataset.filter === this.currentFilter) {
                             tab.classList.add('active');
@@ -177,19 +174,44 @@ class AlphaColorMatch {
                     }
                 }
                 
-                // Si hay resultados, mostrarlos
-                if (this.comparisonResults.length > 0) {
-                    this.filterResults();
+                // ✅ CRÍTICO: Si hay primaryData y secondaryData, regenerar la comparación
+                if (this.primaryData.length > 0 && this.secondaryData.length > 0) {
+                    console.log('🔄 Regenerando comparación con datos guardados...');
+                    
+                    // Regenerar resultados de comparación
+                    const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
+                    
+                    // Aplicar los estados guardados
+                    this.comparisonResults = rawResults.map(result => {
+                        const savedStateItem = this.actionStateMap.get(result.id);
+                        if (savedStateItem) {
+                            return {
+                                ...result,
+                                actionTaken: savedStateItem.actionTaken,
+                                actionReason: savedStateItem.reason,
+                                actionTimestamp: savedStateItem.timestamp
+                            };
+                        }
+                        return result;
+                    });
+                    
+                    console.log(`✅ Comparación regenerada: ${this.comparisonResults.length} resultados`);
                     
                     // Actualizar estadísticas
                     const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
                     this.updateStats(stats);
                     this.updateStatsBar(stats);
                     
-                    this.uiRenderer.showToast(`💾 Datos recuperados de sesión anterior`, 'success');
-                } else if (this.primaryData.length > 0 && this.secondaryData.length > 0) {
-                    // Si hay datos pero no resultados, regenerar comparación
-                    this.compareFiles();
+                    // Guardar en historial
+                    this.saveToHistory(stats);
+                    
+                    // Mostrar resultados
+                    this.filterResults();
+                    
+                    this.uiRenderer.showToast(`💾 Datos recuperados: ${this.primaryData.length} colores, ${this.comparisonResults.length} resultados`, 'success');
+                } else if (hasData) {
+                    this.uiRenderer.showToast(`📂 Datos cargados: ${this.primaryData.length} colores en referencia`, 'info');
+                    this.filterResults();
                 }
             }
         } catch (error) {
@@ -216,12 +238,14 @@ class AlphaColorMatch {
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
             this.actionStateMap.clear();
             
-            // ✅ GUARDAR ESTADO COMPLETO
+            // ✅ GUARDAR ESTADO
             this.saveFullState();
             
             // Si ya hay secondaryData, hacer comparación automática
             if (this.secondaryData.length > 0) {
                 this.compareFiles();
+            } else {
+                this.filterResults();
             }
         } finally {
             this.showLoading(false);
@@ -237,12 +261,14 @@ class AlphaColorMatch {
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
             
-            // ✅ GUARDAR ESTADO COMPLETO
+            // ✅ GUARDAR ESTADO
             this.saveFullState();
             
             // Si ya hay primaryData, hacer comparación automática
             if (this.primaryData.length > 0) {
                 this.compareFiles();
+            } else {
+                this.filterResults();
             }
         } finally {
             this.showLoading(false);
@@ -289,10 +315,10 @@ class AlphaColorMatch {
                 this.saveToHistory(stats);
                 this.filterResults();
                 
-                // ✅ GUARDAR ESTADO COMPLETO DESPUÉS DE COMPARAR
+                // ✅ GUARDAR ESTADO DESPUÉS DE COMPARAR
                 this.saveFullState();
                 
-                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias encontradas, ${stats.missing} colores no encontrados`, 'info');
+                this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.missing} no encontrados`, 'info');
             } finally {
                 this.showLoading(false);
             }
