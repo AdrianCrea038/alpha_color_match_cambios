@@ -17,24 +17,73 @@ class AlphaColorMatch {
         this.actionHistory = [];
         this.actionCounter = 0;
         
-        // ✅ MAPA PARA PERSISTIR EL ESTADO DE CADA COLOR
         this.actionStateMap = new Map();
         
         this.init();
     }
+    
+    // ============================================================
+    // MÉTODOS DE INICIALIZACIÓN
+    // ============================================================
     
     init() {
         this.bindEvents();
         this.loadHistory();
         this.uiRenderer.initCreatorTable();
         window.app = this;
-        
-        // ✅ CARGAR DATOS PERSISTIDOS AL INICIAR
         this.loadPersistedData();
     }
     
+    bindEvents() {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchView(btn.dataset.view));
+        });
+        
+        document.getElementById('primaryFileInput').addEventListener('change', (e) => this.loadPrimaryFile(e.target.files[0]));
+        document.getElementById('secondaryFileInput').addEventListener('change', (e) => this.loadSecondaryFile(e.target.files[0]));
+        
+        document.getElementById('compareBtn').addEventListener('click', () => this.compareFiles());
+        document.getElementById('replaceAllBtn')?.addEventListener('click', () => this.replaceAllColors());
+        document.getElementById('exportResultsBtn').addEventListener('click', () => this.exportResults());
+        document.getElementById('clearAllBtn').addEventListener('click', () => this.clearAll());
+        document.getElementById('clearHistoryBtn')?.addEventListener('click', () => this.clearHistory());
+        document.getElementById('downloadTxtBtn')?.addEventListener('click', () => this.downloadCreatorFile());
+        document.getElementById('addColorRowBtn')?.addEventListener('click', () => this.uiRenderer.addCreatorRow());
+        document.getElementById('resetCreatorBtn')?.addEventListener('click', () => this.uiRenderer.resetCreatorTable());
+        
+        document.getElementById('searchInput').addEventListener('input', (e) => this.filterResults());
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                this.currentFilter = tab.dataset.filter;
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                this.filterResults();
+            });
+        });
+    }
+    
+    showLoading(show) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.style.display = show ? 'flex' : 'none';
+        }
+    }
+    
+    updateFileInfo(type, filename, count) {
+        const infoDiv = document.getElementById(`${type}FileInfo`);
+        if (infoDiv) {
+            infoDiv.querySelector('.filename').textContent = filename;
+            infoDiv.querySelector('.record-count').textContent = `${count} registro${count !== 1 ? 's' : ''}`;
+        }
+        if (type === 'primary') {
+            document.getElementById('primaryCount').textContent = count;
+        } else {
+            document.getElementById('secondaryCount').textContent = count;
+        }
+    }
+    
     // ============================================================
-    // ✅ NUEVO: MÉTODOS DE PERSISTENCIA LOCAL
+    // MÉTODOS DE PERSISTENCIA LOCAL
     // ============================================================
     
     savePersistedData() {
@@ -57,20 +106,17 @@ class AlphaColorMatch {
             if (savedData) {
                 const data = JSON.parse(savedData);
                 
-                // Restaurar primaryData
                 if (data.primaryData && data.primaryData.length > 0) {
                     this.primaryData = data.primaryData;
                     this.updateFileInfo('primary', 'Datos guardados', this.primaryData.length);
                     this.uiRenderer.showToast(`📂 Datos cargados: ${this.primaryData.length} colores en referencia`, 'info');
                 }
                 
-                // Restaurar actionStateMap
                 if (data.actionStateMap && data.actionStateMap.length > 0) {
                     this.actionStateMap = new Map(data.actionStateMap);
                     console.log(`✅ Estado restaurado: ${this.actionStateMap.size} colores marcados`);
                 }
                 
-                // Si hay datos, mostrar mensaje
                 if (this.primaryData.length > 0) {
                     this.uiRenderer.showToast(`💾 Datos recuperados de sesión anterior`, 'success');
                 }
@@ -86,7 +132,7 @@ class AlphaColorMatch {
     }
     
     // ============================================================
-    // MÉTODOS EXISTENTES MODIFICADOS PARA GUARDAR AUTOMÁTICAMENTE
+    // CARGA DE ARCHIVOS
     // ============================================================
     
     async loadPrimaryFile(file) {
@@ -98,8 +144,6 @@ class AlphaColorMatch {
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
             this.actionStateMap.clear();
-            
-            // ✅ GUARDAR AUTOMÁTICAMENTE
             this.savePersistedData();
         } finally {
             this.showLoading(false);
@@ -119,6 +163,10 @@ class AlphaColorMatch {
             this.showLoading(false);
         }
     }
+    
+    // ============================================================
+    // COMPARACIÓN
+    // ============================================================
     
     compareFiles() {
         if (this.primaryData.length === 0) {
@@ -163,6 +211,103 @@ class AlphaColorMatch {
         }, 100);
     }
     
+    updateStats(stats) {
+        document.getElementById('totalCount').textContent = stats.total;
+        document.getElementById('matchCount').textContent = stats.matches;
+        document.getElementById('diffCountDisplay').textContent = stats.differences;
+        document.getElementById('missingCount').textContent = stats.missing;
+        document.getElementById('diffCount').textContent = stats.differences;
+    }
+    
+    updateStatsBar(stats) {
+        const container = document.getElementById('statsBarContainer');
+        const fill = document.getElementById('statsBarFill');
+        const matchPercent = document.getElementById('matchPercent');
+        const diffPercent = document.getElementById('diffPercent');
+        const missingPercent = document.getElementById('missingPercent');
+        
+        if (stats.total > 0) {
+            container.style.display = 'block';
+            const matchPct = (stats.matches / stats.total * 100).toFixed(0);
+            const diffPct = (stats.differences / stats.total * 100).toFixed(0);
+            const missingPct = (stats.missing / stats.total * 100).toFixed(0);
+            
+            matchPercent.textContent = matchPct;
+            diffPercent.textContent = diffPct;
+            missingPercent.textContent = missingPct;
+            fill.style.width = `${matchPct}%`;
+        } else {
+            container.style.display = 'none';
+        }
+    }
+    
+    filterResults() {
+        let filtered = [...this.comparisonResults];
+        if (this.currentFilter !== 'all') {
+            filtered = filtered.filter(item => item.status === this.currentFilter);
+        }
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        if (searchTerm) {
+            filtered = filtered.filter(item => {
+                return item.name.toLowerCase().includes(searchTerm) ||
+                       item.id.includes(searchTerm) ||
+                       (item.cmykPrimary && item.cmykPrimary.some(v => v.toString().includes(searchTerm))) ||
+                       (item.cmykSecondary && item.cmykSecondary.some(v => v.toString().includes(searchTerm)));
+            });
+        }
+        this.uiRenderer.renderComparisonTable(filtered, this);
+    }
+    
+    // ============================================================
+    // MÉTODOS DE ACCIONES
+    // ============================================================
+    
+    saveActionState(colorId, actionTaken, reason = '') {
+        this.actionStateMap.set(colorId, {
+            actionTaken: actionTaken,
+            reason: reason,
+            timestamp: new Date().toISOString()
+        });
+        console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
+        this.savePersistedData();
+    }
+    
+    removeActionState(colorId) {
+        this.actionStateMap.delete(colorId);
+        console.log(`🗑️ Estado eliminado: ${colorId}`);
+        this.savePersistedData();
+    }
+    
+    showReplaceConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showReplaceConfirm(colorId, (reason) => {
+            this.replaceColor(color, reason);
+        });
+    }
+    
+    showKeepConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showKeepConfirm(colorId, (reason) => {
+            this.keepColor(color, reason);
+        });
+    }
+    
+    showAddConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showAddConfirm(colorId, color.name, (reason) => {
+            this.addMissingColor(color, reason);
+        });
+    }
+    
+    showUndoDialog(colorId, actionType) {
+        this.uiRenderer.showUndoModal(colorId, actionType, (reason) => {
+            this.undoAction(colorId, actionType, reason);
+        });
+    }
+    
     replaceColor(item, reason = '') {
         const index = this.primaryData.findIndex(p => 
             p.id === item.id || 
@@ -193,10 +338,7 @@ class AlphaColorMatch {
             };
             
             this.saveActionState(item.id, 'replace', reason);
-            
-            // ✅ GUARDAR DESPUÉS DE MODIFICAR DATOS
             this.savePersistedData();
-            
             this.compareFiles();
             this.saveActionToHistory('replace', item.id, item.name, reason);
             this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado`, 'success');
@@ -218,8 +360,6 @@ class AlphaColorMatch {
         });
         
         this.saveActionState(item.id, 'keep', reason);
-        
-        // ✅ GUARDAR ESTADO DESPUÉS DE MARCAR
         this.savePersistedData();
         
         const resultIndex = this.comparisonResults.findIndex(r => r.id === item.id);
@@ -258,10 +398,7 @@ class AlphaColorMatch {
         this.primaryData.push(newColor);
         
         this.saveActionState(item.id, 'add', reason);
-        
-        // ✅ GUARDAR DESPUÉS DE AGREGAR
         this.savePersistedData();
-        
         this.compareFiles();
         this.saveActionToHistory('add', item.id, item.name, reason);
         this.uiRenderer.showToast(`✅ Color "${item.name}" agregado`, 'success');
@@ -290,8 +427,6 @@ class AlphaColorMatch {
         }
         
         this.removeActionState(colorId);
-        
-        // ✅ GUARDAR DESPUÉS DE DESHACER
         this.savePersistedData();
         
         const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
@@ -366,9 +501,7 @@ class AlphaColorMatch {
                         }
                     }
                     
-                    // ✅ GUARDAR DESPUÉS DE REEMPLAZO MASIVO
                     this.savePersistedData();
-                    
                     this.saveActionToHistory('replace_all', 'all', `${replacedCount} colores`, `Reemplazo masivo`);
                     this.compareFiles();
                     
@@ -380,135 +513,24 @@ class AlphaColorMatch {
         }
     }
     
-    saveActionState(colorId, actionTaken, reason = '') {
-        this.actionStateMap.set(colorId, {
-            actionTaken: actionTaken,
-            reason: reason,
-            timestamp: new Date().toISOString()
-        });
-        console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
-        
-        // ✅ GUARDAR CADA VEZ QUE SE CAMBIA EL ESTADO
-        this.savePersistedData();
-    }
-    
-    removeActionState(colorId) {
-        this.actionStateMap.delete(colorId);
-        console.log(`🗑️ Estado eliminado: ${colorId}`);
-        
-        // ✅ GUARDAR DESPUÉS DE ELIMINAR
-        this.savePersistedData();
-    }
-    
-    clearAll() {
-        if (confirm('¿Limpiar todos los datos cargados? Esta acción eliminará los datos guardados.')) {
-            this.primaryData = [];
-            this.secondaryData = [];
-            this.comparisonResults = [];
-            this.currentFilter = 'all';
-            this.actionHistory = [];
-            this.actionStateMap.clear();
-            
-            // ✅ ELIMINAR DATOS PERSISTIDOS
-            this.clearPersistedData();
-            
-            document.getElementById('primaryFileInput').value = '';
-            document.getElementById('secondaryFileInput').value = '';
-            document.getElementById('primaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
-            document.getElementById('secondaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
-            document.getElementById('primaryCount').textContent = '0';
-            document.getElementById('secondaryCount').textContent = '0';
-            document.getElementById('searchInput').value = '';
-            document.getElementById('statsBarContainer').style.display = 'none';
-            document.querySelectorAll('.filter-tab').forEach(tab => {
-                if (tab.dataset.filter === 'all') tab.classList.add('active');
-                else tab.classList.remove('active');
-            });
-            this.currentFilter = 'all';
-            this.filterResults();
-            this.uiRenderer.showToast('Todos los datos han sido limpiados', 'info');
-        }
-    }
-    
     // ============================================================
-    // MÉTODOS EXISTENTES (SIN CAMBIOS)
+    // HISTORIAL Y EXPORTACIÓN
     // ============================================================
     
-    showReplaceConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showReplaceConfirm(colorId, (reason) => {
-            this.replaceColor(color, reason);
-        });
-    }
-    
-    showKeepConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showKeepConfirm(colorId, (reason) => {
-            this.keepColor(color, reason);
-        });
-    }
-    
-    showAddConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showAddConfirm(colorId, color.name, (reason) => {
-            this.addMissingColor(color, reason);
-        });
-    }
-    
-    showUndoDialog(colorId, actionType) {
-        this.uiRenderer.showUndoModal(colorId, actionType, (reason) => {
-            this.undoAction(colorId, actionType, reason);
-        });
-    }
-    
-    updateStats(stats) {
-        document.getElementById('totalCount').textContent = stats.total;
-        document.getElementById('matchCount').textContent = stats.matches;
-        document.getElementById('diffCountDisplay').textContent = stats.differences;
-        document.getElementById('missingCount').textContent = stats.missing;
-        document.getElementById('diffCount').textContent = stats.differences;
-    }
-    
-    updateStatsBar(stats) {
-        const container = document.getElementById('statsBarContainer');
-        const fill = document.getElementById('statsBarFill');
-        const matchPercent = document.getElementById('matchPercent');
-        const diffPercent = document.getElementById('diffPercent');
-        const missingPercent = document.getElementById('missingPercent');
-        
-        if (stats.total > 0) {
-            container.style.display = 'block';
-            const matchPct = (stats.matches / stats.total * 100).toFixed(0);
-            const diffPct = (stats.differences / stats.total * 100).toFixed(0);
-            const missingPct = (stats.missing / stats.total * 100).toFixed(0);
-            
-            matchPercent.textContent = matchPct;
-            diffPercent.textContent = diffPct;
-            missingPercent.textContent = missingPct;
-            fill.style.width = `${matchPct}%`;
-        } else {
-            container.style.display = 'none';
-        }
-    }
-    
-    filterResults() {
-        let filtered = [...this.comparisonResults];
-        if (this.currentFilter !== 'all') {
-            filtered = filtered.filter(item => item.status === this.currentFilter);
-        }
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        if (searchTerm) {
-            filtered = filtered.filter(item => {
-                return item.name.toLowerCase().includes(searchTerm) ||
-                       item.id.includes(searchTerm) ||
-                       (item.cmykPrimary && item.cmykPrimary.some(v => v.toString().includes(searchTerm))) ||
-                       (item.cmykSecondary && item.cmykSecondary.some(v => v.toString().includes(searchTerm)));
+    saveActionToHistory(actionType, colorId, colorName, reason) {
+        const history = this.dataManager.getHistory();
+        if (history.length > 0) {
+            const lastHistory = history[0];
+            if (!lastHistory.actionsLog) lastHistory.actionsLog = [];
+            lastHistory.actionsLog.push({
+                type: actionType,
+                colorId: colorId,
+                colorName: colorName,
+                reason: reason,
+                timestamp: new Date().toISOString()
             });
+            this.dataManager.saveToHistory(lastHistory);
         }
-        this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
     exportResults() {
@@ -554,6 +576,39 @@ class AlphaColorMatch {
         }
     }
     
+    // ============================================================
+    // LIMPIEZA Y UTILIDADES
+    // ============================================================
+    
+    clearAll() {
+        if (confirm('¿Limpiar todos los datos cargados? Esta acción eliminará los datos guardados.')) {
+            this.primaryData = [];
+            this.secondaryData = [];
+            this.comparisonResults = [];
+            this.currentFilter = 'all';
+            this.actionHistory = [];
+            this.actionStateMap.clear();
+            
+            this.clearPersistedData();
+            
+            document.getElementById('primaryFileInput').value = '';
+            document.getElementById('secondaryFileInput').value = '';
+            document.getElementById('primaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
+            document.getElementById('secondaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
+            document.getElementById('primaryCount').textContent = '0';
+            document.getElementById('secondaryCount').textContent = '0';
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statsBarContainer').style.display = 'none';
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                if (tab.dataset.filter === 'all') tab.classList.add('active');
+                else tab.classList.remove('active');
+            });
+            this.currentFilter = 'all';
+            this.filterResults();
+            this.uiRenderer.showToast('Todos los datos han sido limpiados', 'info');
+        }
+    }
+    
     downloadCreatorFile() {
         const creatorData = this.uiRenderer.getCreatorData();
         if (creatorData.length === 0) {
@@ -580,42 +635,6 @@ class AlphaColorMatch {
         document.getElementById(`${view}View`).classList.add('active');
         if (view === 'history') this.loadHistory();
         else if (view === 'creator') this.uiRenderer.initCreatorTable();
-    }
-    
-    showLoading(show) {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.style.display = show ? 'flex' : 'none';
-        }
-    }
-    
-    updateFileInfo(type, filename, count) {
-        const infoDiv = document.getElementById(`${type}FileInfo`);
-        if (infoDiv) {
-            infoDiv.querySelector('.filename').textContent = filename;
-            infoDiv.querySelector('.record-count').textContent = `${count} registro${count !== 1 ? 's' : ''}`;
-        }
-        if (type === 'primary') {
-            document.getElementById('primaryCount').textContent = count;
-        } else {
-            document.getElementById('secondaryCount').textContent = count;
-        }
-    }
-    
-    saveActionToHistory(actionType, colorId, colorName, reason) {
-        const history = this.dataManager.getHistory();
-        if (history.length > 0) {
-            const lastHistory = history[0];
-            if (!lastHistory.actionsLog) lastHistory.actionsLog = [];
-            lastHistory.actionsLog.push({
-                type: actionType,
-                colorId: colorId,
-                colorName: colorName,
-                reason: reason,
-                timestamp: new Date().toISOString()
-            });
-            this.dataManager.saveToHistory(lastHistory);
-        }
     }
 }
 
