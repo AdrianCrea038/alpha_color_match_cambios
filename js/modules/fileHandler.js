@@ -12,6 +12,13 @@ export class FileHandler {
         });
     }
     
+    // ✅ Función para normalizar espacios en nombres
+    normalizeSpaces(str) {
+        if (!str) return '';
+        // Eliminar espacios al inicio y final, y reemplazar múltiples espacios por uno solo
+        return str.trim().replace(/\s+/g, ' ');
+    }
+    
     parseContent(content) {
         const lines = content.split(/\r?\n/);
         let dataStarted = false;
@@ -29,18 +36,22 @@ export class FileHandler {
             const match = line.match(/^(\d+)\s+"([^"]+)"\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
             
             if (match) {
+                // ✅ NORMALIZAR ESPACIOS EN EL NOMBRE
+                const normalizedName = this.normalizeSpaces(match[2]);
                 records.push({
                     id: match[1],
-                    name: match[2],
+                    name: normalizedName,
                     cmyk: [parseFloat(match[3]), parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6])],
                     lab: [parseFloat(match[7]), parseFloat(match[8]), parseFloat(match[9])]
                 });
             } else {
                 const simpleMatch = line.match(/^(\d+)\s+([^\s]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
                 if (simpleMatch) {
+                    // ✅ NORMALIZAR ESPACIOS EN EL NOMBRE
+                    const normalizedName = this.normalizeSpaces(simpleMatch[2]);
                     records.push({
                         id: simpleMatch[1],
-                        name: simpleMatch[2],
+                        name: normalizedName,
                         cmyk: [parseFloat(simpleMatch[3]), parseFloat(simpleMatch[4]), parseFloat(simpleMatch[5]), parseFloat(simpleMatch[6])],
                         lab: [parseFloat(simpleMatch[7]), parseFloat(simpleMatch[8]), parseFloat(simpleMatch[9])]
                     });
