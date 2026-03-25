@@ -1,6 +1,6 @@
 export class FileHandler {
     constructor() {
-        // ✅ TABLA DE UNIFICACIÓN DE NOMBRES (según tu archivo)
+        // TABLA DE UNIFICACIÓN DE NOMBRES
         this.nameMapping = new Map([
             ["10FTM White", "10A White"],
             ["03sTM Black", "00A Black"],
@@ -56,38 +56,52 @@ export class FileHandler {
             reader.onload = (e) => {
                 const content = e.target.result;
                 const records = this.parseContent(content);
-                resolve(records);
+                // ✅ Eliminar duplicados por ID (por si acaso)
+                const uniqueRecords = this.removeDuplicatesById(records);
+                resolve(uniqueRecords);
             };
             reader.onerror = reject;
             reader.readAsText(file);
         });
     }
     
-    // ✅ Función para normalizar espacios en nombres
+    // ✅ Método para eliminar duplicados por ID
+    removeDuplicatesById(records) {
+        const seen = new Map();
+        const unique = [];
+        
+        for (const record of records) {
+            if (!seen.has(record.id)) {
+                seen.set(record.id, true);
+                unique.push(record);
+            }
+        }
+        
+        if (records.length !== unique.length) {
+            console.warn(`⚠️ Se eliminaron ${records.length - unique.length} registros duplicados por ID`);
+        }
+        
+        return unique;
+    }
+    
     normalizeSpaces(str) {
         if (!str) return '';
         return str.trim().replace(/\s+/g, ' ');
     }
     
-    // ✅ Función para extraer el código NK del nombre
     extractNKCode(name) {
         const match = name.match(/NK\d+$/);
         return match ? match[0] : null;
     }
     
-    // ✅ Función para eliminar el código NK del nombre
     removeNKCode(name) {
         return name.replace(/\s+NK\d+$/, '').trim();
     }
     
-    // ✅ Función para normalizar el nombre según la tabla de unificación
     normalizeNameWithMapping(name) {
-        // Primero eliminar espacios múltiples
         let normalized = this.normalizeSpaces(name);
         
-        // Buscar en el mapa de unificación
         for (let [original, mapped] of this.nameMapping) {
-            // Comparar ignorando espacios y mayúsculas
             const normalizedOriginal = this.normalizeSpaces(original).toLowerCase();
             const normalizedName = normalized.toLowerCase();
             
@@ -107,46 +121,61 @@ export class FileHandler {
         const records = [];
         
         for (let line of lines) {
+            // Saltar líneas vacías
+            if (line.trim() === '') continue;
+            
             if (line.trim() === 'BEGIN_DATA') {
                 dataStarted = true;
                 continue;
             }
             if (dataStarted && line.trim() === 'END_DATA') break;
             if (!dataStarted) continue;
-            if (line.trim() === '') continue;
             
-            const match = line.match(/^(\d+)\s+"([^"]+)"\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
+            // ✅ UN SOLO PATRÓN DE MATCH - evitar duplicados
+            // Patrón que soporta nombres con o sin comillas
+            const match = line.match(/^(\d+)\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
             
             if (match) {
-                let originalName = match[2];
+                // Obtener el nombre (con comillas o sin ellas)
+                let originalName = match[2] || match[3];
                 
-                // ✅ Extraer código NK
-                const nkCode = this.extractNKCode(originalName);
-                
-                // ✅ Eliminar código NK para normalización
-                let nameWithoutNK = this.removeNKCode(originalName);
-                
-                // ✅ Normalizar nombre según tabla de unificación
-                let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
-                
-                // ✅ Reconstruir nombre final con código NK (si existía)
-                let finalName = normalizedBaseName;
-                if (nkCode) {
-                    finalName = `${normalizedBaseName} ${nkCode}`;
+                if (originalName) {
+                    // Extraer código NK
+                    const nkCode = this.extractNKCode(originalName);
+                    
+                    // Eliminar código NK para normalización
+                    let nameWithoutNK = this.removeNKCode(originalName);
+                    
+                    // Normalizar nombre según tabla de unificación
+                    let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
+                    
+                    // Reconstruir nombre final con código NK (si existía)
+                    let finalName = normalizedBaseName;
+                    if (nkCode) {
+                        finalName = `${normalizedBaseName} ${nkCode}`;
+                    }
+                    
+                    // Verificar si ya existe un registro con este ID (evitar duplicados en el mismo archivo)
+                    const existingIndex = records.findIndex(r => r.id === match[1]);
+                    if (existingIndex !== -1) {
+                        console.warn(`⚠️ ID duplicado encontrado: ${match[1]}, omitiendo duplicado`);
+                        continue;
+                    }
+                    
+                    records.push({
+                        id: match[1],
+                        name: finalName,
+                        originalName: originalName,
+                        normalizedBaseName: normalizedBaseName,
+                        cmyk: [parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6]), parseFloat(match[7])],
+                        lab: [parseFloat(match[8]), parseFloat(match[9]), parseFloat(match[10])]
+                    });
                 }
-                
-                records.push({
-                    id: match[1],
-                    name: finalName,
-                    originalName: originalName,
-                    normalizedBaseName: normalizedBaseName,
-                    cmyk: [parseFloat(match[3]), parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6])],
-                    lab: [parseFloat(match[7]), parseFloat(match[8]), parseFloat(match[9])]
-                });
             } else {
-                const simpleMatch = line.match(/^(\d+)\s+([^\s]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
-                if (simpleMatch) {
-                    let originalName = simpleMatch[2];
+                // Si no match con el patrón principal, intentar con formato alternativo
+                const altMatch = line.match(/^(\d+)\s+([^\s]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
+                if (altMatch) {
+                    let originalName = altMatch[2];
                     
                     const nkCode = this.extractNKCode(originalName);
                     let nameWithoutNK = this.removeNKCode(originalName);
@@ -157,18 +186,26 @@ export class FileHandler {
                         finalName = `${normalizedBaseName} ${nkCode}`;
                     }
                     
+                    // Verificar si ya existe un registro con este ID
+                    const existingIndex = records.findIndex(r => r.id === altMatch[1]);
+                    if (existingIndex !== -1) {
+                        console.warn(`⚠️ ID duplicado encontrado: ${altMatch[1]}, omitiendo duplicado`);
+                        continue;
+                    }
+                    
                     records.push({
-                        id: simpleMatch[1],
+                        id: altMatch[1],
                         name: finalName,
                         originalName: originalName,
                         normalizedBaseName: normalizedBaseName,
-                        cmyk: [parseFloat(simpleMatch[3]), parseFloat(simpleMatch[4]), parseFloat(simpleMatch[5]), parseFloat(simpleMatch[6])],
-                        lab: [parseFloat(simpleMatch[7]), parseFloat(simpleMatch[8]), parseFloat(simpleMatch[9])]
+                        cmyk: [parseFloat(altMatch[3]), parseFloat(altMatch[4]), parseFloat(altMatch[5]), parseFloat(altMatch[6])],
+                        lab: [parseFloat(altMatch[7]), parseFloat(altMatch[8]), parseFloat(altMatch[9])]
                     });
                 }
             }
         }
         
+        console.log(`📄 Parseados ${records.length} registros únicos del archivo`);
         return records;
     }
     
