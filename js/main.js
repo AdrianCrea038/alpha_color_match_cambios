@@ -294,47 +294,75 @@ class AlphaColorMatch {
         
         setTimeout(() => {
             try {
-                // Primero, identificar colores que faltan en cada archivo (por NK)
-                const primaryByNK = new Map();
-                const secondaryByNK = new Map();
+                // Crear mapas por ID y por nombre unificado
+                const primaryById = new Map();
+                const primaryByUnifiedName = new Map();
+                const secondaryById = new Map();
+                const secondaryByUnifiedName = new Map();
                 
                 for (const color of this.primaryData) {
-                    const nk = this.extractNKCode(color.name);
-                    if (nk) {
-                        if (!primaryByNK.has(nk)) primaryByNK.set(nk, []);
-                        primaryByNK.get(nk).push(color);
+                    primaryById.set(color.id, color);
+                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+                    if (!primaryByUnifiedName.has(unifiedName)) {
+                        primaryByUnifiedName.set(unifiedName, []);
                     }
+                    primaryByUnifiedName.get(unifiedName).push(color);
                 }
                 
                 for (const color of this.secondaryData) {
-                    const nk = this.extractNKCode(color.name);
-                    if (nk) {
-                        if (!secondaryByNK.has(nk)) secondaryByNK.set(nk, []);
-                        secondaryByNK.get(nk).push(color);
+                    secondaryById.set(color.id, color);
+                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+                    if (!secondaryByUnifiedName.has(unifiedName)) {
+                        secondaryByUnifiedName.set(unifiedName, []);
+                    }
+                    secondaryByUnifiedName.get(unifiedName).push(color);
+                }
+                
+                // Detectar colores que faltan en secundario (por ID)
+                const missingInSecondaryById = [];
+                for (const [id, color] of primaryById) {
+                    if (!secondaryById.has(id)) {
+                        missingInSecondaryById.push(color.name);
                     }
                 }
                 
-                // Colores que faltan en secundario (solo en principal)
-                const missingInSecondary = [];
-                for (const [nk, colors] of primaryByNK) {
-                    if (!secondaryByNK.has(nk)) {
-                        for (const color of colors) {
-                            missingInSecondary.push(color.name);
-                        }
+                // Detectar colores que faltan en principal (por ID)
+                const missingInPrimaryById = [];
+                for (const [id, color] of secondaryById) {
+                    if (!primaryById.has(id)) {
+                        missingInPrimaryById.push(color.name);
                     }
                 }
                 
-                // Colores que faltan en principal (solo en secundario)
-                const missingInPrimary = [];
-                for (const [nk, colors] of secondaryByNK) {
-                    if (!primaryByNK.has(nk)) {
-                        for (const color of colors) {
-                            missingInPrimary.push(color.name);
-                        }
+                // También detectar por nombre equivalente (por si hay nombres diferentes pero equivalentes)
+                const missingInSecondaryByName = [];
+                const missingInPrimaryByName = [];
+                
+                // Para cada color en principal, verificar si hay un equivalente en secundario
+                for (const color of this.primaryData) {
+                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+                    const hasEquivalent = secondaryByUnifiedName.has(unifiedName);
+                    
+                    if (!hasEquivalent && !secondaryById.has(color.id)) {
+                        missingInSecondaryByName.push(color.name);
                     }
                 }
                 
-                // Mostrar advertencias en consola y toast
+                // Para cada color en secundario, verificar si hay un equivalente en principal
+                for (const color of this.secondaryData) {
+                    const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+                    const hasEquivalent = primaryByUnifiedName.has(unifiedName);
+                    
+                    if (!hasEquivalent && !primaryById.has(color.id)) {
+                        missingInPrimaryByName.push(color.name);
+                    }
+                }
+                
+                // Combinar resultados (evitar duplicados)
+                const missingInSecondary = [...new Set([...missingInSecondaryById, ...missingInSecondaryByName])];
+                const missingInPrimary = [...new Set([...missingInPrimaryById, ...missingInPrimaryByName])];
+                
+                // Mostrar en consola los colores faltantes
                 if (missingInSecondary.length > 0) {
                     console.warn(`⚠️⚠️⚠️ COLORES QUE FALTAN EN EL ARCHIVO SECUNDARIO ⚠️⚠️⚠️`);
                     console.warn(`Total: ${missingInSecondary.length} colores`);
@@ -342,8 +370,6 @@ class AlphaColorMatch {
                     
                     let message = `❌ FALTAN en SECUNDARIO: ${missingInSecondary.length} colores`;
                     this.uiRenderer.showToast(message, 'warning');
-                    
-                    // Mostrar en la interfaz (opcional)
                     this.showMissingColorsAlert('secundario', missingInSecondary);
                 }
                 
@@ -354,27 +380,30 @@ class AlphaColorMatch {
                     
                     let message = `❌ FALTAN en PRINCIPAL: ${missingInPrimary.length} colores`;
                     this.uiRenderer.showToast(message, 'warning');
-                    
-                    // Mostrar en la interfaz (opcional)
                     this.showMissingColorsAlert('principal', missingInPrimary);
                 }
                 
                 if (missingInSecondary.length === 0 && missingInPrimary.length === 0) {
-                    this.uiRenderer.showToast('✅ Todos los NK coinciden en ambos archivos', 'success');
+                    this.uiRenderer.showToast('✅ Todos los colores tienen su pareja en ambos archivos', 'success');
                 }
+                
+                // Actualizar estadísticas para mostrar en la interfaz
+                const stats = {
+                    total: this.comparisonResults.length,
+                    matches: this.comparisonResults.filter(r => r.status === 'match').length,
+                    differences: this.comparisonResults.filter(r => r.status === 'diff').length,
+                    missing: missingInSecondary.length + missingInPrimary.length
+                };
+                
+                this.updateStats(stats);
+                this.updateStatsBar(stats);
                 
                 const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
-                // Filtrar resultados: solo mantener los que tienen pareja (mismo NK en ambos)
+                // Filtrar resultados: solo mantener los que tienen pareja
                 const filteredResults = rawResults.filter(result => {
-                    // Si es missing, no tiene pareja, lo filtramos
                     if (result.status === 'missing') return false;
-                    
-                    const nkPrimary = this.extractNKCode(result.primaryName || result.name);
-                    const nkSecondary = this.extractNKCode(result.secondaryName || result.name);
-                    
-                    // Solo mantener si ambos NK existen y son iguales
-                    return nkPrimary && nkSecondary && nkPrimary === nkSecondary;
+                    return true;
                 });
                 
                 this.comparisonResults = filteredResults.map(result => {
@@ -391,9 +420,6 @@ class AlphaColorMatch {
                     return result;
                 });
                 
-                const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
-                this.updateStats(stats);
-                this.updateStatsBar(stats);
                 this.saveToHistory(stats);
                 this.filterResults();
                 this.saveFullState();
@@ -410,24 +436,27 @@ class AlphaColorMatch {
     
     // Método para mostrar alerta de colores faltantes en la interfaz
     showMissingColorsAlert(archivo, colores) {
-        // Crear un modal o panel para mostrar los colores faltantes
+        if (colores.length === 0) return;
+        
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header" style="background: #991b1b;">
-                    <h3>⚠️ Colores faltantes en archivo ${archivo === 'principal' ? 'PRINCIPAL' : 'SECUNDARIO'}</h3>
-                    <button class="modal-close">&times;</button>
+            <div class="modal-content" style="max-width: 550px;">
+                <div class="modal-header" style="background: #991b1b; border-bottom: none;">
+                    <h3 style="color: white;">⚠️ Colores faltantes en archivo ${archivo === 'principal' ? 'PRINCIPAL' : 'SECUNDARIO'}</h3>
+                    <button class="modal-close" style="color: white;">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Los siguientes colores <strong>NO tienen pareja</strong> en el archivo ${archivo === 'principal' ? 'principal' : 'secundario'} (mismo NK):</p>
-                    <div style="max-height: 300px; overflow-y: auto; background: #1e1e2c; border-radius: 0.5rem; padding: 0.5rem; margin-top: 1rem;">
-                        ${colores.map(name => `<div style="padding: 0.25rem; font-family: monospace; font-size: 0.8rem;">❌ ${name}</div>`).join('')}
+                    <p>Los siguientes colores <strong>NO tienen pareja</strong> en el archivo ${archivo === 'principal' ? 'principal' : 'secundario'}:</p>
+                    <div style="max-height: 350px; overflow-y: auto; background: #1e1e2c; border-radius: 0.5rem; padding: 0.75rem; margin-top: 1rem; font-family: monospace;">
+                        ${colores.map(name => `<div style="padding: 0.5rem; border-bottom: 1px solid #2d3748; font-size: 0.8rem;">❌ ${name}</div>`).join('')}
                     </div>
-                    <p style="margin-top: 1rem; color: #fbbf24;">⚠️ Estos colores NO se exportarán porque no tienen su par en el otro archivo.</p>
+                    <p style="margin-top: 1rem; color: #fbbf24; background: rgba(251, 191, 36, 0.1); padding: 0.75rem; border-radius: 0.5rem;">
+                        ⚠️ Estos colores <strong>NO se exportarán</strong> porque no tienen su par en el otro archivo.
+                    </p>
                 </div>
-                <div class="modal-buttons">
-                    <button class="btn btn-primary close-modal">Entendido</button>
+                <div class="modal-buttons" style="padding: 1rem; border-top: 1px solid #2d3748;">
+                    <button class="btn btn-primary close-modal" style="background: #2d4ed6;">Entendido</button>
                 </div>
             </div>
         `;
@@ -454,11 +483,11 @@ class AlphaColorMatch {
         const missingEl = document.getElementById('missingCount');
         const diffCountEl = document.getElementById('diffCount');
         
-        if (totalEl) totalEl.textContent = stats.total;
-        if (matchEl) matchEl.textContent = stats.matches;
-        if (diffDisplayEl) diffDisplayEl.textContent = stats.differences;
-        if (missingEl) missingEl.textContent = stats.missing;
-        if (diffCountEl) diffCountEl.textContent = stats.differences;
+        if (totalEl) totalEl.textContent = stats.total || 0;
+        if (matchEl) matchEl.textContent = stats.matches || 0;
+        if (diffDisplayEl) diffDisplayEl.textContent = stats.differences || 0;
+        if (missingEl) missingEl.textContent = stats.missing || 0;
+        if (diffCountEl) diffCountEl.textContent = stats.differences || 0;
     }
     
     updateStatsBar(stats) {
@@ -468,11 +497,12 @@ class AlphaColorMatch {
         const diffPercent = document.getElementById('diffPercent');
         const missingPercent = document.getElementById('missingPercent');
         
-        if (stats.total > 0 && container) {
+        const total = (stats.matches || 0) + (stats.differences || 0);
+        if (total > 0 && container) {
             container.style.display = 'block';
-            const matchPct = (stats.matches / stats.total * 100).toFixed(0);
-            const diffPct = (stats.differences / stats.total * 100).toFixed(0);
-            const missingPct = (stats.missing / stats.total * 100).toFixed(0);
+            const matchPct = ((stats.matches || 0) / total * 100).toFixed(0);
+            const diffPct = ((stats.differences || 0) / total * 100).toFixed(0);
+            const missingPct = ((stats.missing || 0) / (stats.missing + total) * 100).toFixed(0);
             
             if (matchPercent) matchPercent.textContent = matchPct;
             if (diffPercent) diffPercent.textContent = diffPct;
@@ -783,38 +813,29 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ MÉTODO EXPORTAR CORREGIDO - Con orden por grupos equivalentes
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
-        // Primero, identificar qué NK tienen pareja en ambos archivos
-        const primaryByNK = new Map();
-        const secondaryByNK = new Map();
+        // Crear mapas por ID para encontrar colores que tienen pareja
+        const primaryById = new Map();
+        const secondaryById = new Map();
         
         for (const color of this.primaryData) {
-            const nk = this.extractNKCode(color.name);
-            if (nk) {
-                if (!primaryByNK.has(nk)) primaryByNK.set(nk, []);
-                primaryByNK.get(nk).push(color);
-            }
+            primaryById.set(color.id, color);
         }
         
         for (const color of this.secondaryData) {
-            const nk = this.extractNKCode(color.name);
-            if (nk) {
-                if (!secondaryByNK.has(nk)) secondaryByNK.set(nk, []);
-                secondaryByNK.get(nk).push(color);
-            }
+            secondaryById.set(color.id, color);
         }
         
-        // Encontrar NK que existen en AMBOS archivos
-        const commonNKs = new Set();
-        for (const nk of primaryByNK.keys()) {
-            if (secondaryByNK.has(nk)) {
-                commonNKs.add(nk);
+        // Encontrar IDs que existen en AMBOS archivos
+        const commonIds = new Set();
+        for (const id of primaryById.keys()) {
+            if (secondaryById.has(id)) {
+                commonIds.add(id);
             }
         }
         
@@ -823,15 +844,13 @@ class AlphaColorMatch {
         const excludedSecondary = [];
         
         for (const color of this.primaryData) {
-            const nk = this.extractNKCode(color.name);
-            if (nk && !commonNKs.has(nk)) {
+            if (!commonIds.has(color.id)) {
                 excludedPrimary.push(color.name);
             }
         }
         
         for (const color of this.secondaryData) {
-            const nk = this.extractNKCode(color.name);
-            if (nk && !commonNKs.has(nk)) {
+            if (!commonIds.has(color.id)) {
                 excludedSecondary.push(color.name);
             }
         }
@@ -848,158 +867,87 @@ class AlphaColorMatch {
             this.showMissingColorsAlert('secundario (excluidos)', excludedSecondary);
         }
         
-        // Mapa para valores sincronizados por NK + nombre unificado
-        const syncedValuesMap = new Map(); // clave = `${nk}_${unifiedName}`
+        // Mapa para valores sincronizados por ID
+        const syncedValuesMap = new Map();
         
-        // Determinar valores sincronizados para cada grupo (NK + nombre unificado)
-        for (const result of this.comparisonResults) {
-            const nk = this.extractNKCode(result.name);
-            if (!nk || !commonNKs.has(nk)) continue;
-            
-            const unifiedKey = result.unifiedName || this.colorMatcher.getUnifiedName(result.name);
-            const mapKey = `${nk}_${unifiedKey}`;
+        // Determinar valores sincronizados para cada ID común
+        for (const id of commonIds) {
+            const primaryColor = primaryById.get(id);
+            const secondaryColor = secondaryById.get(id);
             
             // Buscar decisión del usuario
             let decisionCmyk = null;
             let decisionLab = null;
             
             for (const [uniqueId, state] of this.actionStateMap) {
-                if (state.colorId === result.id) {
-                    if (state.actionTaken === 'replace') {
-                        decisionCmyk = [...result.cmykSecondary];
-                        decisionLab = [...result.labSecondary];
-                    } else if (state.actionTaken === 'keep') {
-                        decisionCmyk = [...result.cmykPrimary];
-                        decisionLab = [...result.labPrimary];
+                if (state.colorId === id) {
+                    if (state.actionTaken === 'replace' && secondaryColor) {
+                        decisionCmyk = [...secondaryColor.cmyk];
+                        decisionLab = [...secondaryColor.lab];
+                    } else if (state.actionTaken === 'keep' && primaryColor) {
+                        decisionCmyk = [...primaryColor.cmyk];
+                        decisionLab = [...primaryColor.lab];
                     }
                     break;
                 }
             }
             
             if (decisionCmyk) {
-                syncedValuesMap.set(mapKey, { cmyk: decisionCmyk, lab: decisionLab });
-            } else if (result.cmykPrimary) {
-                syncedValuesMap.set(mapKey, { cmyk: [...result.cmykPrimary], lab: [...result.labPrimary] });
-            } else if (result.cmykSecondary) {
-                syncedValuesMap.set(mapKey, { cmyk: [...result.cmykSecondary], lab: [...result.labSecondary] });
+                syncedValuesMap.set(id, { cmyk: decisionCmyk, lab: decisionLab });
+            } else if (primaryColor) {
+                syncedValuesMap.set(id, { cmyk: [...primaryColor.cmyk], lab: [...primaryColor.lab] });
+            } else if (secondaryColor) {
+                syncedValuesMap.set(id, { cmyk: [...secondaryColor.cmyk], lab: [...secondaryColor.lab] });
             }
         }
         
-        // Construir lista de colores a exportar, organizada por grupos equivalentes
-        const colorGroups = []; // Cada grupo: { nk, unifiedName, primaryColor, secondaryColor, syncedValues }
+        // Construir lista de colores a exportar (solo con IDs comunes)
+        const colorsToExport = [];
+        const processedIds = new Set();
         
-        for (const nk of commonNKs) {
-            const primaryColors = primaryByNK.get(nk) || [];
-            const secondaryColors = secondaryByNK.get(nk) || [];
+        // Procesar cada ID común
+        for (const id of commonIds) {
+            const primaryColor = primaryById.get(id);
+            const secondaryColor = secondaryById.get(id);
+            const syncedValues = syncedValuesMap.get(id);
             
-            // Crear mapa de colores secundarios por nombre base
-            const secondaryByBaseName = new Map();
-            for (const sc of secondaryColors) {
-                const baseName = this.extractBaseName(sc.name);
-                secondaryByBaseName.set(baseName, sc);
-            }
+            if (!syncedValues) continue;
             
-            // Procesar cada color del principal
-            for (const primaryColor of primaryColors) {
-                const primaryBaseName = this.extractBaseName(primaryColor.name);
-                const unifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
-                const mapKey = `${nk}_${unifiedName}`;
-                const syncedValues = syncedValuesMap.get(mapKey);
-                
-                // Buscar si hay un color secundario equivalente
-                let secondaryColor = null;
-                for (const sc of secondaryColors) {
-                    const scBaseName = this.extractBaseName(sc.name);
-                    const scUnified = this.colorMatcher.getUnifiedName(sc.name);
-                    if (scBaseName === primaryBaseName || scUnified === unifiedName) {
-                        secondaryColor = sc;
-                        break;
-                    }
-                }
-                
-                const isEquivalent = secondaryColor && primaryBaseName !== this.extractBaseName(secondaryColor.name);
-                
-                colorGroups.push({
-                    nk,
-                    unifiedName,
-                    primaryColor,
-                    secondaryColor,
-                    syncedValues,
-                    isEquivalent
+            // Verificar si los nombres son equivalentes según la tabla
+            const areEquivalent = primaryColor && secondaryColor && 
+                this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
+            
+            const isSameName = primaryColor && secondaryColor && 
+                this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
+            
+            if (primaryColor && !processedIds.has(`${id}_${primaryColor.name}`)) {
+                colorsToExport.push({
+                    name: primaryColor.name,
+                    cmyk: [...syncedValues.cmyk],
+                    lab: [...syncedValues.lab]
                 });
+                processedIds.add(`${id}_${primaryColor.name}`);
             }
             
-            // Agregar colores secundarios que no tienen equivalente en principal
-            for (const secondaryColor of secondaryColors) {
-                const secondaryBaseName = this.extractBaseName(secondaryColor.name);
-                const unifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
-                
-                let hasEquivalent = false;
-                for (const pg of colorGroups) {
-                    if (pg.nk === nk && pg.unifiedName === unifiedName) {
-                        hasEquivalent = true;
-                        break;
-                    }
-                }
-                
-                if (!hasEquivalent) {
-                    const mapKey = `${nk}_${unifiedName}`;
-                    const syncedValues = syncedValuesMap.get(mapKey);
-                    
-                    colorGroups.push({
-                        nk,
-                        unifiedName,
-                        primaryColor: null,
-                        secondaryColor,
-                        syncedValues,
-                        isEquivalent: false
-                    });
-                }
+            // Si son equivalentes (nombres diferentes según tabla) y tienen secundario, agregar el secundario también
+            if (secondaryColor && areEquivalent && !isSameName && !processedIds.has(`${id}_${secondaryColor.name}`)) {
+                colorsToExport.push({
+                    name: secondaryColor.name,
+                    cmyk: [...syncedValues.cmyk],
+                    lab: [...syncedValues.lab]
+                });
+                processedIds.add(`${id}_${secondaryColor.name}`);
             }
         }
         
-        // Ordenar grupos: primero por NK, luego priorizar los que tienen equivalente para que salgan juntos
-        colorGroups.sort((a, b) => {
-            if (a.nk !== b.nk) return a.nk.localeCompare(b.nk);
-            // Los que tienen equivalente deben ir juntos
-            if (a.isEquivalent && !b.isEquivalent) return -1;
-            if (!a.isEquivalent && b.isEquivalent) return 1;
-            return 0;
+        // Ordenar por ID numérico (extrayendo el número del nombre o usando el ID)
+        colorsToExport.sort((a, b) => {
+            const numA = parseInt(a.name.match(/^(\d+)/)?.[1] || '0');
+            const numB = parseInt(b.name.match(/^(\d+)/)?.[1] || '0');
+            return numA - numB;
         });
         
-        // Construir lista final de colores a exportar (con orden correcto)
-        const colorsToExport = [];
-        
-        for (const group of colorGroups) {
-            const cmyk = group.syncedValues ? [...group.syncedValues.cmyk] : 
-                        (group.primaryColor ? [...group.primaryColor.cmyk] : [...group.secondaryColor.cmyk]);
-            const lab = group.syncedValues ? [...group.syncedValues.lab] :
-                       (group.primaryColor ? [...group.primaryColor.lab] : [...group.secondaryColor.lab]);
-            
-            if (group.primaryColor) {
-                colorsToExport.push({
-                    name: group.primaryColor.name,
-                    cmyk: cmyk,
-                    lab: lab
-                });
-            }
-            
-            if (group.secondaryColor && group.isEquivalent) {
-                colorsToExport.push({
-                    name: group.secondaryColor.name,
-                    cmyk: cmyk,
-                    lab: lab
-                });
-            } else if (group.secondaryColor && !group.primaryColor) {
-                colorsToExport.push({
-                    name: group.secondaryColor.name,
-                    cmyk: cmyk,
-                    lab: lab
-                });
-            }
-        }
-        
-        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con NK comunes en ambos archivos)`);
+        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con IDs comunes en ambos archivos)`);
         
         // Generar contenido del archivo con números correlativos
         let content = 'CGATS.17\n';
@@ -1030,7 +978,7 @@ class AlphaColorMatch {
         a.click();
         URL.revokeObjectURL(url);
         
-        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (solo con NK comunes)`, 'success');
+        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (solo con IDs comunes)`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
