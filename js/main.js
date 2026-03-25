@@ -359,6 +359,7 @@ class AlphaColorMatch {
             const hasDifferences = this.hasCmykDifferences(primaryColor.cmyk, secondaryColor.cmyk);
             const diffPercentage = this.calculateDiffPercentage(primaryColor.cmyk, secondaryColor.cmyk);
             
+            // Siempre agregar el color principal
             results.push({
                 id: id,
                 name: primaryColor.name,
@@ -376,9 +377,30 @@ class AlphaColorMatch {
                 diffDetails: this.getDetailedDiff(primaryColor.cmyk, secondaryColor.cmyk),
                 recommendation: this.getRecommendation(diffPercentage)
             });
+            
+            // ✅ CORRECCIÓN: Si son equivalentes (nombres diferentes según tabla), agregar también el color secundario
+            if (areEquivalent && this.extractBaseName(primaryColor.name) !== this.extractBaseName(secondaryColor.name)) {
+                results.push({
+                    id: id,
+                    name: secondaryColor.name,
+                    primaryName: primaryColor.name,
+                    secondaryName: secondaryColor.name,
+                    unifiedName: this.colorMatcher.getUnifiedName(secondaryColor.name),
+                    cmykPrimary: primaryColor.cmyk,
+                    cmykSecondary: secondaryColor.cmyk,
+                    labPrimary: primaryColor.lab,
+                    labSecondary: secondaryColor.lab,
+                    status: hasDifferences ? 'diff' : 'match',
+                    matchFound: true,
+                    areEquivalent: areEquivalent,
+                    diffPercentage: diffPercentage,
+                    diffDetails: this.getDetailedDiff(primaryColor.cmyk, secondaryColor.cmyk),
+                    recommendation: this.getRecommendation(diffPercentage)
+                });
+            }
         }
         
-        // ✅ Agregar colores que faltan en secundario (solo en principal)
+        // Agregar colores que faltan en secundario (solo en principal)
         console.log(`📝 Agregando ${this.missingInSecondary.length} colores faltantes en SECUNDARIO`);
         for (const missing of this.missingInSecondary) {
             results.push({
@@ -395,7 +417,7 @@ class AlphaColorMatch {
             });
         }
         
-        // ✅ Agregar colores que faltan en principal (solo en secundario)
+        // Agregar colores que faltan en principal (solo en secundario)
         console.log(`📝 Agregando ${this.missingInPrimary.length} colores faltantes en PRINCIPAL`);
         for (const missing of this.missingInPrimary) {
             results.push({
