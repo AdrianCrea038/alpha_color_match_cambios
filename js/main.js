@@ -16,6 +16,7 @@ class AlphaColorMatch {
         this.currentFilter = 'all';
         this.actionHistory = [];
         this.actionCounter = 0;
+        this.searchTerm = '';
         
         this.actionStateMap = new Map();
         
@@ -31,7 +32,9 @@ class AlphaColorMatch {
         this.loadHistory();
         this.uiRenderer.initCreatorTable();
         window.app = this;
-        this.loadPersistedData();
+        
+        // ✅ CARGAR TODO EL ESTADO GUARDADO
+        this.loadFullState();
     }
     
     bindEvents() {
@@ -51,13 +54,20 @@ class AlphaColorMatch {
         document.getElementById('addColorRowBtn')?.addEventListener('click', () => this.uiRenderer.addCreatorRow());
         document.getElementById('resetCreatorBtn')?.addEventListener('click', () => this.uiRenderer.resetCreatorTable());
         
-        document.getElementById('searchInput').addEventListener('input', (e) => this.filterResults());
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', (e) => {
+            this.searchTerm = e.target.value;
+            this.filterResults();
+            this.saveFullState();
+        });
+        
         document.querySelectorAll('.filter-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 this.currentFilter = tab.dataset.filter;
                 document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 this.filterResults();
+                this.saveFullState();
             });
         });
     }
@@ -83,52 +93,113 @@ class AlphaColorMatch {
     }
     
     // ============================================================
-    // MÉTODOS DE PERSISTENCIA LOCAL
+    // ✅ NUEVO: GUARDAR ESTADO COMPLETO
     // ============================================================
     
-    savePersistedData() {
+    saveFullState() {
         try {
-            const dataToSave = {
+            // Obtener el valor actual del campo de búsqueda
+            const searchInput = document.getElementById('searchInput');
+            const currentSearchTerm = searchInput ? searchInput.value : '';
+            
+            const fullState = {
                 primaryData: this.primaryData,
+                secondaryData: this.secondaryData,
+                comparisonResults: this.comparisonResults,
                 actionStateMap: Array.from(this.actionStateMap.entries()),
-                lastUpdated: new Date().toISOString()
+                currentFilter: this.currentFilter,
+                searchTerm: currentSearchTerm,
+                lastUpdated: new Date().toISOString(),
+                version: '1.0'
             };
-            localStorage.setItem('alpha_color_match_data', JSON.stringify(dataToSave));
-            console.log('💾 Datos guardados localmente');
+            localStorage.setItem('alpha_color_match_full_state', JSON.stringify(fullState));
+            console.log('💾 Estado completo guardado:', {
+                colores: this.primaryData.length,
+                comparados: this.comparisonResults.length,
+                acciones: this.actionStateMap.size,
+                filtro: this.currentFilter
+            });
         } catch (error) {
-            console.error('Error al guardar datos:', error);
+            console.error('Error al guardar estado completo:', error);
         }
     }
     
-    loadPersistedData() {
+    // ✅ NUEVO: CARGAR ESTADO COMPLETO
+    loadFullState() {
         try {
-            const savedData = localStorage.getItem('alpha_color_match_data');
-            if (savedData) {
-                const data = JSON.parse(savedData);
+            const savedState = localStorage.getItem('alpha_color_match_full_state');
+            if (savedState) {
+                const state = JSON.parse(savedState);
                 
-                if (data.primaryData && data.primaryData.length > 0) {
-                    this.primaryData = data.primaryData;
+                // Restaurar primaryData
+                if (state.primaryData && state.primaryData.length > 0) {
+                    this.primaryData = state.primaryData;
                     this.updateFileInfo('primary', 'Datos guardados', this.primaryData.length);
-                    this.uiRenderer.showToast(`📂 Datos cargados: ${this.primaryData.length} colores en referencia`, 'info');
+                    this.uiRenderer.showToast(`📂 Cargados ${this.primaryData.length} colores de referencia`, 'success');
                 }
                 
-                if (data.actionStateMap && data.actionStateMap.length > 0) {
-                    this.actionStateMap = new Map(data.actionStateMap);
+                // Restaurar secondaryData (si existe)
+                if (state.secondaryData && state.secondaryData.length > 0) {
+                    this.secondaryData = state.secondaryData;
+                    this.updateFileInfo('secondary', 'Datos guardados', this.secondaryData.length);
+                }
+                
+                // Restaurar comparisonResults
+                if (state.comparisonResults && state.comparisonResults.length > 0) {
+                    this.comparisonResults = state.comparisonResults;
+                }
+                
+                // Restaurar actionStateMap
+                if (state.actionStateMap && state.actionStateMap.length > 0) {
+                    this.actionStateMap = new Map(state.actionStateMap);
                     console.log(`✅ Estado restaurado: ${this.actionStateMap.size} colores marcados`);
                 }
                 
-                if (this.primaryData.length > 0) {
+                // Restaurar filtro
+                if (state.currentFilter) {
+                    this.currentFilter = state.currentFilter;
+                    // Actualizar el tab activo
+                    document.querySelectorAll('.filter-tab').forEach(tab => {
+                        if (tab.dataset.filter === this.currentFilter) {
+                            tab.classList.add('active');
+                        } else {
+                            tab.classList.remove('active');
+                        }
+                    });
+                }
+                
+                // Restaurar búsqueda
+                if (state.searchTerm !== undefined) {
+                    const searchInput = document.getElementById('searchInput');
+                    if (searchInput) {
+                        searchInput.value = state.searchTerm;
+                        this.searchTerm = state.searchTerm;
+                    }
+                }
+                
+                // Si hay resultados, mostrarlos
+                if (this.comparisonResults.length > 0) {
+                    this.filterResults();
+                    
+                    // Actualizar estadísticas
+                    const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
+                    this.updateStats(stats);
+                    this.updateStatsBar(stats);
+                    
                     this.uiRenderer.showToast(`💾 Datos recuperados de sesión anterior`, 'success');
+                } else if (this.primaryData.length > 0 && this.secondaryData.length > 0) {
+                    // Si hay datos pero no resultados, regenerar comparación
+                    this.compareFiles();
                 }
             }
         } catch (error) {
-            console.error('Error al cargar datos guardados:', error);
+            console.error('Error al cargar estado completo:', error);
         }
     }
     
-    clearPersistedData() {
-        localStorage.removeItem('alpha_color_match_data');
-        console.log('🗑️ Datos locales eliminados');
+    clearFullState() {
+        localStorage.removeItem('alpha_color_match_full_state');
+        console.log('🗑️ Estado completo eliminado');
     }
     
     // ============================================================
@@ -144,7 +215,14 @@ class AlphaColorMatch {
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
             this.actionStateMap.clear();
-            this.savePersistedData();
+            
+            // ✅ GUARDAR ESTADO COMPLETO
+            this.saveFullState();
+            
+            // Si ya hay secondaryData, hacer comparación automática
+            if (this.secondaryData.length > 0) {
+                this.compareFiles();
+            }
         } finally {
             this.showLoading(false);
         }
@@ -158,7 +236,14 @@ class AlphaColorMatch {
             this.secondaryData = data;
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
-            this.actionStateMap.clear();
+            
+            // ✅ GUARDAR ESTADO COMPLETO
+            this.saveFullState();
+            
+            // Si ya hay primaryData, hacer comparación automática
+            if (this.primaryData.length > 0) {
+                this.compareFiles();
+            }
         } finally {
             this.showLoading(false);
         }
@@ -204,6 +289,9 @@ class AlphaColorMatch {
                 this.saveToHistory(stats);
                 this.filterResults();
                 
+                // ✅ GUARDAR ESTADO COMPLETO DESPUÉS DE COMPARAR
+                this.saveFullState();
+                
                 this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias encontradas, ${stats.missing} colores no encontrados`, 'info');
             } finally {
                 this.showLoading(false);
@@ -246,7 +334,8 @@ class AlphaColorMatch {
         if (this.currentFilter !== 'all') {
             filtered = filtered.filter(item => item.status === this.currentFilter);
         }
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        
+        const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
         if (searchTerm) {
             filtered = filtered.filter(item => {
                 return item.name.toLowerCase().includes(searchTerm) ||
@@ -269,13 +358,13 @@ class AlphaColorMatch {
             timestamp: new Date().toISOString()
         });
         console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
-        this.savePersistedData();
+        this.saveFullState();
     }
     
     removeActionState(colorId) {
         this.actionStateMap.delete(colorId);
         console.log(`🗑️ Estado eliminado: ${colorId}`);
-        this.savePersistedData();
+        this.saveFullState();
     }
     
     showReplaceConfirm(colorId) {
@@ -338,7 +427,6 @@ class AlphaColorMatch {
             };
             
             this.saveActionState(item.id, 'replace', reason);
-            this.savePersistedData();
             this.compareFiles();
             this.saveActionToHistory('replace', item.id, item.name, reason);
             this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado`, 'success');
@@ -360,7 +448,6 @@ class AlphaColorMatch {
         });
         
         this.saveActionState(item.id, 'keep', reason);
-        this.savePersistedData();
         
         const resultIndex = this.comparisonResults.findIndex(r => r.id === item.id);
         if (resultIndex !== -1) {
@@ -398,7 +485,6 @@ class AlphaColorMatch {
         this.primaryData.push(newColor);
         
         this.saveActionState(item.id, 'add', reason);
-        this.savePersistedData();
         this.compareFiles();
         this.saveActionToHistory('add', item.id, item.name, reason);
         this.uiRenderer.showToast(`✅ Color "${item.name}" agregado`, 'success');
@@ -427,7 +513,6 @@ class AlphaColorMatch {
         }
         
         this.removeActionState(colorId);
-        this.savePersistedData();
         
         const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
         if (resultIndex !== -1) {
@@ -501,7 +586,6 @@ class AlphaColorMatch {
                         }
                     }
                     
-                    this.savePersistedData();
                     this.saveActionToHistory('replace_all', 'all', `${replacedCount} colores`, `Reemplazo masivo`);
                     this.compareFiles();
                     
@@ -588,8 +672,9 @@ class AlphaColorMatch {
             this.currentFilter = 'all';
             this.actionHistory = [];
             this.actionStateMap.clear();
+            this.searchTerm = '';
             
-            this.clearPersistedData();
+            this.clearFullState();
             
             document.getElementById('primaryFileInput').value = '';
             document.getElementById('secondaryFileInput').value = '';
@@ -597,7 +682,10 @@ class AlphaColorMatch {
             document.getElementById('secondaryFileInfo').querySelector('.filename').textContent = 'Ningún archivo cargado';
             document.getElementById('primaryCount').textContent = '0';
             document.getElementById('secondaryCount').textContent = '0';
-            document.getElementById('searchInput').value = '';
+            
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) searchInput.value = '';
+            
             document.getElementById('statsBarContainer').style.display = 'none';
             document.querySelectorAll('.filter-tab').forEach(tab => {
                 if (tab.dataset.filter === 'all') tab.classList.add('active');
