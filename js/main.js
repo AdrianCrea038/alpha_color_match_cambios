@@ -43,6 +43,7 @@ class AlphaColorMatch {
         document.getElementById('secondaryFileInput').addEventListener('change', (e) => this.loadSecondaryFile(e.target.files[0]));
         
         document.getElementById('compareBtn').addEventListener('click', () => this.compareFiles());
+        document.getElementById('replaceAllBtn')?.addEventListener('click', () => this.replaceAllColors());
         document.getElementById('exportResultsBtn').addEventListener('click', () => this.exportResults());
         document.getElementById('clearAllBtn').addEventListener('click', () => this.clearAll());
         document.getElementById('clearHistoryBtn')?.addEventListener('click', () => this.clearHistory());
@@ -178,6 +179,76 @@ class AlphaColorMatch {
             });
         }
         this.uiRenderer.renderComparisonTable(filtered, this);
+    }
+    
+    // ✅ NUEVO MÉTODO: Reemplazar todos los colores con diferencias
+    replaceAllColors() {
+        const diffColors = this.comparisonResults.filter(item => 
+            item.status === 'diff' && !item.actionTaken
+        );
+        
+        if (diffColors.length === 0) {
+            this.uiRenderer.showToast('⚠️ No hay colores con diferencias para reemplazar', 'warning');
+            return;
+        }
+        
+        const confirmMsg = `¿Reemplazar TODOS los ${diffColors.length} colores con diferencias por los valores del archivo secundario?\n\nEsta acción se aplicará a todos los colores que tienen diferencias.`;
+        
+        if (confirm(confirmMsg)) {
+            this.showLoading(true);
+            
+            setTimeout(() => {
+                try {
+                    let replacedCount = 0;
+                    
+                    for (const color of diffColors) {
+                        const index = this.primaryData.findIndex(p => 
+                            p.id === color.id || 
+                            this.colorMatcher.normalizeName(p.name) === this.colorMatcher.normalizeName(color.name)
+                        );
+                        
+                        if (index !== -1) {
+                            const previousState = {
+                                id: color.id,
+                                name: color.name,
+                                cmyk: [...this.primaryData[index].cmyk],
+                                lab: [...this.primaryData[index].lab]
+                            };
+                            
+                            const actionId = `action_${this.actionCounter++}`;
+                            this.actionHistory.push({
+                                id: actionId,
+                                type: 'replace',
+                                colorId: color.id,
+                                colorName: color.name,
+                                timestamp: new Date().toISOString(),
+                                previousState: previousState,
+                                reason: 'Reemplazo masivo de todos los colores'
+                            });
+                            
+                            this.primaryData[index] = {
+                                id: color.id,
+                                name: color.name,
+                                cmyk: [...color.cmykSecondary],
+                                lab: color.labSecondary ? [...color.labSecondary] : (color.labPrimary || [0, 0, 0])
+                            };
+                            
+                            const resultItem = this.comparisonResults.find(r => r.id === color.id);
+                            if (resultItem) resultItem.actionTaken = 'replace';
+                            
+                            replacedCount++;
+                        }
+                    }
+                    
+                    this.saveActionToHistory('replace_all', 'all', `${replacedCount} colores`, `Reemplazo masivo de ${replacedCount} colores con diferencias`);
+                    this.compareFiles();
+                    
+                    this.uiRenderer.showToast(`⚡ Se reemplazaron ${replacedCount} colores con valores del secundario`, 'success');
+                } finally {
+                    this.showLoading(false);
+                }
+            }, 100);
+        }
     }
     
     showReplaceConfirm(colorId) {
