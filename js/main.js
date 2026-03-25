@@ -120,10 +120,8 @@ class AlphaColorMatch {
         
         setTimeout(() => {
             try {
-                // Generar nuevos resultados de comparación
                 const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
-                // ✅ RESTAURAR EL ESTADO DE CADA COLOR DESDE EL MAPA
                 this.comparisonResults = rawResults.map(result => {
                     const savedState = this.actionStateMap.get(result.id);
                     if (savedState) {
@@ -198,7 +196,6 @@ class AlphaColorMatch {
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
-    // ✅ GUARDAR ESTADO DE UNA ACCIÓN EN EL MAPA
     saveActionState(colorId, actionTaken, reason = '') {
         this.actionStateMap.set(colorId, {
             actionTaken: actionTaken,
@@ -208,27 +205,9 @@ class AlphaColorMatch {
         console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
     }
     
-    // ✅ ELIMINAR ESTADO DEL MAPA (AL DESHACER)
     removeActionState(colorId) {
         this.actionStateMap.delete(colorId);
         console.log(`🗑️ Estado eliminado: ${colorId}`);
-    }
-    
-    // ✅ ACTUALIZAR UN SOLO COLOR EN LA VISTA (sin recargar toda la tabla)
-    updateSingleColorInView(colorId, actionTaken, reason = '') {
-        // Actualizar el resultado en memory
-        const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
-        if (resultIndex !== -1) {
-            this.comparisonResults[resultIndex] = {
-                ...this.comparisonResults[resultIndex],
-                actionTaken: actionTaken,
-                actionReason: reason,
-                actionTimestamp: new Date().toISOString()
-            };
-        }
-        
-        // Actualizar la vista completa (para mantener filtros y búsqueda)
-        this.filterResults();
     }
     
     replaceAllColors() {
@@ -364,8 +343,10 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ MÉTODO CORREGIDO: Guarda el estado inmediatamente y actualiza la vista
+    // ✅ MÉTODO KEEPCOLOR CORREGIDO - Actualización inmediata
     keepColor(item, reason = '') {
+        console.log(`🔵 Manteniendo color: ${item.id} - ${item.name}`);
+        
         // 1. Guardar en historial de acciones
         const actionId = `action_${this.actionCounter++}`;
         this.actionHistory.push({
@@ -378,10 +359,10 @@ class AlphaColorMatch {
             reason: reason
         });
         
-        // 2. ✅ GUARDAR ESTADO INMEDIATAMENTE EN EL MAPA
+        // 2. ✅ GUARDAR ESTADO EN EL MAPA
         this.saveActionState(item.id, 'keep', reason);
         
-        // 3. ✅ ACTUALIZAR EL RESULTADO EN MEMORIA
+        // 3. ✅ ACTUALIZAR EL ARRAY comparisonResults DIRECTAMENTE
         const resultIndex = this.comparisonResults.findIndex(r => r.id === item.id);
         if (resultIndex !== -1) {
             this.comparisonResults[resultIndex] = {
@@ -390,16 +371,17 @@ class AlphaColorMatch {
                 actionReason: reason,
                 actionTimestamp: new Date().toISOString()
             };
+            console.log(`✅ Resultado actualizado en array: ${item.id} -> actionTaken = keep`);
         }
         
-        // 4. ✅ ACTUALIZAR LA VISTA INMEDIATAMENTE (sin recargar toda la comparación)
+        // 4. ✅ FORZAR ACTUALIZACIÓN DE LA VISTA
         this.filterResults();
         
         // 5. Guardar en historial persistente
         this.saveActionToHistory('keep', item.id, item.name, reason);
         
-        // 6. Mostrar toast con opción de deshacer
-        this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}". Puedes deshacer si fue un error.`, 'undo');
+        // 6. Mostrar toast
+        this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}"`, 'success');
     }
     
     addMissingColor(item, reason = '') {
@@ -450,10 +432,8 @@ class AlphaColorMatch {
             if (index !== -1) this.primaryData.splice(index, 1);
         }
         
-        // ✅ ELIMINAR ESTADO DEL MAPA
         this.removeActionState(colorId);
         
-        // ✅ Actualizar el resultado en memoria
         const resultIndex = this.comparisonResults.findIndex(r => r.id === colorId);
         if (resultIndex !== -1) {
             delete this.comparisonResults[resultIndex].actionTaken;
@@ -465,8 +445,6 @@ class AlphaColorMatch {
         if (actionIndex !== -1) this.actionHistory.splice(actionIndex, 1);
         
         this.saveActionToHistory('undo', colorId, action.colorName, `Se deshizo acción de ${actionType}. Motivo: ${reason}`);
-        
-        // ✅ Actualizar vista sin recargar toda la comparación
         this.filterResults();
         
         this.uiRenderer.showToast(`↩️ Se deshizo ${actionType === 'keep' ? 'mantener' : actionType === 'replace' ? 'reemplazo' : 'adición'} para "${action.colorName}"`, 'success');
