@@ -32,8 +32,6 @@ class AlphaColorMatch {
         this.loadHistory();
         this.uiRenderer.initCreatorTable();
         window.app = this;
-        
-        // ✅ CARGAR TODO EL ESTADO GUARDADO
         this.loadFullState();
     }
     
@@ -92,8 +90,15 @@ class AlphaColorMatch {
         }
     }
     
+    // ✅ GENERAR ID ÚNICO PARA CADA COLOR
+    getUniqueColorId(color) {
+        // Usar nombre normalizado + ID original para crear un identificador único
+        const normalizedName = this.colorMatcher.normalizeNameForComparison(color.name);
+        return `${color.id}_${normalizedName}`;
+    }
+    
     // ============================================================
-    // ✅ GUARDAR ESTADO COMPLETO
+    // GUARDAR Y CARGAR ESTADO
     // ============================================================
     
     saveFullState() {
@@ -111,49 +116,39 @@ class AlphaColorMatch {
                 version: '1.0'
             };
             localStorage.setItem('alpha_color_match_full_state', JSON.stringify(fullState));
-            console.log('💾 Estado completo guardado:', {
-                colores: this.primaryData.length,
-                secundarios: this.secondaryData.length,
-                acciones: this.actionStateMap.size,
-                filtro: this.currentFilter
-            });
+            console.log('💾 Estado completo guardado');
         } catch (error) {
             console.error('Error al guardar estado completo:', error);
         }
     }
     
-    // ✅ CARGAR ESTADO COMPLETO Y REGENERAR COMPARACIÓN
     loadFullState() {
         try {
             const savedState = localStorage.getItem('alpha_color_match_full_state');
             if (savedState) {
                 const state = JSON.parse(savedState);
-                console.log('📂 Cargando estado guardado...', state);
+                console.log('📂 Cargando estado guardado...');
                 
                 let hasData = false;
                 
-                // Restaurar primaryData
                 if (state.primaryData && state.primaryData.length > 0) {
                     this.primaryData = state.primaryData;
                     this.updateFileInfo('primary', 'Datos guardados', this.primaryData.length);
                     hasData = true;
                 }
                 
-                // Restaurar secondaryData
                 if (state.secondaryData && state.secondaryData.length > 0) {
                     this.secondaryData = state.secondaryData;
                     this.updateFileInfo('secondary', 'Datos guardados', this.secondaryData.length);
                     hasData = true;
                 }
                 
-                // Restaurar actionStateMap
                 if (state.actionStateMap && state.actionStateMap.length > 0) {
                     this.actionStateMap = new Map(state.actionStateMap);
                     console.log(`✅ Estado restaurado: ${this.actionStateMap.size} colores marcados`);
                     hasData = true;
                 }
                 
-                // Restaurar filtro
                 if (state.currentFilter) {
                     this.currentFilter = state.currentFilter;
                     document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -165,7 +160,6 @@ class AlphaColorMatch {
                     });
                 }
                 
-                // Restaurar búsqueda
                 if (state.searchTerm !== undefined) {
                     const searchInput = document.getElementById('searchInput');
                     if (searchInput) {
@@ -174,16 +168,13 @@ class AlphaColorMatch {
                     }
                 }
                 
-                // ✅ CRÍTICO: Si hay primaryData y secondaryData, regenerar la comparación
                 if (this.primaryData.length > 0 && this.secondaryData.length > 0) {
                     console.log('🔄 Regenerando comparación con datos guardados...');
-                    
-                    // Regenerar resultados de comparación
                     const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                     
-                    // Aplicar los estados guardados
                     this.comparisonResults = rawResults.map(result => {
-                        const savedStateItem = this.actionStateMap.get(result.id);
+                        const uniqueId = this.getUniqueColorId(result);
+                        const savedStateItem = this.actionStateMap.get(uniqueId);
                         if (savedStateItem) {
                             return {
                                 ...result,
@@ -195,20 +186,12 @@ class AlphaColorMatch {
                         return result;
                     });
                     
-                    console.log(`✅ Comparación regenerada: ${this.comparisonResults.length} resultados`);
-                    
-                    // Actualizar estadísticas
                     const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
                     this.updateStats(stats);
                     this.updateStatsBar(stats);
-                    
-                    // Guardar en historial
                     this.saveToHistory(stats);
-                    
-                    // Mostrar resultados
                     this.filterResults();
-                    
-                    this.uiRenderer.showToast(`💾 Datos recuperados: ${this.primaryData.length} colores, ${this.comparisonResults.length} resultados`, 'success');
+                    this.uiRenderer.showToast(`💾 Datos recuperados: ${this.primaryData.length} colores`, 'success');
                 } else if (hasData) {
                     this.uiRenderer.showToast(`📂 Datos cargados: ${this.primaryData.length} colores en referencia`, 'info');
                     this.filterResults();
@@ -237,15 +220,9 @@ class AlphaColorMatch {
             this.updateFileInfo('primary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo principal cargado: ${data.length} colores`, 'success');
             this.actionStateMap.clear();
-            
-            // ✅ GUARDAR ESTADO
             this.saveFullState();
-            
-            // Si ya hay secondaryData, hacer comparación automática
             if (this.secondaryData.length > 0) {
                 this.compareFiles();
-            } else {
-                this.filterResults();
             }
         } finally {
             this.showLoading(false);
@@ -260,15 +237,9 @@ class AlphaColorMatch {
             this.secondaryData = data;
             this.updateFileInfo('secondary', file.name, data.length);
             this.uiRenderer.showToast(`✅ Archivo secundario cargado: ${data.length} colores`, 'success');
-            
-            // ✅ GUARDAR ESTADO
             this.saveFullState();
-            
-            // Si ya hay primaryData, hacer comparación automática
             if (this.primaryData.length > 0) {
                 this.compareFiles();
-            } else {
-                this.filterResults();
             }
         } finally {
             this.showLoading(false);
@@ -296,7 +267,8 @@ class AlphaColorMatch {
                 const rawResults = this.colorMatcher.smartCompare(this.primaryData, this.secondaryData);
                 
                 this.comparisonResults = rawResults.map(result => {
-                    const savedState = this.actionStateMap.get(result.id);
+                    const uniqueId = this.getUniqueColorId(result);
+                    const savedState = this.actionStateMap.get(uniqueId);
                     if (savedState) {
                         return {
                             ...result,
@@ -311,11 +283,8 @@ class AlphaColorMatch {
                 const stats = this.colorMatcher.getComparisonStats(this.comparisonResults);
                 this.updateStats(stats);
                 this.updateStatsBar(stats);
-                
                 this.saveToHistory(stats);
                 this.filterResults();
-                
-                // ✅ GUARDAR ESTADO DESPUÉS DE COMPARAR
                 this.saveFullState();
                 
                 this.uiRenderer.showToast(`🔍 Comparación completada: ${stats.differences} diferencias, ${stats.missing} no encontrados`, 'info');
@@ -374,36 +343,63 @@ class AlphaColorMatch {
     }
     
     // ============================================================
-    // MÉTODOS DE ACCIONES
+    // MÉTODOS DE ACCIONES - CORREGIDOS CON BÚSQUEDA SEGURA
     // ============================================================
     
     saveActionState(colorId, actionTaken, reason = '') {
-        this.actionStateMap.set(colorId, {
-            actionTaken: actionTaken,
-            reason: reason,
-            timestamp: new Date().toISOString()
-        });
-        console.log(`✅ Estado guardado: ${colorId} -> ${actionTaken}`);
+        // Buscar el color en comparisonResults para obtener su nombre normalizado
+        const color = this.comparisonResults.find(c => c.id === colorId);
+        if (color) {
+            const uniqueId = this.getUniqueColorId(color);
+            this.actionStateMap.set(uniqueId, {
+                actionTaken: actionTaken,
+                reason: reason,
+                timestamp: new Date().toISOString(),
+                colorId: colorId,
+                colorName: color.name
+            });
+            console.log(`✅ Estado guardado: ${uniqueId} -> ${actionTaken}`);
+        } else {
+            console.warn(`⚠️ No se encontró color con ID: ${colorId}`);
+        }
         this.saveFullState();
     }
     
     removeActionState(colorId) {
-        this.actionStateMap.delete(colorId);
-        console.log(`🗑️ Estado eliminado: ${colorId}`);
+        // Buscar el color en comparisonResults para obtener su nombre normalizado
+        const color = this.comparisonResults.find(c => c.id === colorId);
+        if (color) {
+            const uniqueId = this.getUniqueColorId(color);
+            this.actionStateMap.delete(uniqueId);
+            console.log(`🗑️ Estado eliminado: ${uniqueId}`);
+        }
         this.saveFullState();
     }
     
     showReplaceConfirm(colorId) {
+        console.log(`🔍 Buscando color con ID: ${colorId} para reemplazar`);
         const color = this.comparisonResults.find(c => c.id === colorId);
-        if (!color) return;
+        if (!color) {
+            console.error(`❌ No se encontró color con ID: ${colorId}`);
+            this.uiRenderer.showToast('Error: No se encontró el color', 'error');
+            return;
+        }
+        console.log(`✅ Color encontrado: ${color.name} (ID: ${color.id})`);
+        console.log(`   CMYK Secundario: ${color.cmykSecondary.join(', ')}`);
         this.uiRenderer.showReplaceConfirm(colorId, (reason) => {
             this.replaceColor(color, reason);
         });
     }
     
     showKeepConfirm(colorId) {
+        console.log(`🔍 Buscando color con ID: ${colorId} para mantener`);
         const color = this.comparisonResults.find(c => c.id === colorId);
-        if (!color) return;
+        if (!color) {
+            console.error(`❌ No se encontró color con ID: ${colorId}`);
+            this.uiRenderer.showToast('Error: No se encontró el color', 'error');
+            return;
+        }
+        console.log(`✅ Color encontrado: ${color.name} (ID: ${color.id})`);
         this.uiRenderer.showKeepConfirm(colorId, (reason) => {
             this.keepColor(color, reason);
         });
@@ -423,40 +419,65 @@ class AlphaColorMatch {
         });
     }
     
+    // ✅ REPLACE COLOR CORREGIDO - Búsqueda por nombre normalizado + ID
     replaceColor(item, reason = '') {
-        const index = this.primaryData.findIndex(p => 
-            p.id === item.id || 
-            this.colorMatcher.normalizeName(p.name) === this.colorMatcher.normalizeName(item.name)
-        );
-        if (index !== -1) {
-            const previousState = {
-                id: item.id,
-                name: item.name,
-                cmyk: [...this.primaryData[index].cmyk],
-                lab: [...this.primaryData[index].lab]
-            };
-            const actionId = `action_${this.actionCounter++}`;
-            this.actionHistory.push({
-                id: actionId,
-                type: 'replace',
-                colorId: item.id,
-                colorName: item.name,
-                timestamp: new Date().toISOString(),
-                previousState: previousState,
-                reason: reason
-            });
-            this.primaryData[index] = {
-                id: item.id,
-                name: item.name,
-                cmyk: [...item.cmykSecondary],
-                lab: item.labSecondary ? [...item.labSecondary] : (item.labPrimary || [0, 0, 0])
-            };
-            
-            this.saveActionState(item.id, 'replace', reason);
-            this.compareFiles();
-            this.saveActionToHistory('replace', item.id, item.name, reason);
-            this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado`, 'success');
+        console.log(`🔄 Reemplazando color: ${item.name} (ID: ${item.id})`);
+        console.log(`   CMYK a aplicar: ${item.cmykSecondary.join(', ')}`);
+        
+        // Buscar en primaryData por ID y nombre normalizado
+        const normalizedItemName = this.colorMatcher.normalizeNameForComparison(item.name);
+        
+        const index = this.primaryData.findIndex(p => {
+            const normalizedPName = this.colorMatcher.normalizeNameForComparison(p.name);
+            return p.id === item.id || normalizedPName === normalizedItemName;
+        });
+        
+        if (index === -1) {
+            console.error(`❌ No se encontró el color en primaryData para reemplazar`);
+            this.uiRenderer.showToast(`Error: No se encontró "${item.name}" en la referencia principal`, 'error');
+            return;
         }
+        
+        const originalColor = this.primaryData[index];
+        console.log(`✅ Color encontrado en primaryData: ${originalColor.name}`);
+        console.log(`   CMYK original: ${originalColor.cmyk.join(', ')}`);
+        console.log(`   CMYK nuevo: ${item.cmykSecondary.join(', ')}`);
+        
+        // Guardar estado anterior para deshacer
+        const previousState = {
+            id: originalColor.id,
+            name: originalColor.name,
+            cmyk: [...originalColor.cmyk],
+            lab: [...originalColor.lab]
+        };
+        
+        const actionId = `action_${this.actionCounter++}`;
+        this.actionHistory.push({
+            id: actionId,
+            type: 'replace',
+            colorId: item.id,
+            colorName: item.name,
+            timestamp: new Date().toISOString(),
+            previousState: previousState,
+            reason: reason
+        });
+        
+        // Aplicar los valores CMYK del secundario
+        this.primaryData[index] = {
+            id: originalColor.id,
+            name: originalColor.name,
+            cmyk: [...item.cmykSecondary],
+            lab: item.labSecondary ? [...item.labSecondary] : (originalColor.lab || [0, 0, 0])
+        };
+        
+        console.log(`✅ Color reemplazado exitosamente`);
+        console.log(`   Nuevos valores: ${this.primaryData[index].cmyk.join(', ')}`);
+        
+        this.saveActionState(item.id, 'replace', reason);
+        this.saveFullState();
+        this.compareFiles();
+        this.saveActionToHistory('replace', item.id, item.name, reason);
+        this.uiRenderer.showToast(`🔄 Color "${item.name}" reemplazado correctamente`, 'success');
     }
     
     keepColor(item, reason = '') {
@@ -532,6 +553,7 @@ class AlphaColorMatch {
                     cmyk: [...action.previousState.cmyk],
                     lab: [...action.previousState.lab]
                 };
+                console.log(`↩️ Color restaurado a valores anteriores: ${action.previousState.cmyk.join(', ')}`);
             }
         } else if (action.type === 'add') {
             const index = this.primaryData.findIndex(p => p.id === colorId);
@@ -558,7 +580,7 @@ class AlphaColorMatch {
     
     replaceAllColors() {
         const diffColors = this.comparisonResults.filter(item => 
-            item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(item.id)
+            item.status === 'diff' && !item.actionTaken && !this.actionStateMap.has(this.getUniqueColorId(item))
         );
         
         if (diffColors.length === 0) {
@@ -576,10 +598,11 @@ class AlphaColorMatch {
                     let replacedCount = 0;
                     
                     for (const color of diffColors) {
-                        const index = this.primaryData.findIndex(p => 
-                            p.id === color.id || 
-                            this.colorMatcher.normalizeName(p.name) === this.colorMatcher.normalizeName(color.name)
-                        );
+                        const normalizedColorName = this.colorMatcher.normalizeNameForComparison(color.name);
+                        const index = this.primaryData.findIndex(p => {
+                            const normalizedPName = this.colorMatcher.normalizeNameForComparison(p.name);
+                            return p.id === color.id || normalizedPName === normalizedColorName;
+                        });
                         
                         if (index !== -1) {
                             const previousState = {
