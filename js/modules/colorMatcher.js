@@ -99,10 +99,11 @@ export class ColorMatcher {
     
     normalizeName(name) {
         if (!name) return '';
+        // ✅ NORMALIZAR ESPACIOS MÚLTIPLES A UNO SOLO
         return name.toLowerCase()
             .trim()
+            .replace(/\s+/g, ' ')  // Reemplaza múltiples espacios por uno solo
             .replace(/[^\w\s]/g, '')
-            .replace(/\s+/g, ' ')
             .replace(/nk\d+/gi, '')
             .trim();
     }
