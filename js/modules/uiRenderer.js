@@ -43,7 +43,7 @@ export class UIRenderer {
     renderComparisonTable(results, app) {
         const tbody = document.getElementById('tableBody');
         
-        if (results.length === 0) {
+        if (!results || results.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" class="empty-state">
@@ -97,10 +97,35 @@ export class UIRenderer {
                 else diffSeverityClass = 'diff-severity-high';
             }
             
-            const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
-            const swatchColor = cmykForSwatch ? 
-                this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : 
-                '#2d3748';
+            // ✅ CORREGIDO: Swatch de color - manejar caso cuando no hay CMYK
+            let swatchColor = '#2d3748';
+            let cmykValues = null;
+            
+            if (item.status === 'missing') {
+                // Para colores faltantes, usar el CMYK que tenga disponible
+                if (item.cmykSecondary && Array.isArray(item.cmykSecondary) && item.cmykSecondary.length >= 4) {
+                    cmykValues = item.cmykSecondary;
+                    swatchColor = this.cmykToRgb(cmykValues[0], cmykValues[1], cmykValues[2], cmykValues[3]);
+                } else if (item.cmykPrimary && Array.isArray(item.cmykPrimary) && item.cmykPrimary.length >= 4) {
+                    cmykValues = item.cmykPrimary;
+                    swatchColor = this.cmykToRgb(cmykValues[0], cmykValues[1], cmykValues[2], cmykValues[3]);
+                }
+            } else {
+                // Para colores normales
+                const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
+                if (cmykForSwatch && Array.isArray(cmykForSwatch) && cmykForSwatch.length >= 4) {
+                    cmykValues = cmykForSwatch;
+                    swatchColor = this.cmykToRgb(cmykValues[0], cmykValues[1], cmykValues[2], cmykValues[3]);
+                }
+            }
+            
+            // Tooltip
+            let tooltipText = '';
+            if (cmykValues && cmykValues.length >= 4) {
+                tooltipText = `CMYK: ${cmykValues.map(v => v.toFixed(1)).join(', ')}`;
+            } else {
+                tooltipText = 'Sin datos CMYK';
+            }
             
             // Mostrar nombres - si son equivalentes mostrar ambos
             let nameDisplay = '';
@@ -121,20 +146,35 @@ export class UIRenderer {
                 nameDisplay = `<strong>${this.escapeHtml(item.name)}</strong>`;
             }
             
+            // CMYK Display - manejar caso missing
             let cmykDisplay = '';
             if (item.status === 'missing') {
-                cmykDisplay = `
-                    <div class="cmyk-comparison">
-                        <div class="cmyk-secondary">
-                            <strong>📁 Secundario:</strong><br>
-                            C:${item.cmykSecondary[0].toFixed(1)} M:${item.cmykSecondary[1].toFixed(1)} Y:${item.cmykSecondary[2].toFixed(1)} K:${item.cmykSecondary[3].toFixed(1)}
+                if (item.cmykSecondary && Array.isArray(item.cmykSecondary) && item.cmykSecondary.length >= 4) {
+                    cmykDisplay = `
+                        <div class="cmyk-comparison">
+                            <div class="cmyk-secondary">
+                                <strong>📁 Secundario:</strong><br>
+                                C:${item.cmykSecondary[0].toFixed(1)} M:${item.cmykSecondary[1].toFixed(1)} Y:${item.cmykSecondary[2].toFixed(1)} K:${item.cmykSecondary[3].toFixed(1)}
+                            </div>
+                            <div class="cmyk-primary missing">
+                                <strong>⚠️ No encontrado en archivo principal</strong>
+                            </div>
                         </div>
-                        <div class="cmyk-primary missing">
-                            <strong>⚠️ No encontrado en archivo principal</strong>
+                    `;
+                } else if (item.cmykPrimary && Array.isArray(item.cmykPrimary) && item.cmykPrimary.length >= 4) {
+                    cmykDisplay = `
+                        <div class="cmyk-comparison">
+                            <div class="cmyk-primary">
+                                <strong>📁 Principal:</strong><br>
+                                C:${item.cmykPrimary[0].toFixed(1)} M:${item.cmykPrimary[1].toFixed(1)} Y:${item.cmykPrimary[2].toFixed(1)} K:${item.cmykPrimary[3].toFixed(1)}
+                            </div>
+                            <div class="cmyk-secondary missing">
+                                <strong>⚠️ No encontrado en archivo secundario</strong>
+                            </div>
                         </div>
-                    </div>
-                `;
-            } else {
+                    `;
+                }
+            } else if (item.cmykPrimary && item.cmykSecondary) {
                 cmykDisplay = `
                     <div class="cmyk-comparison">
                         <div class="cmyk-primary ${item.status === 'diff' && !hasActionTaken ? 'diff-value' : ''}">
@@ -149,6 +189,7 @@ export class UIRenderer {
                 `;
             }
             
+            // LAB Display - manejar caso missing
             let labDisplay = '';
             if (item.status !== 'missing' && item.labPrimary && item.labSecondary) {
                 labDisplay = `
@@ -161,15 +202,23 @@ export class UIRenderer {
                         </div>
                     </div>
                 `;
-            } else if (item.status === 'missing' && item.labSecondary) {
-                labDisplay = `
-                    <div class="lab-secondary">
-                        🔄 L:${item.labSecondary[0].toFixed(1)} a:${item.labSecondary[1].toFixed(1)} b:${item.labSecondary[2].toFixed(1)}
-                    </div>
-                `;
+            } else if (item.status === 'missing') {
+                if (item.labSecondary && Array.isArray(item.labSecondary) && item.labSecondary.length >= 3) {
+                    labDisplay = `
+                        <div class="lab-secondary">
+                            🔄 L:${item.labSecondary[0].toFixed(1)} a:${item.labSecondary[1].toFixed(1)} b:${item.labSecondary[2].toFixed(1)}
+                        </div>
+                    `;
+                } else if (item.labPrimary && Array.isArray(item.labPrimary) && item.labPrimary.length >= 3) {
+                    labDisplay = `
+                        <div class="lab-primary">
+                            📁 L:${item.labPrimary[0].toFixed(1)} a:${item.labPrimary[1].toFixed(1)} b:${item.labPrimary[2].toFixed(1)}
+                        </div>
+                    `;
+                }
             }
             
-            const diffDetails = item.diffDetails && !hasActionTaken ? 
+            const diffDetails = item.diffDetails && !hasActionTaken && item.status === 'diff' ? 
                 `<div class="diff-details">
                     📊 Diferencia: C:${item.diffDetails.cyan} | M:${item.diffDetails.magenta} | Y:${item.diffDetails.yellow} | K:${item.diffDetails.black}
                     <br>📈 Total: ${item.diffDetails.total}%
@@ -203,13 +252,15 @@ export class UIRenderer {
                     </div>
                 `;
             } else if (item.status === 'missing') {
-                actions = `
-                    <div class="action-buttons-cell">
-                        <button class="small-btn btn-success" onclick="window.app.showAddConfirm('${item.id}')">
-                            ➕ Agregar a referencia principal
-                        </button>
-                    </div>
-                `;
+                if (item.cmykSecondary) {
+                    actions = `
+                        <div class="action-buttons-cell">
+                            <button class="small-btn btn-success" onclick="window.app.showAddConfirm('${item.id}')">
+                                ➕ Agregar a referencia principal
+                            </button>
+                        </div>
+                    `;
+                }
             }
             
             return `
@@ -217,7 +268,7 @@ export class UIRenderer {
                     <td><strong>${item.id}</strong></td>
                     <td>
                         <div class="color-swatch" style="background: ${swatchColor};" 
-                             data-tooltip="CMYK: ${cmykForSwatch ? cmykForSwatch.map(v => v.toFixed(1)).join(', ') : 'N/A'}">
+                             data-tooltip="${this.escapeHtml(tooltipText)}">
                         </div>
                     </td>
                     <td>${nameDisplay}</td>
@@ -228,7 +279,7 @@ export class UIRenderer {
                         ${diffDetails}
                         ${message}
                         ${actionTakenHtml}
-                        ${item.recommendation && !hasActionTaken ? `<div class="recommendation">💡 ${item.recommendation}</div>` : ''}
+                        ${item.recommendation && !hasActionTaken && item.status !== 'missing' ? `<div class="recommendation">💡 ${item.recommendation}</div>` : ''}
                     </td>
                     <td>${actions}</td>
                 </tr>
