@@ -93,6 +93,24 @@ class AlphaColorMatch {
         return `${color.id}_${normalizedName}`;
     }
     
+    // ✅ NUEVO MÉTODO: Obtener nombre canónico para agrupar colores
+    getCanonicalName(name) {
+        // Extraer y guardar el NK
+        const nkMatch = name.match(/NK\d+$/);
+        
+        // Eliminar NK para normalizar
+        let nameWithoutNK = name.replace(/\s+NK\d+$/, '').trim();
+        
+        // Eliminar espacios múltiples
+        nameWithoutNK = nameWithoutNK.replace(/\s+/g, ' ');
+        
+        // Aplicar la tabla de unificación (desde colorMatcher)
+        const normalizedBase = this.colorMatcher.normalizeBaseName(nameWithoutNK);
+        
+        // Devolver el nombre canónico sin NK (para agrupar)
+        return normalizedBase;
+    }
+    
     saveFullState() {
         try {
             const searchInput = document.getElementById('searchInput');
@@ -626,44 +644,59 @@ class AlphaColorMatch {
         }
     }
     
+    // ✅ MÉTODO EXPORTRESULTS CORREGIDO - Agrupa por nombre canónico y exporta ambos nombres
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
+        // Crear mapa agrupado por NOMBRE CANÓNICO (después de aplicar la tabla de unificación)
         const colorMap = new Map();
         
+        // 1. Procesar primaryData - usar el nombre canónico como clave de agrupación
         for (const color of this.primaryData) {
-            const normalizedName = this.colorMatcher.normalizeNameForComparison(color.name);
-            if (!colorMap.has(normalizedName)) {
-                colorMap.set(normalizedName, {
-                    cmyk: color.cmyk,
-                    lab: color.lab,
-                    names: new Map()
+            const canonicalName = this.getCanonicalName(color.name);
+            
+            if (!colorMap.has(canonicalName)) {
+                colorMap.set(canonicalName, {
+                    cmyk: [...color.cmyk],
+                    lab: [...color.lab],
+                    names: new Map(),
+                    ids: new Set()
                 });
             }
-            const entry = colorMap.get(normalizedName);
+            
+            const entry = colorMap.get(canonicalName);
             entry.names.set(color.id, color.name);
+            entry.ids.add(color.id);
         }
         
+        // 2. Procesar secondaryData - usar el mismo nombre canónico para agrupar
         for (const color of this.secondaryData) {
-            const normalizedName = this.colorMatcher.normalizeNameForComparison(color.name);
-            if (!colorMap.has(normalizedName)) {
-                colorMap.set(normalizedName, {
-                    cmyk: color.cmyk,
-                    lab: color.lab,
-                    names: new Map()
+            const canonicalName = this.getCanonicalName(color.name);
+            
+            if (!colorMap.has(canonicalName)) {
+                colorMap.set(canonicalName, {
+                    cmyk: [...color.cmyk],
+                    lab: [...color.lab],
+                    names: new Map(),
+                    ids: new Set()
                 });
             }
-            const entry = colorMap.get(normalizedName);
+            
+            const entry = colorMap.get(canonicalName);
+            
             if (!entry.names.has(color.id)) {
                 entry.names.set(color.id, color.name);
             }
+            entry.ids.add(color.id);
         }
         
+        // 3. Construir lista de colores para exportar (UN COLOR POR CADA NOMBRE EN EL GRUPO)
         const colorsToExport = [];
-        for (const [normalizedName, data] of colorMap) {
+        
+        for (const [canonicalName, data] of colorMap) {
             for (const [id, name] of data.names) {
                 colorsToExport.push({
                     id: id,
@@ -674,6 +707,7 @@ class AlphaColorMatch {
             }
         }
         
+        // 4. Ordenar por ID numérico
         colorsToExport.sort((a, b) => {
             const numA = parseInt(a.id) || 0;
             const numB = parseInt(b.id) || 0;
@@ -681,7 +715,9 @@ class AlphaColorMatch {
         });
         
         console.log(`📤 Exportando ${colorsToExport.length} colores (${colorMap.size} grupos unificados)`);
+        console.log('Grupos unificados:', Array.from(colorMap.keys()));
         
+        // Generar contenido del archivo TXT
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
