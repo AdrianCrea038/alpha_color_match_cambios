@@ -23,6 +23,16 @@ export class UIRenderer {
         setTimeout(() => toast.remove(), 4000);
     }
     
+    escapeHtml(str) {
+        if (!str) return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    
     cmykToRgb(c, m, y, k) {
         const r = 255 * (1 - c / 100) * (1 - k / 100);
         const g = 255 * (1 - m / 100) * (1 - k / 100);
@@ -46,7 +56,6 @@ export class UIRenderer {
         }
         
         tbody.innerHTML = results.map((item, idx) => {
-            // Estado de acción
             const hasActionTaken = item.actionTaken === 'keep' || 
                                    item.actionTaken === 'replace' || 
                                    item.actionTaken === 'add';
@@ -60,7 +69,6 @@ export class UIRenderer {
                 actionTakenText = '➕ Color agregado';
             }
             
-            // Clase de estado
             let statusClass = '';
             let statusText = '';
             if (item.status === 'match') {
@@ -74,7 +82,6 @@ export class UIRenderer {
                 statusText = '❌ NO ENCONTRADO';
             }
             
-            // Resaltado
             let diffHighlight = '';
             if (item.status === 'diff') {
                 diffHighlight = 'diff-highlight';
@@ -82,7 +89,6 @@ export class UIRenderer {
                 diffHighlight = 'missing-highlight';
             }
             
-            // Severidad
             let diffSeverityClass = '';
             if (item.status === 'diff' && item.diffPercentage) {
                 const diffPct = parseFloat(item.diffPercentage);
@@ -91,22 +97,30 @@ export class UIRenderer {
                 else diffSeverityClass = 'diff-severity-high';
             }
             
-            // Swatch de color
             const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
             const swatchColor = cmykForSwatch ? 
                 this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : 
                 '#2d3748';
             
-            // ✅ NUEVO: Mostrar ambos nombres si son diferentes
-            let nameDisplay = `<strong>${item.name}</strong>`;
-            if (item.originalName && item.originalName !== item.name) {
+            // Mostrar nombres - si son equivalentes mostrar ambos
+            let nameDisplay = '';
+            if (item.areEquivalent && item.primaryName && item.secondaryName && item.primaryName !== item.secondaryName) {
                 nameDisplay = `
-                    <strong>${item.name}</strong>
-                    <br><small style="color:#888;">↳ Original: ${item.originalName}</small>
+                    <div class="equivalent-names">
+                        <strong>📁 Principal:</strong> ${this.escapeHtml(item.primaryName)}<br>
+                        <strong>🔄 Secundario:</strong> ${this.escapeHtml(item.secondaryName)}
+                        <br><small style="color:#fbbf24;">✨ Son equivalentes (mismo color)</small>
+                    </div>
                 `;
+            } else if (item.originalName && item.originalName !== item.name) {
+                nameDisplay = `
+                    <strong>${this.escapeHtml(item.name)}</strong>
+                    <br><small style="color:#888;">↳ Original: ${this.escapeHtml(item.originalName)}</small>
+                `;
+            } else {
+                nameDisplay = `<strong>${this.escapeHtml(item.name)}</strong>`;
             }
             
-            // CMYK Display
             let cmykDisplay = '';
             if (item.status === 'missing') {
                 cmykDisplay = `
@@ -135,7 +149,6 @@ export class UIRenderer {
                 `;
             }
             
-            // LAB Display
             let labDisplay = '';
             if (item.status !== 'missing' && item.labPrimary && item.labSecondary) {
                 labDisplay = `
@@ -163,7 +176,7 @@ export class UIRenderer {
                 </div>` : '';
             
             const message = item.message ? 
-                `<div class="error-message">${item.message}</div>` : '';
+                `<div class="error-message">${this.escapeHtml(item.message)}</div>` : '';
             
             const actionTakenHtml = actionTakenText ? 
                 `<div class="action-taken">${actionTakenText}</div>` : '';
@@ -224,10 +237,6 @@ export class UIRenderer {
         
         window.app = app;
     }
-    
-    // ============================================================
-    // MÉTODOS DE MODALES (sin cambios)
-    // ============================================================
     
     showUndoModal(colorId, actionType, onConfirm) {
         const modal = document.createElement('div');
@@ -471,7 +480,6 @@ export class UIRenderer {
         `).join('');
     }
     
-    // Métodos del creador de archivos
     initCreatorTable() {
         this.resetCreatorTable();
     }
