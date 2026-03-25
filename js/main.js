@@ -93,21 +93,11 @@ class AlphaColorMatch {
         return `${color.id}_${normalizedName}`;
     }
     
-    // ✅ NUEVO MÉTODO: Obtener nombre canónico para agrupar colores
     getCanonicalName(name) {
-        // Extraer y guardar el NK
         const nkMatch = name.match(/NK\d+$/);
-        
-        // Eliminar NK para normalizar
         let nameWithoutNK = name.replace(/\s+NK\d+$/, '').trim();
-        
-        // Eliminar espacios múltiples
         nameWithoutNK = nameWithoutNK.replace(/\s+/g, ' ');
-        
-        // Aplicar la tabla de unificación (desde colorMatcher)
         const normalizedBase = this.colorMatcher.normalizeBaseName(nameWithoutNK);
-        
-        // Devolver el nombre canónico sin NK (para agrupar)
         return normalizedBase;
     }
     
@@ -644,59 +634,60 @@ class AlphaColorMatch {
         }
     }
     
-    // ✅ MÉTODO EXPORTRESULTS CORREGIDO - Agrupa por nombre canónico y exporta ambos nombres
+    // ============================================================
+    // ✅ MÉTODO EXPORTRESULTS CORREGIDO - Exporta TODOS los nombres originales
+    // ============================================================
+    
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
-        // Crear mapa agrupado por NOMBRE CANÓNICO (después de aplicar la tabla de unificación)
-        const colorMap = new Map();
+        // Crear un mapa para agrupar por nombre canónico
+        const groupMap = new Map(); // key: nombreCanonico, value: { cmyk, lab, names: [{id, name}] }
         
-        // 1. Procesar primaryData - usar el nombre canónico como clave de agrupación
+        // 1. Agregar todos los colores del archivo PRINCIPAL
         for (const color of this.primaryData) {
             const canonicalName = this.getCanonicalName(color.name);
             
-            if (!colorMap.has(canonicalName)) {
-                colorMap.set(canonicalName, {
+            if (!groupMap.has(canonicalName)) {
+                groupMap.set(canonicalName, {
                     cmyk: [...color.cmyk],
                     lab: [...color.lab],
-                    names: new Map(),
-                    ids: new Set()
+                    names: new Map() // Map para evitar duplicados por ID
                 });
             }
             
-            const entry = colorMap.get(canonicalName);
-            entry.names.set(color.id, color.name);
-            entry.ids.add(color.id);
-        }
-        
-        // 2. Procesar secondaryData - usar el mismo nombre canónico para agrupar
-        for (const color of this.secondaryData) {
-            const canonicalName = this.getCanonicalName(color.name);
-            
-            if (!colorMap.has(canonicalName)) {
-                colorMap.set(canonicalName, {
-                    cmyk: [...color.cmyk],
-                    lab: [...color.lab],
-                    names: new Map(),
-                    ids: new Set()
-                });
-            }
-            
-            const entry = colorMap.get(canonicalName);
-            
+            const entry = groupMap.get(canonicalName);
             if (!entry.names.has(color.id)) {
                 entry.names.set(color.id, color.name);
             }
-            entry.ids.add(color.id);
         }
         
-        // 3. Construir lista de colores para exportar (UN COLOR POR CADA NOMBRE EN EL GRUPO)
+        // 2. Agregar todos los colores del archivo SECUNDARIO
+        for (const color of this.secondaryData) {
+            const canonicalName = this.getCanonicalName(color.name);
+            
+            if (!groupMap.has(canonicalName)) {
+                groupMap.set(canonicalName, {
+                    cmyk: [...color.cmyk],
+                    lab: [...color.lab],
+                    names: new Map()
+                });
+            }
+            
+            const entry = groupMap.get(canonicalName);
+            if (!entry.names.has(color.id)) {
+                entry.names.set(color.id, color.name);
+            }
+        }
+        
+        // 3. Construir lista de colores para exportar (UN REGISTRO POR CADA NOMBRE ORIGINAL)
         const colorsToExport = [];
         
-        for (const [canonicalName, data] of colorMap) {
+        for (const [canonicalName, data] of groupMap) {
+            // Por cada nombre original en este grupo, crear un registro
             for (const [id, name] of data.names) {
                 colorsToExport.push({
                     id: id,
@@ -714,8 +705,8 @@ class AlphaColorMatch {
             return numA - numB;
         });
         
-        console.log(`📤 Exportando ${colorsToExport.length} colores (${colorMap.size} grupos unificados)`);
-        console.log('Grupos unificados:', Array.from(colorMap.keys()));
+        console.log(`📤 Exportando ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`);
+        console.log('Grupos unificados:', Array.from(groupMap.keys()).slice(0, 10));
         
         // Generar contenido del archivo TXT
         let content = 'CGATS.17\n';
@@ -743,7 +734,8 @@ class AlphaColorMatch {
         a.download = `alpha_color_export_${new Date().toISOString().slice(0,19)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (${colorMap.size} grupos unificados)`, 'success');
+        
+        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
