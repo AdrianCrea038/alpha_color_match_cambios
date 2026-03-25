@@ -18,26 +18,11 @@ export class UIRenderer {
             undo: '↩️'
         };
         
-        if (type === 'undo' && message.includes('Mantener')) {
-            toast.innerHTML = `${icons.undo} ${message}`;
-            toast.style.cursor = 'pointer';
-            toast.style.borderLeftColor = '#f59e0b';
-            toast.onclick = () => {
-                const actionId = toast.dataset.actionId;
-                if (actionId && this.app.undoLastAction) {
-                    this.app.undoLastAction(actionId);
-                }
-                toast.remove();
-            };
-        } else {
-            toast.innerHTML = `${icons[type] || 'ℹ️'} ${message}`;
-        }
-        
+        toast.innerHTML = `${icons[type] || 'ℹ️'} ${message}`;
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
     }
     
-    // Convertir CMYK a RGB para el swatch de color
     cmykToRgb(c, m, y, k) {
         const r = 255 * (1 - c / 100) * (1 - k / 100);
         const g = 255 * (1 - m / 100) * (1 - k / 100);
@@ -62,74 +47,62 @@ export class UIRenderer {
         
         tbody.innerHTML = results.map((item, idx) => {
             // ============================================================
-            // ✅ CRÍTICO: Definir todas las variables ANTES de usarlas
+            // ✅ DEFINICIÓN DE VARIABLES ANTES DE USARLAS
             // ============================================================
             
-            // 1. Definir diffHighlight PRIMERO
+            // ✅ Estado de acción - CRÍTICO: detectar 'keep', 'replace', 'add'
+            const hasActionTaken = item.actionTaken === 'keep' || 
+                                   item.actionTaken === 'replace' || 
+                                   item.actionTaken === 'add';
+            
+            // ✅ Texto de acción tomada
+            let actionTakenText = '';
+            if (item.actionTaken === 'keep') {
+                actionTakenText = '🔒 Valor principal mantenido';
+            } else if (item.actionTaken === 'replace') {
+                actionTakenText = '🔄 Valor actualizado con secundario';
+            } else if (item.actionTaken === 'add') {
+                actionTakenText = '➕ Color agregado';
+            }
+            
+            // ✅ Clase de estado
+            let statusClass = '';
+            let statusText = '';
+            if (item.status === 'match') {
+                statusClass = 'status-match';
+                statusText = '✅ Coincidencia exacta';
+            } else if (item.status === 'diff') {
+                statusClass = 'status-diff';
+                statusText = '⚠️ Valores diferentes';
+            } else {
+                statusClass = 'status-missing';
+                statusText = '❌ NO ENCONTRADO';
+            }
+            
+            // ✅ Clase de resaltado
             let diffHighlight = '';
             if (item.status === 'diff') {
                 diffHighlight = 'diff-highlight';
             } else if (item.status === 'missing') {
                 diffHighlight = 'missing-highlight';
-            } else {
-                diffHighlight = '';
             }
             
-            // 2. Definir statusClass
-            let statusClass = '';
-            if (item.status === 'match') {
-                statusClass = 'status-match';
-            } else if (item.status === 'diff') {
-                statusClass = 'status-diff';
-            } else {
-                statusClass = 'status-missing';
-            }
-            
-            // 3. Definir statusText
-            let statusText = '';
-            if (item.status === 'match') {
-                statusText = '✅ Coincidencia exacta';
-            } else if (item.status === 'diff') {
-                statusText = '⚠️ Valores diferentes';
-            } else {
-                statusText = '❌ NO ENCONTRADO';
-            }
-            
-            // 4. hasActionTaken - incluye 'keep', 'replace', 'add'
-            const hasActionTaken = item.actionTaken === 'keep' || 
-                                   item.actionTaken === 'replace' || 
-                                   item.actionTaken === 'add';
-            
-            // 5. actionTakenText
-            let actionTakenText = '';
-            if (item.actionTaken === 'keep') {
-                actionTakenText = '🔒 Valor principal mantenido';
-            } else if (item.actionTaken === 'replace') {
-                actionTakenText = '🔄 Valor actualizado';
-            } else if (item.actionTaken === 'add') {
-                actionTakenText = '➕ Color agregado';
-            }
-            
-            // 6. Determinar severidad de la diferencia
+            // ✅ Severidad de diferencia
             let diffSeverityClass = '';
             if (item.status === 'diff' && item.diffPercentage) {
                 const diffPct = parseFloat(item.diffPercentage);
-                if (diffPct < 5) {
-                    diffSeverityClass = 'diff-severity-low';
-                } else if (diffPct < 15) {
-                    diffSeverityClass = 'diff-severity-medium';
-                } else {
-                    diffSeverityClass = 'diff-severity-high';
-                }
+                if (diffPct < 5) diffSeverityClass = 'diff-severity-low';
+                else if (diffPct < 15) diffSeverityClass = 'diff-severity-medium';
+                else diffSeverityClass = 'diff-severity-high';
             }
             
-            // 7. Swatch de color
+            // ✅ Swatch de color
             const cmykForSwatch = item.cmykPrimary || item.cmykSecondary;
             const swatchColor = cmykForSwatch ? 
                 this.cmykToRgb(cmykForSwatch[0], cmykForSwatch[1], cmykForSwatch[2], cmykForSwatch[3]) : 
                 '#2d3748';
             
-            // 8. CMYK Display
+            // ✅ CMYK Display
             let cmykDisplay = '';
             if (item.status === 'missing') {
                 cmykDisplay = `
@@ -158,7 +131,7 @@ export class UIRenderer {
                 `;
             }
             
-            // 9. LAB Display
+            // ✅ LAB Display
             let labDisplay = '';
             if (item.status !== 'missing' && item.labPrimary && item.labSecondary) {
                 labDisplay = `
@@ -179,24 +152,23 @@ export class UIRenderer {
                 `;
             }
             
-            // 10. Diff Details
+            // ✅ Detalles de diferencia
             const diffDetails = item.diffDetails && !hasActionTaken ? 
                 `<div class="diff-details">
                     📊 Diferencia: C:${item.diffDetails.cyan} | M:${item.diffDetails.magenta} | Y:${item.diffDetails.yellow} | K:${item.diffDetails.black}
                     <br>📈 Total: ${item.diffDetails.total}%
                 </div>` : '';
             
-            // 11. Mensaje de error
             const message = item.message ? 
                 `<div class="error-message">${item.message}</div>` : '';
             
-            // 12. Acción tomada
             const actionTakenHtml = actionTakenText ? 
                 `<div class="action-taken">${actionTakenText}</div>` : '';
             
-            // 13. Botones de acción
+            // ✅ BOTONES DE ACCIÓN - CRÍTICO: Si ya se tomó acción, solo mostrar "Deshacer"
             let actions = '';
             if (hasActionTaken) {
+                // ✅ Si ya hay acción tomada, solo mostrar botón deshacer
                 actions = `
                     <div class="action-buttons-cell">
                         <button class="small-btn btn-undo" onclick="window.app.showUndoDialog('${item.id}', '${item.actionTaken}')">
@@ -205,6 +177,7 @@ export class UIRenderer {
                     </div>
                 `;
             } else if (item.status === 'diff') {
+                // ✅ Si hay diferencias y no hay acción, mostrar ambos botones
                 actions = `
                     <div class="action-buttons-cell">
                         <button class="small-btn btn-replace" onclick="window.app.showReplaceConfirm('${item.id}')">
@@ -225,9 +198,7 @@ export class UIRenderer {
                 `;
             }
             
-            // ============================================================
-            // ✅ AHORA SÍ: Usar diffHighlight (ya está definida)
-            // ============================================================
+            // ✅ RENDERIZAR FILA
             return `
                 <tr class="${diffHighlight} ${diffSeverityClass}" data-color-id="${item.id}">
                     <td><strong>${item.id}</strong></td>
@@ -257,6 +228,10 @@ export class UIRenderer {
         
         window.app = app;
     }
+    
+    // ============================================================
+    // MÉTODOS DE MODALES (sin cambios)
+    // ============================================================
     
     showUndoModal(colorId, actionType, onConfirm) {
         const modal = document.createElement('div');
@@ -500,6 +475,7 @@ export class UIRenderer {
         `).join('');
     }
     
+    // Métodos del creador de archivos (sin cambios)
     initCreatorTable() {
         this.resetCreatorTable();
     }
