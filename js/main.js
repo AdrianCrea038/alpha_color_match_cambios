@@ -660,71 +660,119 @@ class AlphaColorMatch {
         }
     }
     
+    // ✅ MÉTODO EXPORTAR CORREGIDO - Mantiene ambos registros con valores sincronizados
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
-        const groupMap = new Map();
+        // Crear un mapa para sincronizar valores CMYK entre colores equivalentes
+        const syncMap = new Map(); // clave = nombre unificado, valor = { cmyk, lab }
         
+        // Función para obtener el nombre unificado según la tabla de mapeo
+        const getUnifiedKey = (color) => {
+            // Extraer el nombre sin NK
+            let nameWithoutNK = color.name.replace(/\s+NK\d+$/, '').trim();
+            nameWithoutNK = nameWithoutNK.replace(/\s+/g, ' ');
+            
+            // Buscar en el mapa de unificación
+            for (let [original, mapped] of this.fileHandler.nameMapping) {
+                const normalizedOriginal = original.trim().replace(/\s+/g, ' ');
+                if (nameWithoutNK === normalizedOriginal) {
+                    return mapped;
+                }
+            }
+            
+            return nameWithoutNK;
+        };
+        
+        // Colección de todos los colores a exportar (ambos archivos)
+        const allColorsToExport = [];
+        
+        // Procesar colores del archivo principal con sus valores ACTUALES (después de decisiones)
         for (const color of this.primaryData) {
-            const canonicalName = this.getCanonicalName(color.name);
+            const unifiedKey = getUnifiedKey(color);
+            allColorsToExport.push({
+                id: color.id,
+                name: color.name,
+                cmyk: [...color.cmyk],
+                lab: [...color.lab],
+                unifiedKey: unifiedKey,
+                source: 'primary'
+            });
             
-            if (!groupMap.has(canonicalName)) {
-                groupMap.set(canonicalName, {
+            // Registrar en el mapa de sincronización
+            if (!syncMap.has(unifiedKey)) {
+                syncMap.set(unifiedKey, {
                     cmyk: [...color.cmyk],
-                    lab: [...color.lab],
-                    names: new Map()
+                    lab: [...color.lab]
                 });
-            }
-            
-            const entry = groupMap.get(canonicalName);
-            const uniqueKey = `${color.id}_${color.name}`;
-            if (!entry.names.has(uniqueKey)) {
-                entry.names.set(uniqueKey, { id: color.id, name: color.name });
             }
         }
         
+        // Procesar colores del archivo secundario
         for (const color of this.secondaryData) {
-            const canonicalName = this.getCanonicalName(color.name);
+            const unifiedKey = getUnifiedKey(color);
             
-            if (!groupMap.has(canonicalName)) {
-                groupMap.set(canonicalName, {
+            // Buscar si este color equivalente ya tiene valores definidos (por decisiones del usuario)
+            const syncedValues = syncMap.get(unifiedKey);
+            
+            if (syncedValues) {
+                // ✅ Si ya existe un color equivalente, usar los MISMO valores CMYK sincronizados
+                allColorsToExport.push({
+                    id: color.id,
+                    name: color.name,
+                    cmyk: [...syncedValues.cmyk],
+                    lab: [...syncedValues.lab],
+                    unifiedKey: unifiedKey,
+                    source: 'secondary',
+                    synced: true
+                });
+            } else {
+                // Si no hay equivalente, usar sus propios valores
+                allColorsToExport.push({
+                    id: color.id,
+                    name: color.name,
                     cmyk: [...color.cmyk],
                     lab: [...color.lab],
-                    names: new Map()
+                    unifiedKey: unifiedKey,
+                    source: 'secondary'
                 });
-            }
-            
-            const entry = groupMap.get(canonicalName);
-            const uniqueKey = `${color.id}_${color.name}`;
-            if (!entry.names.has(uniqueKey)) {
-                entry.names.set(uniqueKey, { id: color.id, name: color.name });
-            }
-        }
-        
-        const colorsToExport = [];
-        
-        for (const [canonicalName, data] of groupMap) {
-            for (const [uniqueKey, nameInfo] of data.names) {
-                colorsToExport.push({
-                    id: nameInfo.id,
-                    name: nameInfo.name,
-                    cmyk: data.cmyk,
-                    lab: data.lab
+                
+                syncMap.set(unifiedKey, {
+                    cmyk: [...color.cmyk],
+                    lab: [...color.lab]
                 });
             }
         }
         
-        colorsToExport.sort((a, b) => {
+        // Ordenar por ID
+        allColorsToExport.sort((a, b) => {
             const numA = parseInt(a.id) || 0;
             const numB = parseInt(b.id) || 0;
             return numA - numB;
         });
         
-        console.log(`📤 Exportando ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`);
+        // Mostrar en consola qué sincronizaciones se hicieron
+        console.log(`📤 Exportando ${allColorsToExport.length} colores totales`);
         
+        // Agrupar por unifiedKey para mostrar en consola
+        const groupLog = new Map();
+        for (const color of allColorsToExport) {
+            if (!groupLog.has(color.unifiedKey)) {
+                groupLog.set(color.unifiedKey, []);
+            }
+            groupLog.get(color.unifiedKey).push(color.name);
+        }
+        
+        for (const [unifiedKey, names] of groupLog) {
+            if (names.length > 1) {
+                console.log(`   🔗 Sincronizados como "${unifiedKey}": ${names.join(', ')} → mismos valores CMYK`);
+            }
+        }
+        
+        // Generar contenido del archivo
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -732,10 +780,10 @@ class AlphaColorMatch {
         content += 'BEGIN_DATA_FORMAT\n';
         content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
         content += 'END_DATA_FORMAT\n';
-        content += `NUMBER_OF_SETS\t${colorsToExport.length}\n`;
+        content += `NUMBER_OF_SETS\t${allColorsToExport.length}\n`;
         content += 'BEGIN_DATA\n\n';
         
-        colorsToExport.forEach(item => {
+        allColorsToExport.forEach(item => {
             content += `${item.id} "${item.name}" `;
             content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
             content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
@@ -751,7 +799,7 @@ class AlphaColorMatch {
         a.click();
         URL.revokeObjectURL(url);
         
-        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (${groupMap.size} grupos unificados)`, 'success');
+        this.uiRenderer.showToast(`📥 Exportados ${allColorsToExport.length} colores (${groupLog.size} grupos sincronizados)`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
