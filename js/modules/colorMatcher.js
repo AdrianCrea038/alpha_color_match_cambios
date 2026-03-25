@@ -73,6 +73,8 @@ export class ColorMatcher {
     
     // ✅ Función para normalizar el nombre base según la tabla
     normalizeBaseName(name) {
+        if (!name) return '';
+        
         // Eliminar espacios múltiples
         let normalized = name.trim().replace(/\s+/g, ' ');
         
