@@ -96,7 +96,7 @@ export class ColorMatcher {
         return normalizedBase.toLowerCase().trim();
     }
     
-    // ✅ NUEVO: Obtener el nombre unificado según la tabla
+    // NUEVO: Obtener el nombre unificado según la tabla
     getUnifiedName(name) {
         if (!name) return '';
         
@@ -113,7 +113,7 @@ export class ColorMatcher {
         return nameWithoutNK;
     }
     
-    // ✅ NUEVO: Verificar si dos nombres son equivalentes según la tabla
+    // NUEVO: Verificar si dos nombres son equivalentes según la tabla
     areEquivalentNames(name1, name2) {
         const unified1 = this.getUnifiedName(name1);
         const unified2 = this.getUnifiedName(name2);
@@ -176,19 +176,19 @@ export class ColorMatcher {
             const hasDifferences = differences.some(d => Math.abs(d) > 0.01);
             const diffPercentage = this.calculateDifferencePercentage(match.cmyk, secondary.cmyk);
             
-            // ✅ Obtener nombres unificados
+            // Obtener nombres unificados
             const unifiedName = this.getUnifiedName(secondary.name);
             const primaryUnifiedName = this.getUnifiedName(match.name);
             
-            // ✅ Verificar si son equivalentes (mismo color según tabla)
+            // Verificar si son equivalentes (mismo color según tabla)
             const areEquivalent = this.areEquivalentNames(match.name, secondary.name);
             
             return {
                 id: secondary.id,
                 name: secondary.name,
-                primaryName: match.name,  // ✅ Guardar el nombre del principal
-                secondaryName: secondary.name,  // ✅ Guardar el nombre del secundario
-                unifiedName: unifiedName,  // ✅ Nombre unificado para referencia
+                primaryName: match.name,
+                secondaryName: secondary.name,
+                unifiedName: unifiedName,
                 cmykPrimary: match.cmyk,
                 cmykSecondary: secondary.cmyk,
                 labPrimary: match.lab,
@@ -196,7 +196,7 @@ export class ColorMatcher {
                 status: hasDifferences ? 'diff' : 'match',
                 matchFound: true,
                 matchType: matchType,
-                areEquivalent: areEquivalent,  // ✅ Indica si son equivalentes según tabla
+                areEquivalent: areEquivalent,
                 differences: differences,
                 diffPercentage: diffPercentage,
                 originalName: match.name,
