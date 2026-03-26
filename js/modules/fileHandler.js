@@ -1,63 +1,63 @@
 export class FileHandler {
     constructor() {
-        // Tabla de unificación de nombres (normalizada internamente)
+        // Tabla de unificación de nombres
         this.nameMapping = new Map([
-            ["10FTM WHITE", "10A WHITE"],
-            ["03STM BLACK", "00A BLACK"],
-            ["01PTM DK STEEL GREY", "01P DK STEEL GREY"],
-            ["03TBLUE GREY", "01V WOLF GREY"],
-            ["05XTM ANTHRACITE", "06F ANTHRACITE"],
-            ["2AQTM BROWN", "20Q DARK CINDER"],
-            ["2DHTM MEDIUM OLIVE", "2DH MEDIUM OLIVE"],
-            ["3EMTM KELLY GREEN", "31W CLASSIC GREEN"],
-            ["31VTM DARK GREEN", "39Y GORGE GREEN"],
-            ["43VTM NAVY", "41S COLLEGE NAVY"],
-            ["44ATM TIDAL BLUE", "44A TIDAL BLUE"],
-            ["45WTM BLUSTERY", "45W BLUSTERY"],
+            ["10F TM WHITE", "10A WHITE"],
+            ["03S TM BLACK", "00A BLACK"],
+            ["01P TM DK STEEL GREY", "01P DK STEEL GREY"],
+            ["03T BLUE GREY", "01V WOLF GREY"],
+            ["05X TM ANTHRACITE", "06F ANTHRACITE"],
+            ["2AQ TM BROWN", "20Q DARK CINDER"],
+            ["2DH TM MEDIUM OLIVE", "2DH MEDIUM OLIVE"],
+            ["3EM TM KELLY GREEN", "31W CLASSIC GREEN"],
+            ["31V TM DARK GREEN", "39Y GORGE GREEN"],
+            ["43V TM NAVY", "41S COLLEGE NAVY"],
+            ["44A TM TIDAL BLUE", "44A TIDAL BLUE"],
+            ["45W TM BLUSTERY", "45W BLUSTERY"],
             ["4ES TM AERO BLUE", "4ES AERO BLUE"],
-            ["49VTM ROYAL", "4EV GAME ROYAL"],
-            ["4CVTM LIGHT BLUE", "4EY VALOR BLUE"],
-            ["52VTM PURPLE", "56N FIELD PURPLE"],
-            ["64VTM SCARLET", "65N UNIVERSITY RED"],
-            ["67YTM DARK MAROON", "66P DEEP MAROON"],
-            ["6DRTM PINK FIRE II", "66Z PINK FIRE II"],
-            ["69WTM CRIMSON", "69W TEAM CRIMSON"],
-            ["69YTM CARDINAL", "69X TEAM MAROON"],
-            ["79YTM BRIGHT GOLD", "79Q SUNDOWN"],
-            ["79STM YELLOW STRIKE", "79S YELLOW STRIKE"],
-            ["79XTM VEGAS GOLD", "79W TEAM GOLD"],
-            ["81FDESERT ORANGE", "81F DESERT ORANGE"],
-            ["87FTM BRIGHT CERAMIC", "87F BRIGHT CERAMIC"],
+            ["49V TM ROYAL", "4EV GAME ROYAL"],
+            ["4CV TM LIGHT BLUE", "4EY VALOR BLUE"],
+            ["52V TM PURPLE", "56N FIELD PURPLE"],
+            ["64V TM SCARLET", "65N UNIVERSITY RED"],
+            ["67Y TM DARK MAROON", "66P DEEP MAROON"],
+            ["6DR TM PINK FIRE II", "66Z PINK FIRE II"],
+            ["69W TM CRIMSON", "69W TEAM CRIMSON"],
+            ["69Y TM CARDINAL", "69X TEAM MAROON"],
+            ["79Y TM BRIGHT GOLD", "79Q SUNDOWN"],
+            ["79S TM YELLOW STRIKE", "79S YELLOW STRIKE"],
+            ["79X TM VEGAS GOLD", "79W TEAM GOLD"],
+            ["81F DESERT ORANGE", "81F DESERT ORANGE"],
+            ["87F TM BRIGHT CERAMIC", "87F BRIGHT CERAMIC"],
             ["82U TM ORANGE", "89L TEAM ORANGE"],
-            ["06HFLINT GREY", "06H FLINT GREY"],
-            ["15ANATURAL", "15A NATURAL"],
-            ["3EYPRO GREEN", "3EY PRO GREEN"],
-            ["3HNACTION GREEN", "3HN ACTION GREEN"],
-            ["3GUHYPER TURQUOISE", "3GU HYPER TURQUOISE"],
-            ["44USIGNAL BLUE", "44U SIGNAL BLUE"],
-            ["4KBDARK TURQUOISE", "4KB DARK TURQUOISE"],
-            ["4LBGYM BLUE", "4LB GYM BLUE"],
-            ["48YITALY BLUE", "48Y ITALY BLUE"],
-            ["52MNEW ORCHID", "52M NEW ORCHID"],
-            ["71RVOLT", "71R VOLT"],
-            ["77CGOLD", "77C GOLD"],
-            ["76IUNIVERSITY GOLD", "76I UNIVERSITY GOLD"],
-            ["78HAMARILLO", "78H AMARILLO"],
-            ["79VCLUB GOLD", "79V CLUB GOLD"],
-            ["89MUNIVERSITY ORANGE", "89M UNIVERSITY ORANGE"],
-            ["89NBRILLIANT ORANGE", "89N BRILLIANT ORANGE"],
-            ["89QORANGE HORIZON", "89Q ORANGE HORIZON"]
+            ["06H FLINT GREY", "06H FLINT GREY"],
+            ["15A NATURAL", "15A NATURAL"],
+            ["3EY PRO GREEN", "3EY PRO GREEN"],
+            ["3HN ACTION GREEN", "3HN ACTION GREEN"],
+            ["3GU HYPER TURQUOISE", "3GU HYPER TURQUOISE"],
+            ["44U SIGNAL BLUE", "44U SIGNAL BLUE"],
+            ["4KB DARK TURQUOISE", "4KB DARK TURQUOISE"],
+            ["4LB GYM BLUE", "4LB GYM BLUE"],
+            ["48Y ITALY BLUE", "48Y ITALY BLUE"],
+            ["52M NEW ORCHID", "52M NEW ORCHID"],
+            ["71R VOLT", "71R VOLT"],
+            ["77C GOLD", "77C GOLD"],
+            ["76I UNIVERSITY GOLD", "76I UNIVERSITY GOLD"],
+            ["78H AMARILLO", "78H AMARILLO"],
+            ["79V CLUB GOLD", "79V CLUB GOLD"],
+            ["89M UNIVERSITY ORANGE", "89M UNIVERSITY ORANGE"],
+            ["89N BRILLIANT ORANGE", "89N BRILLIANT ORANGE"],
+            ["89Q ORANGE HORIZON", "89Q ORANGE HORIZON"]
         ]);
     }
 
-    // ✅ Normalización para comparación: MAYÚSCULAS + eliminar espacios, guiones, guiones bajos, puntos
+    // Normalización para comparación: MAYÚSCULAS + eliminar espacios, guiones, guiones bajos, puntos
     normalizeForComparison(str) {
         if (!str) return '';
         return str
             .toUpperCase()
-            .replace(/\s+/g, '')           // Eliminar todos los espacios
-            .replace(/[-_]/g, '')          // Eliminar guiones y guiones bajos
-            .replace(/\./g, '');           // Eliminar puntos
+            .replace(/\s+/g, '')
+            .replace(/[-_]/g, '')
+            .replace(/\./g, '');
     }
 
     async parseTxtFile(file) {
@@ -107,7 +107,6 @@ export class FileHandler {
     }
     
     normalizeNameWithMapping(name) {
-        // Normalizar el nombre para buscar en la tabla
         const normalizedInput = this.normalizeForComparison(name);
         
         for (let [original, mapped] of this.nameMapping) {
@@ -145,7 +144,6 @@ export class FileHandler {
                     let nameWithoutNK = this.removeNKCode(originalName);
                     let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
                     
-                    // Mantener los espacios originales del nombre base normalizado
                     let finalName = normalizedBaseName.toUpperCase();
                     if (nkCode) {
                         finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
