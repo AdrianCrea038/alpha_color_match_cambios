@@ -50,7 +50,6 @@ export class FileHandler {
         ]);
     }
 
-    // Normalización para comparación: MAYÚSCULAS + eliminar espacios, guiones, guiones bajos, puntos
     normalizeForComparison(str) {
         if (!str) return '';
         return str
