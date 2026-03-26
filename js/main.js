@@ -1005,7 +1005,7 @@ class AlphaColorMatch {
     }
     
     // ============================================================
-    // MÉTODO EXPORT RESULTS - CORREGIDO
+    // MÉTODO EXPORT RESULTS - CORREGIDO (Usa tabla de equivalencia)
     // ============================================================
     exportResults() {
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
@@ -1016,17 +1016,17 @@ class AlphaColorMatch {
         const colorsToExport = [];
         const processedIds = new Set();
         
-        // Crear mapa de colores secundarios por NK + nombre normalizado
-        const secondaryByNormalizedKey = new Map();
+        // Crear mapa de colores secundarios por UNIFIED NAME (nombre unificado según tabla)
+        const secondaryByUnifiedName = new Map();
         
         for (const color of this.secondaryData) {
             const nk = this.extractNKCode(color.name);
-            const baseName = this.colorMatcher.normalizeForComparison(this.extractBaseName(color.name));
-            const key = `${nk}_${baseName}`;
-            if (!secondaryByNormalizedKey.has(key)) {
-                secondaryByNormalizedKey.set(key, []);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            const key = `${nk}_${unifiedName}`;
+            if (!secondaryByUnifiedName.has(key)) {
+                secondaryByUnifiedName.set(key, []);
             }
-            secondaryByNormalizedKey.get(key).push(color);
+            secondaryByUnifiedName.get(key).push(color);
         }
         
         // 1. Exportar todos los colores de primaryData
@@ -1045,17 +1045,18 @@ class AlphaColorMatch {
             processedIds.add(color.id);
         }
         
-        // 2. Buscar colores equivalentes en secundario
+        // 2. Buscar colores equivalentes en secundario usando la tabla de equivalencia
         for (const primaryColor of this.primaryData) {
             const primaryNK = this.extractNKCode(primaryColor.name);
-            const primaryBaseNormalized = this.colorMatcher.normalizeForComparison(this.extractBaseName(primaryColor.name));
-            const primaryKey = `${primaryNK}_${primaryBaseNormalized}`;
+            const primaryUnifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
+            const key = `${primaryNK}_${primaryUnifiedName}`;
             
-            const equivalentColors = secondaryByNormalizedKey.get(primaryKey) || [];
+            const equivalentColors = secondaryByUnifiedName.get(key) || [];
             
             for (const secondaryColor of equivalentColors) {
                 if (processedIds.has(secondaryColor.id)) continue;
                 
+                // Verificar si son equivalentes según la tabla
                 const isEquivalent = this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
                 const isSameName = this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
                 
