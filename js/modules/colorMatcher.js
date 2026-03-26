@@ -1,18 +1,5 @@
-/**
- * Módulo ColorMatcher - Comparación inteligente de colores
- * Versión mejorada: Normalización de nombres para comparación
- */
-
 export class ColorMatcher {
     constructor() {
-        this.tolerance = {
-            cmyk: 5.0,
-            euclidean: 8.0
-        };
-        
-        // Tabla de unificación para nombres base (sin NK)
-        // Columna 1: Nombre en archivo principal
-        // Columna 2: Nombre equivalente en archivo secundario
         this.nameMapping = new Map([
             ["10F TM WHITE", "10A WHITE"],
             ["03S TM BLACK", "00A BLACK"],
@@ -62,7 +49,6 @@ export class ColorMatcher {
         ]);
     }
 
-    // Normalización para comparación: MAYÚSCULAS + eliminar espacios, guiones, guiones bajos, puntos
     normalizeForComparison(str) {
         if (!str) return '';
         return str
@@ -73,15 +59,14 @@ export class ColorMatcher {
     }
 
     extractNKCode(fullName) {
-        const match = fullName.match(/NK\d+$/);
-        return match ? match[0] : null;
+        const match = fullName.match(/NK\d+$/i);
+        return match ? match[0].toUpperCase() : null;
     }
-    
-    removeNKCode(name) {
-        return name.replace(/\s+NK\d+$/, '').trim();
+
+    extractBaseName(fullName) {
+        return fullName.replace(/\s+NK\d+$/i, '').trim();
     }
-    
-    // Normalizar nombre base usando la tabla de mapeo
+
     normalizeBaseName(name) {
         if (!name) return '';
         
@@ -96,192 +81,57 @@ export class ColorMatcher {
         
         return name.trim().replace(/\s+/g, ' ');
     }
-    
-    normalizeNameForComparison(name) {
-        if (!name) return '';
-        
-        const nkCode = this.extractNKCode(name);
-        let nameWithoutNK = this.removeNKCode(name);
-        let normalizedBase = this.normalizeBaseName(nameWithoutNK);
-        
-        return this.normalizeForComparison(normalizedBase);
-    }
-    
-    // Obtener el nombre unificado según la tabla (el nombre al que mapea)
+
     getUnifiedName(name) {
-        if (!name) return '';
+        const baseName = this.extractBaseName(name);
+        const normalizedBase = this.normalizeBaseName(baseName);
+        const nkCode = this.extractNKCode(name);
         
-        let nameWithoutNK = this.removeNKCode(name);
-        nameWithoutNK = nameWithoutNK.trim().replace(/\s+/g, ' ');
-        
-        const normalizedInput = this.normalizeForComparison(nameWithoutNK);
-        
-        for (let [original, mapped] of this.nameMapping) {
-            const normalizedOriginal = this.normalizeForComparison(original);
-            if (normalizedInput === normalizedOriginal) {
-                return mapped;
-            }
-        }
-        
-        return nameWithoutNK;
+        return nkCode ? `${normalizedBase} ${nkCode}` : normalizedBase;
     }
-    
-    // Verificar si dos nombres son equivalentes según la tabla
+
     areEquivalentNames(name1, name2) {
-        const base1 = this.removeNKCode(name1);
-        const base2 = this.removeNKCode(name2);
+        const base1 = this.extractBaseName(name1);
+        const base2 = this.extractBaseName(name2);
         
         const normalized1 = this.normalizeForComparison(base1);
         const normalized2 = this.normalizeForComparison(base2);
         
         if (normalized1 === normalized2) return true;
         
-        const unified1 = this.normalizeForComparison(this.getUnifiedName(name1));
-        const unified2 = this.normalizeForComparison(this.getUnifiedName(name2));
+        const unified1 = this.normalizeForComparison(this.normalizeBaseName(base1));
+        const unified2 = this.normalizeForComparison(this.normalizeBaseName(base2));
         
         return unified1 === unified2;
     }
 
-    smartCompare(primaryData, secondaryData) {
-        const results = [];
-        const primaryIndex = this.buildSearchIndex(primaryData);
-        
-        for (const secondary of secondaryData) {
-            const comparison = this.compareSingleColor(secondary, primaryIndex, primaryData);
-            results.push(comparison);
-        }
-        
-        return results;
+    getComparisonKey(color) {
+        const nkCode = color.nkCode || this.extractNKCode(color.name);
+        const baseName = color.baseName || this.extractBaseName(color.name);
+        const normalizedBase = this.normalizeForComparison(this.normalizeBaseName(baseName));
+        return `${nkCode}_${normalizedBase}`;
     }
-    
-    buildSearchIndex(primaryData) {
-        const index = {
-            byNormalizedName: new Map(),
-            byId: new Map(),
-            byCmykHash: new Map(),
-            all: primaryData
-        };
-        
-        for (const item of primaryData) {
-            const normalizedName = this.normalizeNameForComparison(item.name);
-            index.byNormalizedName.set(normalizedName, item);
-            index.byId.set(item.id, item);
-            
-            const cmykHash = this.getCmykHash(item.cmyk);
-            if (!index.byCmykHash.has(cmykHash)) {
-                index.byCmykHash.set(cmykHash, []);
-            }
-            index.byCmykHash.get(cmykHash).push(item);
-        }
-        
-        return index;
-    }
-    
-    compareSingleColor(secondary, primaryIndex, primaryData) {
-        const normalizedName = this.normalizeNameForComparison(secondary.name);
-        
-        let match = primaryIndex.byNormalizedName.get(normalizedName);
-        let matchType = 'name_match';
-        
-        if (!match) {
-            match = primaryIndex.byId.get(secondary.id);
-            if (match) matchType = 'id_match';
-        }
-        
-        if (!match) {
-            match = this.fuzzySearchByCmyk(secondary.cmyk, primaryData);
-            if (match) matchType = 'cmyk_match';
-        }
-        
-        if (match) {
-            const differences = this.compareCmykValues(match.cmyk, secondary.cmyk);
-            const hasDifferences = differences.some(d => Math.abs(d) > 0.01);
-            const diffPercentage = this.calculateDifferencePercentage(match.cmyk, secondary.cmyk);
-            
-            const unifiedName = this.getUnifiedName(secondary.name);
-            const areEquivalent = this.areEquivalentNames(match.name, secondary.name);
-            
-            return {
-                id: secondary.id,
-                name: secondary.name,
-                primaryName: match.name,
-                secondaryName: secondary.name,
-                unifiedName: unifiedName,
-                cmykPrimary: match.cmyk,
-                cmykSecondary: secondary.cmyk,
-                labPrimary: match.lab,
-                labSecondary: secondary.lab,
-                status: hasDifferences ? 'diff' : 'match',
-                matchFound: true,
-                matchType: matchType,
-                areEquivalent: areEquivalent,
-                differences: differences,
-                diffPercentage: diffPercentage,
-                originalName: match.name,
-                diffDetails: this.getDetailedDiff(match.cmyk, secondary.cmyk),
-                recommendation: this.getRecommendation(diffPercentage)
-            };
-        }
+
+    compareColors(primaryColor, secondaryColor) {
+        const hasDifferences = this.hasCmykDifferences(primaryColor.cmyk, secondaryColor.cmyk);
+        const diffPercentage = this.calculateDiffPercentage(primaryColor.cmyk, secondaryColor.cmyk);
+        const areEquivalent = this.areEquivalentNames(primaryColor.name, secondaryColor.name);
         
         return {
-            id: secondary.id,
-            name: secondary.name,
-            secondaryName: secondary.name,
-            cmykSecondary: secondary.cmyk,
-            labSecondary: secondary.lab,
-            cmykPrimary: null,
-            labPrimary: null,
-            status: 'missing',
-            matchFound: false,
-            matchType: 'none',
-            areEquivalent: false,
-            message: `❌ No se encontró el color "${secondary.name}" en el archivo principal`,
-            recommendation: 'Agregar este color a la referencia principal'
+            hasDifferences,
+            diffPercentage,
+            areEquivalent,
+            diffDetails: this.getDetailedDiff(primaryColor.cmyk, secondaryColor.cmyk),
+            recommendation: this.getRecommendation(diffPercentage)
         };
     }
-    
-    getCmykHash(cmyk) {
-        if (!cmyk || cmyk.length < 4) return '';
-        const rounded = cmyk.map(v => Math.round(v / 5) * 5);
-        return rounded.join(',');
+
+    hasCmykDifferences(cmyk1, cmyk2) {
+        if (!cmyk1 || !cmyk2) return true;
+        return cmyk1.some((val, idx) => Math.abs(val - cmyk2[idx]) > 0.01);
     }
-    
-    fuzzySearchByCmyk(targetCmyk, dataset, threshold = 8.0) {
-        let bestMatch = null;
-        let smallestDistance = Infinity;
-        
-        for (const item of dataset) {
-            if (!item.cmyk) continue;
-            
-            const distance = this.calculateEuclideanDistance(targetCmyk, item.cmyk);
-            
-            if (distance < smallestDistance && distance <= threshold) {
-                smallestDistance = distance;
-                bestMatch = item;
-            }
-        }
-        
-        return bestMatch;
-    }
-    
-    compareCmykValues(cmyk1, cmyk2) {
-        if (!cmyk1 || !cmyk2) return [0, 0, 0, 0];
-        return cmyk1.map((val, idx) => {
-            const diff = val - (cmyk2[idx] || 0);
-            return parseFloat(diff.toFixed(4));
-        });
-    }
-    
-    calculateEuclideanDistance(arr1, arr2) {
-        if (!arr1 || !arr2) return Infinity;
-        const sum = arr1.reduce((acc, val, i) => {
-            const diff = val - (arr2[i] || 0);
-            return acc + diff * diff;
-        }, 0);
-        return Math.sqrt(sum);
-    }
-    
-    calculateDifferencePercentage(cmyk1, cmyk2) {
+
+    calculateDiffPercentage(cmyk1, cmyk2) {
         if (!cmyk1 || !cmyk2) return 100;
         const totalDiff = cmyk1.reduce((sum, val, i) => {
             return sum + Math.abs(val - (cmyk2[i] || 0));
@@ -289,30 +139,17 @@ export class ColorMatcher {
         const maxPossible = 400;
         return (totalDiff / maxPossible) * 100;
     }
-    
+
     getDetailedDiff(cmyk1, cmyk2) {
         return {
             cyan: Math.abs(cmyk1[0] - cmyk2[0]).toFixed(2),
             magenta: Math.abs(cmyk1[1] - cmyk2[1]).toFixed(2),
             yellow: Math.abs(cmyk1[2] - cmyk2[2]).toFixed(2),
             black: Math.abs(cmyk1[3] - cmyk2[3]).toFixed(2),
-            total: this.calculateDifferencePercentage(cmyk1, cmyk2).toFixed(2)
+            total: this.calculateDiffPercentage(cmyk1, cmyk2).toFixed(2)
         };
     }
-    
-    getMatchType(match, secondary) {
-        const normalizedMatch = this.normalizeNameForComparison(match.name);
-        const normalizedSecondary = this.normalizeNameForComparison(secondary.name);
-        
-        if (normalizedMatch === normalizedSecondary) {
-            return 'name_match';
-        }
-        if (match.id === secondary.id) {
-            return 'id_match';
-        }
-        return 'cmyk_match';
-    }
-    
+
     getRecommendation(diffPercentage) {
         if (diffPercentage < 1) {
             return '✅ Coincidencia exacta - No requiere acción';
@@ -323,37 +160,5 @@ export class ColorMatcher {
         } else {
             return '❗ Diferencia significativa - Se recomienda reemplazar el valor';
         }
-    }
-    
-    getComparisonStats(results) {
-        const stats = {
-            total: results.length,
-            matches: 0,
-            differences: 0,
-            missing: 0,
-            avgDifference: 0,
-            maxDifference: 0
-        };
-        
-        let totalDiff = 0;
-        
-        for (const result of results) {
-            if (result.status === 'match') {
-                stats.matches++;
-            } else if (result.status === 'diff') {
-                stats.differences++;
-                if (result.diffPercentage) {
-                    totalDiff += parseFloat(result.diffPercentage);
-                    stats.maxDifference = Math.max(stats.maxDifference, parseFloat(result.diffPercentage));
-                }
-            } else if (result.status === 'missing') {
-                stats.missing++;
-            }
-        }
-        
-        stats.avgDifference = stats.differences > 0 ? 
-            (totalDiff / stats.differences).toFixed(2) : 0;
-        
-        return stats;
     }
 }
