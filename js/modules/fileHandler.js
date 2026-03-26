@@ -1,53 +1,63 @@
 export class FileHandler {
     constructor() {
-        // TABLA DE UNIFICACIÓN DE NOMBRES
+        // Tabla de unificación de nombres (normalizada internamente)
         this.nameMapping = new Map([
-            ["10FTM White", "10A White"],
-            ["03sTM Black", "00A Black"],
-            ["01PTM DK Steel Grey", "01P DK Steel Grey"],
-            ["03TBlue Grey", "01V Wolf Grey"],
-            ["05XTM Anthracite", "06F Anthracite"],
-            ["2AQTM Brown", "20Q Dark Cinder"],
-            ["2DHTM Medium Olive", "2DH Medium Olive"],
-            ["3EMTM Kelly Green", "31W Classic Green"],
-            ["31VTM Dark Green", "39Y Gorge Green"],
-            ["43VTM Navy", "41S College Navy"],
-            ["44ATM Tidal Blue", "44A Tidal Blue"],
-            ["45WTM Blustery", "45W Blustery"],
-            ["4ES TM Aero Blue", "4ES Aero Blue"],
-            ["49VTM Royal", "4EV Game Royal"],
-            ["4CVTM Light Blue", "4EY Valor Blue"],
-            ["52VTM Purple", "56N Field Purple"],
-            ["64VTM Scarlet", "65N University Red"],
-            ["67YTM Dark Maroon", "66P Deep Maroon"],
-            ["6DRTM Pink Fire II", "66Z Pink Fire II"],
-            ["69WTM Crimson", "69W Team Crimson"],
-            ["69YTM Cardinal", "69X Team Maroon"],
-            ["79YTM Bright Gold", "79Q Sundown"],
-            ["79STM Yellow Strike", "79S Yellow Strike"],
-            ["79XTM Vegas Gold", "79W Team Gold"],
-            ["81FDesert Orange", "81F Desert Orange"],
-            ["87FTM Bright Ceramic", "87F Bright Ceramic"],
-            ["82U TM Orange", "89L Team Orange"],
-            ["06HFlint Grey", "06H Flint Grey"],
-            ["15ANatural", "15A Natural"],
-            ["3EYPro Green", "3EY Pro Green"],
-            ["3HNAction Green", "3HN Action Green"],
-            ["3GUHyper Turquoise", "3GU Hyper Turquoise"],
-            ["44USignal Blue", "44U Signal Blue"],
-            ["4KBDark Turquoise", "4KB Dark Turquoise"],
-            ["4LBGym Blue", "4LB Gym Blue"],
-            ["48YItaly Blue", "48Y Italy Blue"],
-            ["52MNew Orchid", "52M New Orchid"],
-            ["71RVolt", "71R Volt"],
-            ["77CGold", "77C Gold"],
-            ["76IUniversity Gold", "76I University Gold"],
-            ["78HAmarillo", "78H Amarillo"],
-            ["79VClub Gold", "79V Club Gold"],
-            ["89MUniversity Orange", "89M University Orange"],
-            ["89NBrilliant Orange", "89N Brilliant Orange"],
-            ["89QOrange Horizon", "89Q Orange Horizon"]
+            ["10FTM WHITE", "10A WHITE"],
+            ["03STM BLACK", "00A BLACK"],
+            ["01PTM DK STEEL GREY", "01P DK STEEL GREY"],
+            ["03TBLUE GREY", "01V WOLF GREY"],
+            ["05XTM ANTHRACITE", "06F ANTHRACITE"],
+            ["2AQTM BROWN", "20Q DARK CINDER"],
+            ["2DHTM MEDIUM OLIVE", "2DH MEDIUM OLIVE"],
+            ["3EMTM KELLY GREEN", "31W CLASSIC GREEN"],
+            ["31VTM DARK GREEN", "39Y GORGE GREEN"],
+            ["43VTM NAVY", "41S COLLEGE NAVY"],
+            ["44ATM TIDAL BLUE", "44A TIDAL BLUE"],
+            ["45WTM BLUSTERY", "45W BLUSTERY"],
+            ["4ES TM AERO BLUE", "4ES AERO BLUE"],
+            ["49VTM ROYAL", "4EV GAME ROYAL"],
+            ["4CVTM LIGHT BLUE", "4EY VALOR BLUE"],
+            ["52VTM PURPLE", "56N FIELD PURPLE"],
+            ["64VTM SCARLET", "65N UNIVERSITY RED"],
+            ["67YTM DARK MAROON", "66P DEEP MAROON"],
+            ["6DRTM PINK FIRE II", "66Z PINK FIRE II"],
+            ["69WTM CRIMSON", "69W TEAM CRIMSON"],
+            ["69YTM CARDINAL", "69X TEAM MAROON"],
+            ["79YTM BRIGHT GOLD", "79Q SUNDOWN"],
+            ["79STM YELLOW STRIKE", "79S YELLOW STRIKE"],
+            ["79XTM VEGAS GOLD", "79W TEAM GOLD"],
+            ["81FDESERT ORANGE", "81F DESERT ORANGE"],
+            ["87FTM BRIGHT CERAMIC", "87F BRIGHT CERAMIC"],
+            ["82U TM ORANGE", "89L TEAM ORANGE"],
+            ["06HFLINT GREY", "06H FLINT GREY"],
+            ["15ANATURAL", "15A NATURAL"],
+            ["3EYPRO GREEN", "3EY PRO GREEN"],
+            ["3HNACTION GREEN", "3HN ACTION GREEN"],
+            ["3GUHYPER TURQUOISE", "3GU HYPER TURQUOISE"],
+            ["44USIGNAL BLUE", "44U SIGNAL BLUE"],
+            ["4KBDARK TURQUOISE", "4KB DARK TURQUOISE"],
+            ["4LBGYM BLUE", "4LB GYM BLUE"],
+            ["48YITALY BLUE", "48Y ITALY BLUE"],
+            ["52MNEW ORCHID", "52M NEW ORCHID"],
+            ["71RVOLT", "71R VOLT"],
+            ["77CGOLD", "77C GOLD"],
+            ["76IUNIVERSITY GOLD", "76I UNIVERSITY GOLD"],
+            ["78HAMARILLO", "78H AMARILLO"],
+            ["79VCLUB GOLD", "79V CLUB GOLD"],
+            ["89MUNIVERSITY ORANGE", "89M UNIVERSITY ORANGE"],
+            ["89NBRILLIANT ORANGE", "89N BRILLIANT ORANGE"],
+            ["89QORANGE HORIZON", "89Q ORANGE HORIZON"]
         ]);
+    }
+
+    // ✅ Normalización para comparación: MAYÚSCULAS + eliminar espacios, guiones, guiones bajos, puntos
+    normalizeForComparison(str) {
+        if (!str) return '';
+        return str
+            .toUpperCase()
+            .replace(/\s+/g, '')           // Eliminar todos los espacios
+            .replace(/[-_]/g, '')          // Eliminar guiones y guiones bajos
+            .replace(/\./g, '');           // Eliminar puntos
     }
 
     async parseTxtFile(file) {
@@ -56,7 +66,6 @@ export class FileHandler {
             reader.onload = (e) => {
                 const content = e.target.result;
                 const records = this.parseContent(content);
-                // ✅ Eliminar duplicados por ID (por si acaso)
                 const uniqueRecords = this.removeDuplicatesById(records);
                 resolve(uniqueRecords);
             };
@@ -65,7 +74,6 @@ export class FileHandler {
         });
     }
     
-    // ✅ Método para eliminar duplicados por ID
     removeDuplicatesById(records) {
         const seen = new Map();
         const unique = [];
@@ -99,20 +107,17 @@ export class FileHandler {
     }
     
     normalizeNameWithMapping(name) {
-        let normalized = this.normalizeSpaces(name);
+        // Normalizar el nombre para buscar en la tabla
+        const normalizedInput = this.normalizeForComparison(name);
         
         for (let [original, mapped] of this.nameMapping) {
-            const normalizedOriginal = this.normalizeSpaces(original).toLowerCase();
-            const normalizedName = normalized.toLowerCase();
-            
-            if (normalizedName === normalizedOriginal || 
-                normalizedName.includes(normalizedOriginal) ||
-                normalizedOriginal.includes(normalizedName)) {
+            const normalizedOriginal = this.normalizeForComparison(original);
+            if (normalizedInput === normalizedOriginal) {
                 return mapped;
             }
         }
         
-        return normalized;
+        return name.trim().replace(/\s+/g, ' ');
     }
     
     parseContent(content) {
@@ -121,7 +126,6 @@ export class FileHandler {
         const records = [];
         
         for (let line of lines) {
-            // Saltar líneas vacías
             if (line.trim() === '') continue;
             
             if (line.trim() === 'BEGIN_DATA') {
@@ -131,31 +135,23 @@ export class FileHandler {
             if (dataStarted && line.trim() === 'END_DATA') break;
             if (!dataStarted) continue;
             
-            // ✅ UN SOLO PATRÓN DE MATCH - evitar duplicados
-            // Patrón que soporta nombres con o sin comillas
             const match = line.match(/^(\d+)\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
             
             if (match) {
-                // Obtener el nombre (con comillas o sin ellas)
                 let originalName = match[2] || match[3];
                 
                 if (originalName) {
-                    // Extraer código NK
                     const nkCode = this.extractNKCode(originalName);
-                    
-                    // Eliminar código NK para normalización
                     let nameWithoutNK = this.removeNKCode(originalName);
-                    
-                    // Normalizar nombre según tabla de unificación
                     let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
                     
-                    // Reconstruir nombre final con código NK (si existía)
-                    let finalName = normalizedBaseName;
+                    let finalName = normalizedBaseName.toUpperCase();
                     if (nkCode) {
-                        finalName = `${normalizedBaseName} ${nkCode}`;
+                        finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
+                    } else {
+                        finalName = normalizedBaseName.toUpperCase();
                     }
                     
-                    // Verificar si ya existe un registro con este ID (evitar duplicados en el mismo archivo)
                     const existingIndex = records.findIndex(r => r.id === match[1]);
                     if (existingIndex !== -1) {
                         console.warn(`⚠️ ID duplicado encontrado: ${match[1]}, omitiendo duplicado`);
@@ -172,7 +168,6 @@ export class FileHandler {
                     });
                 }
             } else {
-                // Si no match con el patrón principal, intentar con formato alternativo
                 const altMatch = line.match(/^(\d+)\s+([^\s]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
                 if (altMatch) {
                     let originalName = altMatch[2];
@@ -181,12 +176,13 @@ export class FileHandler {
                     let nameWithoutNK = this.removeNKCode(originalName);
                     let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
                     
-                    let finalName = normalizedBaseName;
+                    let finalName = normalizedBaseName.toUpperCase();
                     if (nkCode) {
-                        finalName = `${normalizedBaseName} ${nkCode}`;
+                        finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
+                    } else {
+                        finalName = normalizedBaseName.toUpperCase();
                     }
                     
-                    // Verificar si ya existe un registro con este ID
                     const existingIndex = records.findIndex(r => r.id === altMatch[1]);
                     if (existingIndex !== -1) {
                         console.warn(`⚠️ ID duplicado encontrado: ${altMatch[1]}, omitiendo duplicado`);
@@ -223,7 +219,7 @@ export class FileHandler {
         results.forEach(item => {
             const cmyk = item.cmykPrimary || item.cmykSecondary;
             const lab = item.labPrimary || item.labSecondary;
-            content += `${item.id} "${item.name}" `;
+            content += `${item.id} "${item.name.toUpperCase()}" `;
             content += `${cmyk[0].toFixed(6)} ${cmyk[1].toFixed(6)} ${cmyk[2].toFixed(6)} ${cmyk[3].toFixed(6)} `;
             content += `${lab[0].toFixed(6)} ${lab[1].toFixed(6)} ${lab[2].toFixed(6)}\n`;
         });
@@ -244,7 +240,7 @@ export class FileHandler {
         content += 'BEGIN_DATA\n\n';
         
         data.forEach(item => {
-            content += `${item.id} "${item.name}" `;
+            content += `${item.id} "${item.name.toUpperCase()}" `;
             content += `${item.cmyk.c.toFixed(6)} ${item.cmyk.m.toFixed(6)} ${item.cmyk.y.toFixed(6)} ${item.cmyk.k.toFixed(6)} `;
             content += `${item.lab.l.toFixed(6)} ${item.lab.a.toFixed(6)} ${item.lab.b.toFixed(6)}\n`;
         });
