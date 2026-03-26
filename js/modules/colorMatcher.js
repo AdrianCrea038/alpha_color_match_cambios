@@ -67,9 +67,9 @@ export class ColorMatcher {
         if (!str) return '';
         return str
             .toUpperCase()
-            .replace(/\s+/g, '')           // Eliminar todos los espacios
-            .replace(/[-_]/g, '')          // Eliminar guiones y guiones bajos
-            .replace(/\./g, '');           // Eliminar puntos
+            .replace(/\s+/g, '')
+            .replace(/[-_]/g, '')
+            .replace(/\./g, '');
     }
 
     extractNKCode(fullName) {
@@ -85,10 +85,8 @@ export class ColorMatcher {
     normalizeBaseName(name) {
         if (!name) return '';
         
-        // Normalizar el nombre para buscar en la tabla
         const normalizedInput = this.normalizeForComparison(name);
         
-        // Buscar en el mapa de unificación
         for (let [original, mapped] of this.nameMapping) {
             const normalizedOriginal = this.normalizeForComparison(original);
             if (normalizedInput === normalizedOriginal) {
@@ -102,18 +100,14 @@ export class ColorMatcher {
     normalizeNameForComparison(name) {
         if (!name) return '';
         
-        // Extraer NK y nombre base
         const nkCode = this.extractNKCode(name);
         let nameWithoutNK = this.removeNKCode(name);
-        
-        // Normalizar el nombre base
         let normalizedBase = this.normalizeBaseName(nameWithoutNK);
         
-        // Devolver nombre base normalizado (para comparación de nombres)
         return this.normalizeForComparison(normalizedBase);
     }
     
-    // Obtener el nombre unificado según la tabla
+    // Obtener el nombre unificado según la tabla (el nombre al que mapea)
     getUnifiedName(name) {
         if (!name) return '';
         
@@ -134,17 +128,14 @@ export class ColorMatcher {
     
     // Verificar si dos nombres son equivalentes según la tabla
     areEquivalentNames(name1, name2) {
-        // Extraer nombres base sin NK
         const base1 = this.removeNKCode(name1);
         const base2 = this.removeNKCode(name2);
         
-        // Si los nombres base son iguales (normalizados), son equivalentes
         const normalized1 = this.normalizeForComparison(base1);
         const normalized2 = this.normalizeForComparison(base2);
         
         if (normalized1 === normalized2) return true;
         
-        // Buscar en la tabla de unificación
         const unified1 = this.normalizeForComparison(this.getUnifiedName(name1));
         const unified2 = this.normalizeForComparison(this.getUnifiedName(name2));
         
