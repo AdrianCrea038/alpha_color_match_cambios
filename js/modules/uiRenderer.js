@@ -666,9 +666,9 @@ export class UIRenderer {
                     <div>🔄 Secundario: ${item.secondaryFile}</div>
                 </div>
                 <div class="history-stats">
-                    <span>✅ Coincidencias: ${item.stats.matches}</span>
-                    <span>⚠️ Diferencias: ${item.stats.differences}</span>
-                    <span>❌ No encontrados: ${item.stats.missing}</span>
+                    <span>✅ Coincidencias: ${item.stats?.matches || 0}</span>
+                    <span>⚠️ Diferencias: ${item.stats?.differences || 0}</span>
+                    <span>❌ No encontrados: ${item.stats?.missing || 0}</span>
                 </div>
                 ${item.actionsLog && item.actionsLog.length ? `
                     <details class="history-actions">
