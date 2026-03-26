@@ -1004,64 +1004,92 @@ class AlphaColorMatch {
         }
     }
     
+    // ============================================================
+    // MÉTODO EXPORT RESULTS - CORREGIDO
+    // ============================================================
+    // Este método exporta todos los colores después de las decisiones del usuario
+    // Los colores equivalentes según la tabla se exportan ambos con los mismos valores CMYK
+    // ============================================================
     exportResults() {
+        // Verificar si hay datos para exportar
         if (this.primaryData.length === 0 && this.secondaryData.length === 0) {
             this.uiRenderer.showToast('No hay datos para exportar', 'warning');
             return;
         }
         
-        const colorsToExport = [];
-        const processedIds = new Set();
+        // ============================================================
+        // SECCIÓN 1: INICIALIZACIÓN DE VARIABLES
+        // ============================================================
+        const colorsToExport = [];     // Aquí se guardarán todos los colores a exportar
+        const processedIds = new Set(); // Para evitar exportar el mismo color dos veces
         
-        // Crear mapa de colores secundarios por NK + nombre normalizado
+        // ============================================================
+        // SECCIÓN 2: CREAR MAPA DE COLORES SECUNDARIOS
+        // ============================================================
+        // Este mapa nos ayudará a buscar colores equivalentes en el archivo secundario
         const secondaryByNormalizedKey = new Map();
         
         for (const color of this.secondaryData) {
-            const nk = this.extractNKCode(color.name);
-            const baseName = this.colorMatcher.normalizeForComparison(this.extractBaseName(color.name));
-            const key = `${nk}_${baseName}`;
+            const nk = this.extractNKCode(color.name);                                    // Extrae el código NK (ej: NK123)
+            const baseName = this.colorMatcher.normalizeForComparison(this.extractBaseName(color.name)); // Normaliza el nombre (sin espacios, mayúsculas)
+            const key = `${nk}_${baseName}`;                                              // Clave única: NK + nombre normalizado
             if (!secondaryByNormalizedKey.has(key)) {
                 secondaryByNormalizedKey.set(key, []);
             }
             secondaryByNormalizedKey.get(key).push(color);
         }
         
-        // 1. Exportar todos los colores de primaryData (después de decisiones del usuario)
+        // ============================================================
+        // SECCIÓN 3: EXPORTAR COLORES DEL ARCHIVO PRINCIPAL
+        // ============================================================
+        // Aquí se exportan todos los colores que están en primaryData
+        // Los colores que el usuario eliminó NO se exportan
         for (const color of this.primaryData) {
+            // Verificar si el usuario eliminó este color
             const actionState = this.actionStateMap.get(this.getUniqueColorId(color));
             if (actionState && actionState.actionTaken === 'delete_missing') {
-                continue;
+                continue; // Saltar colores eliminados
             }
             
+            // Agregar el color a la lista de exportación
             colorsToExport.push({
                 id: color.id,
                 name: color.name,
                 cmyk: [...color.cmyk],
                 lab: [...color.lab]
             });
-            processedIds.add(color.id);
+            processedIds.add(color.id); // Marcar este ID como ya procesado
         }
         
-        // 2. Buscar colores equivalentes en secundario que no estén ya en primaryData
+        // ============================================================
+        // SECCIÓN 4: BUSCAR COLORES EQUIVALENTES EN SECUNDARIO
+        // ============================================================
+        // Por cada color en principal, buscar si existe un color equivalente en secundario
+        // Si existe y tiene nombre diferente, exportarlo también con los mismos valores CMYK
         for (const primaryColor of this.primaryData) {
             const primaryNK = this.extractNKCode(primaryColor.name);
             const primaryBaseNormalized = this.colorMatcher.normalizeForComparison(this.extractBaseName(primaryColor.name));
             const primaryKey = `${primaryNK}_${primaryBaseNormalized}`;
             
+            // Buscar colores en secundario con la misma clave (mismo NK y nombre normalizado)
             const equivalentColors = secondaryByNormalizedKey.get(primaryKey) || [];
             
             for (const secondaryColor of equivalentColors) {
+                // Si ya exportamos este color (por ID), saltar
                 if (processedIds.has(secondaryColor.id)) continue;
                 
+                // Verificar si son equivalentes según la tabla y tienen nombres diferentes
                 const isEquivalent = this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
                 const isSameName = this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
                 
                 if (isEquivalent && !isSameName) {
+                    // Verificar si el usuario ignoró este color
                     const actionState = this.actionStateMap.get(this.getUniqueColorId(secondaryColor));
                     if (actionState && actionState.actionTaken === 'ignore_missing') {
-                        continue;
+                        continue; // Saltar colores ignorados
                     }
                     
+                    // Exportar el color secundario con los mismos valores CMYK del principal
                     colorsToExport.push({
                         id: secondaryColor.id,
                         name: secondaryColor.name,
@@ -1073,7 +1101,10 @@ class AlphaColorMatch {
             }
         }
         
-        // 3. Exportar colores que están solo en secundario y que el usuario eligió "Agregar"
+        // ============================================================
+        // SECCIÓN 5: EXPORTAR COLORES AGREGADOS DEL SECUNDARIO
+        // ============================================================
+        // Exportar colores que están solo en secundario y que el usuario eligió "Agregar"
         for (const secondaryColor of this.secondaryData) {
             if (processedIds.has(secondaryColor.id)) continue;
             
@@ -1089,6 +1120,9 @@ class AlphaColorMatch {
             }
         }
         
+        // ============================================================
+        // SECCIÓN 6: ORDENAR Y GENERAR ARCHIVO
+        // ============================================================
         // Ordenar por ID numérico
         colorsToExport.sort((a, b) => {
             const numA = parseInt(a.id) || 0;
@@ -1098,7 +1132,7 @@ class AlphaColorMatch {
         
         console.log(`📤 Exportando ${colorsToExport.length} colores`);
         
-        // Generar contenido del archivo
+        // Generar contenido del archivo en formato CGATS.17
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -1119,6 +1153,7 @@ class AlphaColorMatch {
         
         content += '\nEND_DATA\n';
         
+        // Descargar el archivo
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
