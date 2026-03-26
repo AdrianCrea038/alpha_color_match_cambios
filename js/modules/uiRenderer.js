@@ -141,11 +141,6 @@ export class UIRenderer {
                         <br><small style="color:#fbbf24;">✨ Son equivalentes (mismo color)</small>
                     </div>
                 `;
-            } else if (item.originalName && item.originalName !== item.name) {
-                nameDisplay = `
-                    <strong>${this.escapeHtml(item.name)}</strong>
-                    <br><small style="color:#888;">↳ Original: ${this.escapeHtml(item.originalName)}</small>
-                `;
             } else {
                 nameDisplay = `<strong>${this.escapeHtml(item.name)}</strong>`;
             }
@@ -281,7 +276,7 @@ export class UIRenderer {
             
             return `
                 <tr class="${diffHighlight} ${diffSeverityClass}" data-color-id="${item.id}">
-                    <td><strong>${item.id}</strong></td>
+                    <td><strong>${idx + 1}</strong></td>
                     <td>
                         <div class="color-swatch" style="background: ${swatchColor};" 
                              data-tooltip="${this.escapeHtml(tooltipText)}">
@@ -723,9 +718,8 @@ export class UIRenderer {
         const downloadBtn = document.getElementById('downloadTxtBtn');
         
         if (this.creatorRows.length === 0) {
-            tbody.innerHTML = '发展<td colspan="10" class="empty-state">Agregue colores para comenzar</td>';
-
-            downloadBtn.disabled = true;
+            tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Agregue colores para comenzar</td></tr>';
+            if (downloadBtn) downloadBtn.disabled = true;
             return;
         }
         
@@ -744,7 +738,7 @@ export class UIRenderer {
             </tr>
         `).join('');
         
-        downloadBtn.disabled = false;
+        if (downloadBtn) downloadBtn.disabled = false;
         this.attachCreatorEvents();
     }
     
