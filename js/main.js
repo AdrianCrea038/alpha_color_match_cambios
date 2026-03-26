@@ -283,6 +283,7 @@ class AlphaColorMatch {
             secondaryById.set(color.id, color);
         }
         
+        // Colores que están solo en principal
         for (const color of this.primaryData) {
             if (!secondaryById.has(color.id)) {
                 this.missingInSecondary.push({
@@ -295,6 +296,7 @@ class AlphaColorMatch {
             }
         }
         
+        // Colores que están solo en secundario
         for (const color of this.secondaryData) {
             if (!primaryById.has(color.id)) {
                 this.missingInPrimary.push({
@@ -341,6 +343,7 @@ class AlphaColorMatch {
             }
         }
         
+        // 1. Colores que están en ambos archivos (mismo ID)
         for (const id of commonIds) {
             const primaryColor = primaryById.get(id);
             const secondaryColor = secondaryById.get(id);
@@ -349,6 +352,7 @@ class AlphaColorMatch {
             const hasDifferences = this.hasCmykDifferences(primaryColor.cmyk, secondaryColor.cmyk);
             const diffPercentage = this.calculateDiffPercentage(primaryColor.cmyk, secondaryColor.cmyk);
             
+            // Color principal
             results.push({
                 id: id,
                 name: primaryColor.name,
@@ -367,6 +371,7 @@ class AlphaColorMatch {
                 recommendation: this.getRecommendation(diffPercentage)
             });
             
+            // Si son equivalentes con nombres diferentes, agregar también el color secundario
             if (areEquivalent && this.extractBaseName(primaryColor.name) !== this.extractBaseName(secondaryColor.name)) {
                 results.push({
                     id: id,
@@ -388,7 +393,7 @@ class AlphaColorMatch {
             }
         }
         
-        console.log(`📝 Agregando ${this.missingInSecondary.length} colores faltantes en SECUNDARIO`);
+        // 2. Colores que están solo en principal
         for (const missing of this.missingInSecondary) {
             results.push({
                 id: missing.id,
@@ -399,12 +404,13 @@ class AlphaColorMatch {
                 labSecondary: null,
                 status: 'missing',
                 matchFound: false,
+                source: 'only_primary',
                 message: `❌ No se encontró en el archivo secundario`,
-                recommendation: 'Agregar este color al archivo secundario'
+                recommendation: 'Elegir: Mantener o Eliminar'
             });
         }
         
-        console.log(`📝 Agregando ${this.missingInPrimary.length} colores faltantes en PRINCIPAL`);
+        // 3. Colores que están solo en secundario
         for (const missing of this.missingInPrimary) {
             results.push({
                 id: missing.id,
@@ -415,8 +421,9 @@ class AlphaColorMatch {
                 labSecondary: missing.lab ? [...missing.lab] : [0, 0, 0],
                 status: 'missing',
                 matchFound: false,
+                source: 'only_secondary',
                 message: `❌ No se encontró en el archivo principal`,
-                recommendation: 'Agregar este color al archivo principal'
+                recommendation: 'Elegir: Agregar o Ignorar'
             });
         }
         
@@ -426,7 +433,7 @@ class AlphaColorMatch {
             return numA - numB;
         });
         
-        console.log(`📊 Total resultados: ${results.length} (comunes: ${commonIds.size}, faltantes: ${this.missingInSecondary.length + this.missingInPrimary.length})`);
+        console.log(`📊 Total resultados: ${results.length}`);
         
         return results;
     }
@@ -526,6 +533,7 @@ class AlphaColorMatch {
                                     </div>
                                 `).join('')}
                             </div>
+                            <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #fbbf24;">➡️ Puede: Mantener o Eliminar</p>
                         </div>
                     ` : ''}
                     
@@ -539,11 +547,12 @@ class AlphaColorMatch {
                                     </div>
                                 `).join('')}
                             </div>
+                            <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #fbbf24;">➡️ Puede: Agregar o Ignorar</p>
                         </div>
                     ` : ''}
                     
                     <p style="margin-top: 1rem; color: #fbbf24; background: rgba(251, 191, 36, 0.1); padding: 0.75rem; border-radius: 0.5rem;">
-                        ⚠️ Estos colores aparecen como <strong>"NO ENCONTRADOS"</strong> en la tabla.
+                        ⚠️ Use los botones en la tabla para decidir qué hacer con cada color faltante.
                     </p>
                 </div>
                 <div class="modal-buttons" style="padding: 1rem; border-top: 1px solid #2d3748;">
@@ -646,7 +655,7 @@ class AlphaColorMatch {
         this.uiRenderer.renderComparisonTable(filtered, this);
     }
     
-    saveActionState(colorId, actionTaken, reason = '') {
+    saveActionState(colorId, actionTaken, reason = '', source = null) {
         const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (color) {
             const uniqueId = this.getUniqueColorId(color);
@@ -655,7 +664,8 @@ class AlphaColorMatch {
                 reason: reason,
                 timestamp: new Date().toISOString(),
                 colorId: colorId,
-                colorName: color.name
+                colorName: color.name,
+                source: source || color.source
             });
             console.log(`✅ Estado guardado: ${uniqueId} -> ${actionTaken}`);
             this.saveFullState();
@@ -674,6 +684,7 @@ class AlphaColorMatch {
         }
     }
     
+    // Acciones para colores en ambos archivos
     showReplaceConfirm(colorId) {
         const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color || color.status === 'missing') {
@@ -693,44 +704,6 @@ class AlphaColorMatch {
         }
         this.uiRenderer.showKeepConfirm(colorId, (reason) => {
             this.keepColor(color, reason);
-        });
-    }
-    
-    showAddConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c && c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showAddConfirm(colorId, color.name, (reason) => {
-            this.addMissingColor(color, reason);
-        });
-    }
-    
-    showKeepMissingConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c && c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showKeepMissingConfirm(colorId, color.name, (reason) => {
-            this.keepMissingColor(color, reason);
-        });
-    }
-    
-    showDeleteMissingConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c && c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showDeleteMissingConfirm(colorId, color.name, (reason) => {
-            this.deleteMissingColor(color, reason);
-        });
-    }
-    
-    showIgnoreConfirm(colorId) {
-        const color = this.comparisonResults.find(c => c && c.id === colorId);
-        if (!color) return;
-        this.uiRenderer.showIgnoreConfirm(colorId, color.name, (reason) => {
-            this.ignoreMissingColor(color, reason);
-        });
-    }
-    
-    showUndoDialog(colorId, actionType) {
-        this.uiRenderer.showUndoModal(colorId, actionType, (reason) => {
-            this.undoAction(colorId, actionType, reason);
         });
     }
     
@@ -812,6 +785,75 @@ class AlphaColorMatch {
         this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}"`, 'success');
     }
     
+    // Acciones para colores solo en principal (faltan en secundario)
+    showKeepMissingConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showKeepMissingConfirm(colorId, color.name, (reason) => {
+            this.keepMissingColor(color, reason);
+        });
+    }
+    
+    showDeleteMissingConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showDeleteMissingConfirm(colorId, color.name, (reason) => {
+            this.deleteMissingColor(color, reason);
+        });
+    }
+    
+    keepMissingColor(item, reason = '') {
+        this.saveActionState(item.id, 'keep_missing', reason, 'only_primary');
+        this.saveActionToHistory('keep_missing', item.id, item.name, reason);
+        this.uiRenderer.showToast(`💾 Color "${item.name}" mantenido en principal`, 'success');
+    }
+    
+    deleteMissingColor(item, reason = '') {
+        const previousState = {
+            id: item.id,
+            name: item.name,
+            cmyk: [...item.cmykPrimary],
+            lab: [...item.labPrimary]
+        };
+        
+        const actionId = `action_${this.actionCounter++}`;
+        this.actionHistory.push({
+            id: actionId,
+            type: 'delete_missing',
+            colorId: item.id,
+            colorName: item.name,
+            timestamp: new Date().toISOString(),
+            previousState: previousState,
+            reason: reason
+        });
+        
+        const index = this.primaryData.findIndex(p => p.id === item.id);
+        if (index !== -1) {
+            this.primaryData.splice(index, 1);
+            this.saveActionState(item.id, 'delete_missing', reason, 'only_primary');
+            this.saveActionToHistory('delete_missing', item.id, item.name, reason);
+            this.uiRenderer.showToast(`🗑️ Color "${item.name}" eliminado de principal`, 'success');
+            this.compareFiles();
+        }
+    }
+    
+    // Acciones para colores solo en secundario (faltan en principal)
+    showAddConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showAddConfirm(colorId, color.name, (reason) => {
+            this.addMissingColor(color, reason);
+        });
+    }
+    
+    showIgnoreConfirm(colorId) {
+        const color = this.comparisonResults.find(c => c && c.id === colorId);
+        if (!color) return;
+        this.uiRenderer.showIgnoreConfirm(colorId, color.name, (reason) => {
+            this.ignoreMissingColor(color, reason);
+        });
+    }
+    
     addMissingColor(item, reason = '') {
         const newColor = {
             id: item.id,
@@ -819,6 +861,7 @@ class AlphaColorMatch {
             cmyk: [...item.cmykSecondary],
             lab: item.labSecondary ? [...item.labSecondary] : [0, 0, 0]
         };
+        
         const actionId = `action_${this.actionCounter++}`;
         this.actionHistory.push({
             id: actionId,
@@ -830,35 +873,26 @@ class AlphaColorMatch {
             newColor: {...newColor},
             reason: reason
         });
-        this.primaryData.push(newColor);
         
-        this.saveActionState(item.id, 'add', reason);
-        this.compareFiles();
+        this.primaryData.push(newColor);
+        this.primaryData.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+        
+        this.saveActionState(item.id, 'add', reason, 'only_secondary');
         this.saveActionToHistory('add', item.id, item.name, reason);
-        this.uiRenderer.showToast(`✅ Color "${item.name}" agregado`, 'success');
-    }
-    
-    keepMissingColor(item, reason = '') {
-        this.saveActionState(item.id, 'keep_missing', reason);
-        this.saveActionToHistory('keep_missing', item.id, item.name, reason);
-        this.uiRenderer.showToast(`💾 Color "${item.name}" mantenido en principal`, 'success');
-    }
-    
-    deleteMissingColor(item, reason = '') {
-        const index = this.primaryData.findIndex(p => p.id === item.id);
-        if (index !== -1) {
-            this.primaryData.splice(index, 1);
-            this.saveActionState(item.id, 'delete_missing', reason);
-            this.saveActionToHistory('delete_missing', item.id, item.name, reason);
-            this.uiRenderer.showToast(`🗑️ Color "${item.name}" eliminado de principal`, 'success');
-            this.compareFiles();
-        }
+        this.uiRenderer.showToast(`✅ Color "${item.name}" agregado a principal`, 'success');
+        this.compareFiles();
     }
     
     ignoreMissingColor(item, reason = '') {
-        this.saveActionState(item.id, 'ignore_missing', reason);
+        this.saveActionState(item.id, 'ignore_missing', reason, 'only_secondary');
         this.saveActionToHistory('ignore_missing', item.id, item.name, reason);
         this.uiRenderer.showToast(`⏭️ Color "${item.name}" ignorado`, 'success');
+    }
+    
+    showUndoDialog(colorId, actionType) {
+        this.uiRenderer.showUndoModal(colorId, actionType, (reason) => {
+            this.undoAction(colorId, actionType, reason);
+        });
     }
     
     undoAction(colorId, actionType, reason = '') {
@@ -881,14 +915,13 @@ class AlphaColorMatch {
         } else if (action.type === 'add') {
             const index = this.primaryData.findIndex(p => p.id === colorId);
             if (index !== -1) this.primaryData.splice(index, 1);
-        } else if (action.type === 'delete_missing') {
-            const newColor = {
-                id: action.colorId,
-                name: action.colorName,
-                cmyk: action.previousState?.cmyk || [0, 0, 0, 0],
-                lab: action.previousState?.lab || [0, 0, 0]
-            };
-            this.primaryData.push(newColor);
+        } else if (action.type === 'delete_missing' && action.previousState) {
+            this.primaryData.push({
+                id: action.previousState.id,
+                name: action.previousState.name,
+                cmyk: [...action.previousState.cmyk],
+                lab: [...action.previousState.lab]
+            });
             this.primaryData.sort((a, b) => parseInt(a.id) - parseInt(b.id));
         }
         
@@ -987,90 +1020,108 @@ class AlphaColorMatch {
             return;
         }
         
-        const primaryById = new Map();
-        const secondaryById = new Map();
-        
-        for (const color of this.primaryData) {
-            primaryById.set(color.id, color);
-        }
-        
-        for (const color of this.secondaryData) {
-            secondaryById.set(color.id, color);
-        }
-        
-        const commonIds = new Set();
-        for (const id of primaryById.keys()) {
-            if (secondaryById.has(id)) {
-                commonIds.add(id);
-            }
-        }
-        
         const colorsToExport = [];
         const processedIds = new Set();
         
-        for (const id of commonIds) {
-            const primaryColor = primaryById.get(id);
-            const secondaryColor = secondaryById.get(id);
+        // Crear mapa de colores secundarios por ID y por nombre equivalente
+        const secondaryById = new Map();
+        const secondaryByUnifiedName = new Map();
+        
+        for (const color of this.secondaryData) {
+            secondaryById.set(color.id, color);
+            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
+            if (!secondaryByUnifiedName.has(unifiedName)) {
+                secondaryByUnifiedName.set(unifiedName, []);
+            }
+            secondaryByUnifiedName.get(unifiedName).push(color);
+        }
+        
+        // 1. Exportar todos los colores de primaryData (después de decisiones del usuario)
+        for (const color of this.primaryData) {
+            // Verificar si este color fue eliminado por el usuario
+            const actionState = this.actionStateMap.get(this.getUniqueColorId(color));
+            if (actionState && actionState.actionTaken === 'delete_missing') {
+                continue; // Saltar colores eliminados
+            }
             
-            let syncedCmyk = null;
-            let syncedLab = null;
+            colorsToExport.push({
+                id: color.id,
+                name: color.name,
+                cmyk: [...color.cmyk],
+                lab: [...color.lab]
+            });
+            processedIds.add(color.id);
+        }
+        
+        // 2. Buscar colores equivalentes en secundario que no estén ya en primaryData
+        // y que el usuario no haya ignorado
+        for (const primaryColor of this.primaryData) {
+            const primaryUnifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
+            const equivalentColors = secondaryByUnifiedName.get(primaryUnifiedName) || [];
             
-            for (const [uniqueId, state] of this.actionStateMap) {
-                if (state.colorId === id) {
-                    if (state.actionTaken === 'replace' && secondaryColor) {
-                        syncedCmyk = [...secondaryColor.cmyk];
-                        syncedLab = [...secondaryColor.lab];
-                    } else if (state.actionTaken === 'keep' && primaryColor) {
-                        syncedCmyk = [...primaryColor.cmyk];
-                        syncedLab = [...primaryColor.lab];
+            for (const secondaryColor of equivalentColors) {
+                // Verificar si es equivalente (nombres diferentes)
+                const isEquivalent = this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
+                const isSameName = this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
+                
+                if (isEquivalent && !isSameName && !processedIds.has(secondaryColor.id)) {
+                    // Verificar si el usuario ignoró este color
+                    const actionState = this.actionStateMap.get(this.getUniqueColorId(secondaryColor));
+                    if (actionState && actionState.actionTaken === 'ignore_missing') {
+                        continue; // Saltar colores ignorados
                     }
+                    
+                    colorsToExport.push({
+                        id: secondaryColor.id,
+                        name: secondaryColor.name,
+                        cmyk: [...primaryColor.cmyk], // Mismos valores que el principal
+                        lab: [...primaryColor.lab]
+                    });
+                    processedIds.add(secondaryColor.id);
+                }
+            }
+        }
+        
+        // 3. Exportar colores que están solo en secundario y que el usuario eligió "Agregar"
+        for (const secondaryColor of this.secondaryData) {
+            // Verificar si ya fue agregado
+            if (processedIds.has(secondaryColor.id)) continue;
+            
+            // Verificar si tiene equivalente en principal (ya lo procesamos arriba)
+            const secondaryUnifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
+            let hasEquivalent = false;
+            for (const primaryColor of this.primaryData) {
+                if (this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name)) {
+                    hasEquivalent = true;
                     break;
                 }
             }
             
-            if (!syncedCmyk && primaryColor) {
-                syncedCmyk = [...primaryColor.cmyk];
-                syncedLab = [...primaryColor.lab];
-            } else if (!syncedCmyk && secondaryColor) {
-                syncedCmyk = [...secondaryColor.cmyk];
-                syncedLab = [...secondaryColor.lab];
-            }
+            if (hasEquivalent) continue;
             
-            if (!syncedCmyk) continue;
-            
-            const areEquivalent = primaryColor && secondaryColor && 
-                this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
-            
-            const isSameName = primaryColor && secondaryColor && 
-                this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
-            
-            if (primaryColor && !processedIds.has(`${id}_${primaryColor.name}`)) {
+            // Verificar si el usuario eligió agregar este color
+            const actionState = this.actionStateMap.get(this.getUniqueColorId(secondaryColor));
+            if (actionState && actionState.actionTaken === 'add') {
                 colorsToExport.push({
-                    name: primaryColor.name,
-                    cmyk: [...syncedCmyk],
-                    lab: [...syncedLab]
-                });
-                processedIds.add(`${id}_${primaryColor.name}`);
-            }
-            
-            if (secondaryColor && areEquivalent && !isSameName && !processedIds.has(`${id}_${secondaryColor.name}`)) {
-                colorsToExport.push({
+                    id: secondaryColor.id,
                     name: secondaryColor.name,
-                    cmyk: [...syncedCmyk],
-                    lab: [...syncedLab]
+                    cmyk: [...secondaryColor.cmyk],
+                    lab: [...secondaryColor.lab]
                 });
-                processedIds.add(`${id}_${secondaryColor.name}`);
+                processedIds.add(secondaryColor.id);
             }
         }
         
+        // Ordenar por ID numérico
         colorsToExport.sort((a, b) => {
-            const numA = parseInt(a.name.match(/^(\d+)/)?.[1] || '0');
-            const numB = parseInt(b.name.match(/^(\d+)/)?.[1] || '0');
+            const numA = parseInt(a.id) || 0;
+            const numB = parseInt(b.id) || 0;
             return numA - numB;
         });
         
-        console.log(`📤 Exportando ${colorsToExport.length} colores (solo con IDs comunes)`);
+        console.log(`📤 Exportando ${colorsToExport.length} colores`);
         
+        // Generar contenido del archivo
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -1099,7 +1150,7 @@ class AlphaColorMatch {
         a.click();
         URL.revokeObjectURL(url);
         
-        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores (solo con IDs comunes)`, 'success');
+        this.uiRenderer.showToast(`📥 Exportados ${colorsToExport.length} colores`, 'success');
     }
     
     saveActionToHistory(actionType, colorId, colorName, reason) {
