@@ -283,7 +283,6 @@ class AlphaColorMatch {
             secondaryById.set(color.id, color);
         }
         
-        // Colores que están solo en principal
         for (const color of this.primaryData) {
             if (!secondaryById.has(color.id)) {
                 this.missingInSecondary.push({
@@ -296,7 +295,6 @@ class AlphaColorMatch {
             }
         }
         
-        // Colores que están solo en secundario
         for (const color of this.secondaryData) {
             if (!primaryById.has(color.id)) {
                 this.missingInPrimary.push({
@@ -343,7 +341,6 @@ class AlphaColorMatch {
             }
         }
         
-        // 1. Colores que están en ambos archivos (mismo ID)
         for (const id of commonIds) {
             const primaryColor = primaryById.get(id);
             const secondaryColor = secondaryById.get(id);
@@ -352,7 +349,6 @@ class AlphaColorMatch {
             const hasDifferences = this.hasCmykDifferences(primaryColor.cmyk, secondaryColor.cmyk);
             const diffPercentage = this.calculateDiffPercentage(primaryColor.cmyk, secondaryColor.cmyk);
             
-            // Color principal
             results.push({
                 id: id,
                 name: primaryColor.name,
@@ -371,7 +367,6 @@ class AlphaColorMatch {
                 recommendation: this.getRecommendation(diffPercentage)
             });
             
-            // Si son equivalentes con nombres diferentes, agregar también el color secundario
             if (areEquivalent && this.extractBaseName(primaryColor.name) !== this.extractBaseName(secondaryColor.name)) {
                 results.push({
                     id: id,
@@ -393,7 +388,6 @@ class AlphaColorMatch {
             }
         }
         
-        // 2. Colores que están solo en principal
         for (const missing of this.missingInSecondary) {
             results.push({
                 id: missing.id,
@@ -410,7 +404,6 @@ class AlphaColorMatch {
             });
         }
         
-        // 3. Colores que están solo en secundario
         for (const missing of this.missingInPrimary) {
             results.push({
                 id: missing.id,
@@ -684,7 +677,6 @@ class AlphaColorMatch {
         }
     }
     
-    // Acciones para colores en ambos archivos
     showReplaceConfirm(colorId) {
         const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color || color.status === 'missing') {
@@ -785,7 +777,6 @@ class AlphaColorMatch {
         this.uiRenderer.showToast(`💾 Valor principal mantenido para "${item.name}"`, 'success');
     }
     
-    // Acciones para colores solo en principal (faltan en secundario)
     showKeepMissingConfirm(colorId) {
         const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color) return;
@@ -837,7 +828,6 @@ class AlphaColorMatch {
         }
     }
     
-    // Acciones para colores solo en secundario (faltan en principal)
     showAddConfirm(colorId) {
         const color = this.comparisonResults.find(c => c && c.id === colorId);
         if (!color) return;
@@ -1023,25 +1013,24 @@ class AlphaColorMatch {
         const colorsToExport = [];
         const processedIds = new Set();
         
-        // Crear mapa de colores secundarios por ID y por nombre equivalente
-        const secondaryById = new Map();
-        const secondaryByUnifiedName = new Map();
+        // Crear mapa de colores secundarios por NK + nombre normalizado
+        const secondaryByNormalizedKey = new Map();
         
         for (const color of this.secondaryData) {
-            secondaryById.set(color.id, color);
-            const unifiedName = this.colorMatcher.getUnifiedName(color.name);
-            if (!secondaryByUnifiedName.has(unifiedName)) {
-                secondaryByUnifiedName.set(unifiedName, []);
+            const nk = this.extractNKCode(color.name);
+            const baseName = this.colorMatcher.normalizeForComparison(this.extractBaseName(color.name));
+            const key = `${nk}_${baseName}`;
+            if (!secondaryByNormalizedKey.has(key)) {
+                secondaryByNormalizedKey.set(key, []);
             }
-            secondaryByUnifiedName.get(unifiedName).push(color);
+            secondaryByNormalizedKey.get(key).push(color);
         }
         
         // 1. Exportar todos los colores de primaryData (después de decisiones del usuario)
         for (const color of this.primaryData) {
-            // Verificar si este color fue eliminado por el usuario
             const actionState = this.actionStateMap.get(this.getUniqueColorId(color));
             if (actionState && actionState.actionTaken === 'delete_missing') {
-                continue; // Saltar colores eliminados
+                continue;
             }
             
             colorsToExport.push({
@@ -1054,27 +1043,29 @@ class AlphaColorMatch {
         }
         
         // 2. Buscar colores equivalentes en secundario que no estén ya en primaryData
-        // y que el usuario no haya ignorado
         for (const primaryColor of this.primaryData) {
-            const primaryUnifiedName = this.colorMatcher.getUnifiedName(primaryColor.name);
-            const equivalentColors = secondaryByUnifiedName.get(primaryUnifiedName) || [];
+            const primaryNK = this.extractNKCode(primaryColor.name);
+            const primaryBaseNormalized = this.colorMatcher.normalizeForComparison(this.extractBaseName(primaryColor.name));
+            const primaryKey = `${primaryNK}_${primaryBaseNormalized}`;
+            
+            const equivalentColors = secondaryByNormalizedKey.get(primaryKey) || [];
             
             for (const secondaryColor of equivalentColors) {
-                // Verificar si es equivalente (nombres diferentes)
+                if (processedIds.has(secondaryColor.id)) continue;
+                
                 const isEquivalent = this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name);
                 const isSameName = this.extractBaseName(primaryColor.name) === this.extractBaseName(secondaryColor.name);
                 
-                if (isEquivalent && !isSameName && !processedIds.has(secondaryColor.id)) {
-                    // Verificar si el usuario ignoró este color
+                if (isEquivalent && !isSameName) {
                     const actionState = this.actionStateMap.get(this.getUniqueColorId(secondaryColor));
                     if (actionState && actionState.actionTaken === 'ignore_missing') {
-                        continue; // Saltar colores ignorados
+                        continue;
                     }
                     
                     colorsToExport.push({
                         id: secondaryColor.id,
                         name: secondaryColor.name,
-                        cmyk: [...primaryColor.cmyk], // Mismos valores que el principal
+                        cmyk: [...primaryColor.cmyk],
                         lab: [...primaryColor.lab]
                     });
                     processedIds.add(secondaryColor.id);
@@ -1084,22 +1075,8 @@ class AlphaColorMatch {
         
         // 3. Exportar colores que están solo en secundario y que el usuario eligió "Agregar"
         for (const secondaryColor of this.secondaryData) {
-            // Verificar si ya fue agregado
             if (processedIds.has(secondaryColor.id)) continue;
             
-            // Verificar si tiene equivalente en principal (ya lo procesamos arriba)
-            const secondaryUnifiedName = this.colorMatcher.getUnifiedName(secondaryColor.name);
-            let hasEquivalent = false;
-            for (const primaryColor of this.primaryData) {
-                if (this.colorMatcher.areEquivalentNames(primaryColor.name, secondaryColor.name)) {
-                    hasEquivalent = true;
-                    break;
-                }
-            }
-            
-            if (hasEquivalent) continue;
-            
-            // Verificar si el usuario eligió agregar este color
             const actionState = this.actionStateMap.get(this.getUniqueColorId(secondaryColor));
             if (actionState && actionState.actionTaken === 'add') {
                 colorsToExport.push({
@@ -1134,7 +1111,7 @@ class AlphaColorMatch {
         
         let counter = 1;
         colorsToExport.forEach(item => {
-            content += `${counter} "${item.name}" `;
+            content += `${counter} "${item.name.toUpperCase()}" `;
             content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
             content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
             counter++;
