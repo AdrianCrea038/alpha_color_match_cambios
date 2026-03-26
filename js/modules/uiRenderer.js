@@ -723,7 +723,8 @@ export class UIRenderer {
         const downloadBtn = document.getElementById('downloadTxtBtn');
         
         if (this.creatorRows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Agregue colores para comenzar</td></tr>';
+            tbody.innerHTML = '发展<td colspan="10" class="empty-state">Agregue colores para comenzar</td>';
+
             downloadBtn.disabled = true;
             return;
         }
