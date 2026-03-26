@@ -145,6 +145,7 @@ export class FileHandler {
                     let nameWithoutNK = this.removeNKCode(originalName);
                     let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
                     
+                    // Mantener los espacios originales del nombre base normalizado
                     let finalName = normalizedBaseName.toUpperCase();
                     if (nkCode) {
                         finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
