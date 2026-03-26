@@ -1,6 +1,5 @@
 export class FileHandler {
     constructor() {
-        // Tabla de unificación de nombres
         this.nameMapping = new Map([
             ["10F TM WHITE", "10A WHITE"],
             ["03S TM BLACK", "00A BLACK"],
@@ -59,53 +58,18 @@ export class FileHandler {
             .replace(/\./g, '');
     }
 
-    async parseTxtFile(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const content = e.target.result;
-                const records = this.parseContent(content);
-                const uniqueRecords = this.removeDuplicatesById(records);
-                resolve(uniqueRecords);
-            };
-            reader.onerror = reject;
-            reader.readAsText(file);
-        });
+    extractNKCode(fullName) {
+        const match = fullName.match(/NK\d+$/i);
+        return match ? match[0].toUpperCase() : null;
     }
-    
-    removeDuplicatesById(records) {
-        const seen = new Map();
-        const unique = [];
-        
-        for (const record of records) {
-            if (!seen.has(record.id)) {
-                seen.set(record.id, true);
-                unique.push(record);
-            }
-        }
-        
-        if (records.length !== unique.length) {
-            console.warn(`⚠️ Se eliminaron ${records.length - unique.length} registros duplicados por ID`);
-        }
-        
-        return unique;
+
+    extractBaseName(fullName) {
+        return fullName.replace(/\s+NK\d+$/i, '').trim();
     }
-    
-    normalizeSpaces(str) {
-        if (!str) return '';
-        return str.trim().replace(/\s+/g, ' ');
-    }
-    
-    extractNKCode(name) {
-        const match = name.match(/NK\d+$/);
-        return match ? match[0] : null;
-    }
-    
-    removeNKCode(name) {
-        return name.replace(/\s+NK\d+$/, '').trim();
-    }
-    
+
     normalizeNameWithMapping(name) {
+        if (!name) return '';
+        
         const normalizedInput = this.normalizeForComparison(name);
         
         for (let [original, mapped] of this.nameMapping) {
@@ -116,6 +80,39 @@ export class FileHandler {
         }
         
         return name.trim().replace(/\s+/g, ' ');
+    }
+
+    async parseTxtFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                const records = this.parseContent(content);
+                const uniqueRecords = this.removeDuplicatesByNK(records);
+                resolve(uniqueRecords);
+            };
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+    }
+    
+    removeDuplicatesByNK(records) {
+        const seen = new Map();
+        const unique = [];
+        
+        for (const record of records) {
+            const key = `${record.nkCode}_${this.normalizeForComparison(record.baseName)}`;
+            if (!seen.has(key)) {
+                seen.set(key, true);
+                unique.push(record);
+            }
+        }
+        
+        if (records.length !== unique.length) {
+            console.warn(`⚠️ Se eliminaron ${records.length - unique.length} registros duplicados por NK`);
+        }
+        
+        return unique;
     }
     
     parseContent(content) {
@@ -140,14 +137,12 @@ export class FileHandler {
                 
                 if (originalName) {
                     const nkCode = this.extractNKCode(originalName);
-                    let nameWithoutNK = this.removeNKCode(originalName);
-                    let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
+                    const baseNameRaw = this.extractBaseName(originalName);
+                    const normalizedBaseName = this.normalizeNameWithMapping(baseNameRaw);
                     
                     let finalName = normalizedBaseName.toUpperCase();
                     if (nkCode) {
                         finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
-                    } else {
-                        finalName = normalizedBaseName.toUpperCase();
                     }
                     
                     const existingIndex = records.findIndex(r => r.id === match[1]);
@@ -158,42 +153,13 @@ export class FileHandler {
                     
                     records.push({
                         id: match[1],
+                        originalId: match[1],
                         name: finalName,
                         originalName: originalName,
-                        normalizedBaseName: normalizedBaseName,
+                        baseName: normalizedBaseName.toUpperCase(),
+                        nkCode: nkCode,
                         cmyk: [parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6]), parseFloat(match[7])],
                         lab: [parseFloat(match[8]), parseFloat(match[9]), parseFloat(match[10])]
-                    });
-                }
-            } else {
-                const altMatch = line.match(/^(\d+)\s+([^\s]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
-                if (altMatch) {
-                    let originalName = altMatch[2];
-                    
-                    const nkCode = this.extractNKCode(originalName);
-                    let nameWithoutNK = this.removeNKCode(originalName);
-                    let normalizedBaseName = this.normalizeNameWithMapping(nameWithoutNK);
-                    
-                    let finalName = normalizedBaseName.toUpperCase();
-                    if (nkCode) {
-                        finalName = `${normalizedBaseName.toUpperCase()} ${nkCode.toUpperCase()}`;
-                    } else {
-                        finalName = normalizedBaseName.toUpperCase();
-                    }
-                    
-                    const existingIndex = records.findIndex(r => r.id === altMatch[1]);
-                    if (existingIndex !== -1) {
-                        console.warn(`⚠️ ID duplicado encontrado: ${altMatch[1]}, omitiendo duplicado`);
-                        continue;
-                    }
-                    
-                    records.push({
-                        id: altMatch[1],
-                        name: finalName,
-                        originalName: originalName,
-                        normalizedBaseName: normalizedBaseName,
-                        cmyk: [parseFloat(altMatch[3]), parseFloat(altMatch[4]), parseFloat(altMatch[5]), parseFloat(altMatch[6])],
-                        lab: [parseFloat(altMatch[7]), parseFloat(altMatch[8]), parseFloat(altMatch[9])]
                     });
                 }
             }
@@ -203,7 +169,7 @@ export class FileHandler {
         return records;
     }
     
-    generateExportContent(results) {
+    generateExportContent(colorsToExport) {
         let content = 'CGATS.17\n';
         content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
         content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
@@ -211,15 +177,14 @@ export class FileHandler {
         content += 'BEGIN_DATA_FORMAT\n';
         content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
         content += 'END_DATA_FORMAT\n';
-        content += `NUMBER_OF_SETS\t${results.length}\n`;
+        content += `NUMBER_OF_SETS\t${colorsToExport.length}\n`;
         content += 'BEGIN_DATA\n\n';
         
-        results.forEach(item => {
-            const cmyk = item.cmykPrimary || item.cmykSecondary;
-            const lab = item.labPrimary || item.labSecondary;
-            content += `${item.id} "${item.name.toUpperCase()}" `;
-            content += `${cmyk[0].toFixed(6)} ${cmyk[1].toFixed(6)} ${cmyk[2].toFixed(6)} ${cmyk[3].toFixed(6)} `;
-            content += `${lab[0].toFixed(6)} ${lab[1].toFixed(6)} ${lab[2].toFixed(6)}\n`;
+        colorsToExport.forEach((item, idx) => {
+            const counter = idx + 1;
+            content += `${counter} "${item.name}" `;
+            content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
+            content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
         });
         
         content += '\nEND_DATA\n';
@@ -227,23 +192,12 @@ export class FileHandler {
     }
     
     generateTxtFromData(data) {
-        let content = 'CGATS.17\n';
-        content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
-        content += `CREATED\t"${new Date().toLocaleDateString()}"\n`;
-        content += 'NUMBER_OF_FIELDS\t9\n';
-        content += 'BEGIN_DATA_FORMAT\n';
-        content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
-        content += 'END_DATA_FORMAT\n';
-        content += `NUMBER_OF_SETS\t${data.length}\n`;
-        content += 'BEGIN_DATA\n\n';
+        const colorsToExport = data.map((item, idx) => ({
+            name: item.name.toUpperCase(),
+            cmyk: [item.cmyk.c, item.cmyk.m, item.cmyk.y, item.cmyk.k],
+            lab: [item.lab.l, item.lab.a, item.lab.b]
+        }));
         
-        data.forEach(item => {
-            content += `${item.id} "${item.name.toUpperCase()}" `;
-            content += `${item.cmyk.c.toFixed(6)} ${item.cmyk.m.toFixed(6)} ${item.cmyk.y.toFixed(6)} ${item.cmyk.k.toFixed(6)} `;
-            content += `${item.lab.l.toFixed(6)} ${item.lab.a.toFixed(6)} ${item.lab.b.toFixed(6)}\n`;
-        });
-        
-        content += '\nEND_DATA\n';
-        return content;
+        return this.generateExportContent(colorsToExport);
     }
 }
