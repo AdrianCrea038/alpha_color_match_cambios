@@ -132,14 +132,7 @@ export class ColorMatcher {
     
     // Verificar si dos nombres son equivalentes según la tabla
     areEquivalentNames(name1, name2) {
-        // Primero comparar por NK
-        const nk1 = this.extractNKCode(name1);
-        const nk2 = this.extractNKCode(name2);
-        
-        // Si los NK son diferentes, no son equivalentes
-        if (nk1 !== nk2) return false;
-        
-        // Extraer nombres base
+        // Extraer nombres base sin NK
         const base1 = this.removeNKCode(name1);
         const base2 = this.removeNKCode(name2);
         
@@ -150,10 +143,10 @@ export class ColorMatcher {
         if (normalized1 === normalized2) return true;
         
         // Buscar en la tabla de unificación
-        const unified1 = this.getUnifiedName(name1);
-        const unified2 = this.getUnifiedName(name2);
+        const unified1 = this.normalizeForComparison(this.getUnifiedName(name1));
+        const unified2 = this.normalizeForComparison(this.getUnifiedName(name2));
         
-        return this.normalizeForComparison(unified1) === this.normalizeForComparison(unified2);
+        return unified1 === unified2;
     }
 
     smartCompare(primaryData, secondaryData) {
