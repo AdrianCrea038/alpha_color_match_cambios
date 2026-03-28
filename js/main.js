@@ -5,7 +5,14 @@
 // - Pares equivalentes comparten los mismos valores CMYK
 // - Validación de pendientes funciona correctamente
 // - Nombre de archivo personalizable al exportar
+// - Detección inteligente de NK's por patrones
+// - Tabla de equivalencia expandida a 4 columnas
+// - Normalización elimina "TM" para mejor coincidencia
+// - Soporte para punto después del número correlativo (ej: "1. Nombre")
+// - Etiquetas HTML correctas en renderResults
 // ============================================================
+
+import { CreatorView } from './modules/views/creatorView.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -18,54 +25,69 @@ class AlphaColorMatch {
         this.manualGroupSelections = new Set();
         this.autoAddedItems = [];
         
-        // Tabla de equivalencia de nombres (normalizada)
-        this.equivalencyTable = new Map([
-            ["10F TM WHITE", "10A WHITE"],
-            ["03S TM BLACK", "00A BLACK"],
-            ["01P TM DK STEEL GREY", "01P DK STEEL GREY"],
-            ["03T BLUE GREY", "01V WOLF GREY"],
-            ["05X TM ANTHRACITE", "06F ANTHRACITE"],
-            ["2AQ TM BROWN", "20Q DARK CINDER"],
-            ["2DH TM MEDIUM OLIVE", "2DH MEDIUM OLIVE"],
-            ["3EM TM KELLY GREEN", "31W CLASSIC GREEN"],
-            ["31V TM DARK GREEN", "39Y GORGE GREEN"],
-            ["43V TM NAVY", "41S COLLEGE NAVY"],
-            ["44A TM TIDAL BLUE", "44A TIDAL BLUE"],
-            ["45W TM BLUSTERY", "45W BLUSTERY"],
-            ["4ES TM AERO BLUE", "4ES AERO BLUE"],
-            ["49V TM ROYAL", "4EV GAME ROYAL"],
-            ["4CV TM LIGHT BLUE", "4EY VALOR BLUE"],
-            ["52V TM PURPLE", "56N FIELD PURPLE"],
-            ["64V TM SCARLET", "65N UNIVERSITY RED"],
-            ["67Y TM DARK MAROON", "66P DEEP MAROON"],
-            ["6DR TM PINK FIRE II", "66Z PINK FIRE II"],
+        // Tabla de equivalencia de nombres expandida a 4 columnas
+        this.equivalencyRows = [
+            ["00A BLACK", "03S TM Black", "03T TM BLACK"],
+            ["06F ANTHRACITE", "05X TM Anthracite"],
+            ["01V WOLF GREY", "03T Blue Grey", "03T TM Blue Grey"],
+            ["01P DK STEEL GREY", "01P DARK STEEL GREY"],
+            ["08Q TM PEWTER GREY", "03T PEWTER GREY", "08Q PEWTER GREY", "03T TM PEWTER GREY"],
+            ["06H FLINT GREY"],
+            ["10F WHITE", "10F TM WHITE"],
+            ["15A TM NATURAL", "15A NATURAL"],
+            ["77C GOLD"],
+            ["79W TEAM GOLD", "79X TM Vegas Gold"],
+            ["79Y TM Bright Gold", "79Q SUNDOWN"],
+            ["79V CLUB GOLD"],
+            ["76I UNIVERSITY GOLD"],
+            ["79U GOLD DART"],
+            ["77C TONAL GOLD"],
+            ["PMS 132 OLD GOLD"],
+            ["PMS 1255C OLD GOLD"],
+            ["79S YELLOW STRIKE", "79S TM Yellow Strike"],
+            ["PMS 109C NEW YELLOW"],
+            ["81F DESERT ORANGE", "81F TM DESERT ORANGE"],
+            ["89L TEAM ORANGE", "82U TM ORANGE"],
+            ["89M Uni Orange"],
+            ["89N Brilliant Orange"],
+            ["65N UNIVERSITY RED", "65N UNI RED", "54V TM Scarlet"],
+            ["66P DEEP MAROON", "67Y TM Dark Maroon"],
             ["69W TM CRIMSON", "69W TEAM CRIMSON"],
-            ["69Y TM CARDINAL", "69X TEAM MAROON"],
-            ["79Y TM BRIGHT GOLD", "79Q SUNDOWN"],
-            ["79S TM YELLOW STRIKE", "79S YELLOW STRIKE"],
-            ["79X TM VEGAS GOLD", "79W TEAM GOLD"],
-            ["81F DESERT ORANGE", "81F DESERT ORANGE"],
-            ["87F TM BRIGHT CERAMIC", "87F BRIGHT CERAMIC"],
-            ["82U TM ORANGE", "89L TEAM ORANGE"],
-            ["06H FLINT GREY", "06H FLINT GREY"],
-            ["15A NATURAL", "15A NATURAL"],
-            ["3EY PRO GREEN", "3EY PRO GREEN"],
-            ["3HN ACTION GREEN", "3HN ACTION GREEN"],
-            ["3GU HYPER TURQUOISE", "3GU HYPER TURQUOISE"],
-            ["44U SIGNAL BLUE", "44U SIGNAL BLUE"],
-            ["4KB DARK TURQUOISE", "4KB DARK TURQUOISE"],
-            ["4LB GYM BLUE", "4LB GYM BLUE"],
-            ["48Y ITALY BLUE", "48Y ITALY BLUE"],
-            ["52M NEW ORCHID", "52M NEW ORCHID"],
-            ["71R VOLT", "71R VOLT"],
-            ["77C GOLD", "77C GOLD"],
-            ["76I UNIVERSITY GOLD", "76I UNIVERSITY GOLD"],
-            ["78H AMARILLO", "78H AMARILLO"],
-            ["79V CLUB GOLD", "79V CLUB GOLD"],
-            ["89M UNIVERSITY ORANGE", "89M UNIVERSITY ORANGE"],
-            ["89N BRILLIANT ORANGE", "89N BRILLIANT ORANGE"],
-            ["89Q ORANGE HORIZON", "89Q ORANGE HORIZON"]
-        ]);
+            ["69X TEAM MAROON", "69Y TM CARDINAL"],
+            ["6DL GYM RED"],
+            ["39Y GORGE GREEN", "31V TM Dark Green"],
+            ["31W CLASSIC GREEN", "3EM TM Kelly Green"],
+            ["2DH MEDIUM OLIVE", "2DH TM Medium Olive"],
+            ["3EY PRO GREEN"],
+            ["PMS 361C LEVEL GREEN"],
+            ["4EV GAME ROYAL", "49V TM ROYAL"],
+            ["4EY VALOR BLUE", "4CV TM LIGHT BLUE"],
+            ["4ES AERO BLUE", "4ES  TM AERO BLUE"],
+            ["44A TIDAL BLUE"],
+            ["41S COLLEGE NAVY", "43V TM NAVY"],
+            ["4EW RUSH BLUE"],
+            ["48Y ITALY BLUE"],
+            ["44U SIGNAL BLUE"],
+            ["56N FIELD PURPLE", "52V TM Purple"],
+            ["52M NEW ORCHID"],
+            ["55U URBAN LILAC"],
+            ["66Z PINK FIRE II", "66Z PINK FIRE", "6DR TM Pink Fire"],
+            ["2AQ TM Brown", "20Q   DARK CINDER"],
+            ["2DI SEAL BROWN"],
+            ["33B OCHRE"],
+            ["TAN PMS 720C"],
+            ["71R VOLT"],
+            ["3GU HYPER TURQ"],
+            ["4KB DARK TURQUOISE"],
+            ["87F BRIGHT CERAMIC", "87F TM BRIGHT CERAMIC"],
+            // NUEVAS FILAS AGREGADAS
+            ["03T TM BLUE GREY", "03T Blue Grey", "01V WOLF GREY"],
+            ["03T TM PEWTER GREY", "03T PEWTER GREY", "08Q PEWTER GREY", "08Q TM PEWTER GREY"],
+            ["01P TM DARK STEEL GREY", "01P DK STEEL GREY", "01P DARK STEEL GREY"]
+        ];
+        
+        // Inicializar CreatorView
+        this.creatorView = null;
         
         // Construir grupos de equivalencia (expansión transitiva)
         this.equivalenceGroups = this.buildEquivalenceGroups();
@@ -74,35 +96,40 @@ class AlphaColorMatch {
     }
     
     buildEquivalenceGroups() {
-        // Crear un mapa de nombre -> grupo
         const nameToGroup = new Map();
         const groups = [];
         
-        for (let [name1, name2] of this.equivalencyTable) {
-            const norm1 = this.normalizeBaseName(name1);
-            const norm2 = this.normalizeBaseName(name2);
+        for (const row of this.equivalencyRows) {
+            const names = row.filter(name => name && name.trim() !== '');
+            if (names.length === 0) continue;
             
-            let group = null;
+            const normalizedNames = names.map(name => this.normalizeBaseName(name));
             
-            if (nameToGroup.has(norm1)) {
-                group = nameToGroup.get(norm1);
-            } else if (nameToGroup.has(norm2)) {
-                group = nameToGroup.get(norm2);
-            } else {
-                group = new Set();
-                groups.push(group);
+            let existingGroup = null;
+            for (const normName of normalizedNames) {
+                if (nameToGroup.has(normName)) {
+                    existingGroup = nameToGroup.get(normName);
+                    break;
+                }
             }
             
-            group.add(norm1);
-            group.add(norm2);
-            nameToGroup.set(norm1, group);
-            nameToGroup.set(norm2, group);
+            let targetGroup = existingGroup;
+            
+            if (!targetGroup) {
+                targetGroup = new Set();
+                groups.push(targetGroup);
+            }
+            
+            for (const normName of normalizedNames) {
+                targetGroup.add(normName);
+                nameToGroup.set(normName, targetGroup);
+            }
         }
         
-        // Para los nombres que son equivalentes a sí mismos (sin pareja)
-        for (let [name1, name2] of this.equivalencyTable) {
-            if (name1 === name2) {
-                const norm = this.normalizeBaseName(name1);
+        for (const row of this.equivalencyRows) {
+            for (const name of row) {
+                if (!name || name.trim() === '') continue;
+                const norm = this.normalizeBaseName(name);
                 if (!nameToGroup.has(norm)) {
                     const group = new Set();
                     group.add(norm);
@@ -146,7 +173,67 @@ class AlphaColorMatch {
     
     init() {
         this.bindEvents();
+        this.initCreatorView();
+        this.initViews();
         console.log('✅ Alpha Color Match - Versión Corregida');
+    }
+    
+    initCreatorView() {
+        const equivalencyMap = new Map();
+        for (const row of this.equivalencyRows) {
+            for (let i = 0; i < row.length; i++) {
+                for (let j = i + 1; j < row.length; j++) {
+                    equivalencyMap.set(row[i], row[j]);
+                    equivalencyMap.set(row[j], row[i]);
+                }
+            }
+        }
+        this.creatorView = new CreatorView(this, equivalencyMap);
+    }
+    
+    initViews() {
+        const menuItems = document.querySelectorAll('.menu-item');
+        const views = {
+            comparator: document.getElementById('comparatorView'),
+            history: document.getElementById('historyView'),
+            creator: document.getElementById('creatorView'),
+            eps: document.getElementById('epsView')
+        };
+        
+        const switchView = (viewName) => {
+            Object.values(views).forEach(view => {
+                if (view) view.classList.remove('active');
+            });
+            
+            if (views[viewName]) {
+                views[viewName].classList.add('active');
+            }
+            
+            menuItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.view === viewName) {
+                    item.classList.add('active');
+                }
+            });
+            
+            if (viewName === 'history') {
+                if (this.loadHistory) this.loadHistory();
+            }
+            if (viewName === 'creator') {
+                if (this.creatorView) this.creatorView.renderTable();
+            }
+        };
+        
+        menuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const viewName = item.dataset.view;
+                if (viewName) {
+                    switchView(viewName);
+                }
+            });
+        });
+        
+        switchView('comparator');
     }
     
     bindEvents() {
@@ -262,18 +349,86 @@ class AlphaColorMatch {
     
     normalizeBaseName(baseName) {
         if (!baseName) return '';
-        return baseName.toUpperCase().replace(/\s+/g, ' ').trim();
+        let cleaned = baseName.toUpperCase();
+        cleaned = cleaned.replace(/\bTM\b/g, '');
+        cleaned = cleaned.replace(/\s+/g, ' ').trim();
+        return cleaned;
     }
     
     extractNK(fullName) {
         if (!fullName) return null;
-        const match = fullName.match(/NK\d+$/i);
-        return match ? match[0].toUpperCase() : null;
+        
+        const words = fullName.trim().split(/\s+/);
+        if (words.length === 0) return null;
+        
+        const patterns = [
+            {
+                name: 'NK_pattern',
+                test: (str) => /^NK[-]?[A-Z0-9]+/i.test(str),
+                minWords: 1,
+                maxWords: 3
+            },
+            {
+                name: 'numbers_only',
+                test: (str) => /^[\d\-]{4,12}$/.test(str),
+                minWords: 1,
+                maxWords: 1
+            },
+            {
+                name: 'alphanumeric',
+                test: (str) => /^[A-Z]{1,4}[\d]{1,4}[A-Z]{0,2}$/i.test(str) || /^[\d]{1,4}[A-Z]{1,4}$/i.test(str),
+                minWords: 1,
+                maxWords: 1
+            },
+            {
+                name: 'letter_number',
+                test: (str) => /^[A-Z][\d]{3,6}[A-Z]{0,2}$/i.test(str),
+                minWords: 1,
+                maxWords: 1
+            },
+            {
+                name: 'number_letter',
+                test: (str) => /^[\d]{3,6}[A-Z]{1,4}$/i.test(str),
+                minWords: 1,
+                maxWords: 1
+            },
+            {
+                name: 'specific_words',
+                test: (str) => ['STANDARD', 'COLORS', 'GREY', 'WHITE', 'BLACK', 'BLUE', 'GOLD', 'SILVER'].includes(str.toUpperCase()),
+                minWords: 1,
+                maxWords: 1
+            }
+        ];
+        
+        for (let wordCount = 1; wordCount <= 3; wordCount++) {
+            if (words.length < wordCount) continue;
+            
+            const candidate = words.slice(-wordCount).join(' ');
+            
+            for (const pattern of patterns) {
+                if (wordCount >= pattern.minWords && wordCount <= pattern.maxWords) {
+                    if (pattern.test(candidate)) {
+                        console.log(`🔍 NK detectado: "${candidate}" (patrón: ${pattern.name})`);
+                        return candidate;
+                    }
+                }
+            }
+        }
+        
+        const lastWord = words[words.length - 1];
+        console.log(`⚠️ NK no detectado con patrones, usando última palabra: "${lastWord}"`);
+        return lastWord;
     }
     
     extractBaseName(fullName) {
         if (!fullName) return '';
-        const base = fullName.replace(/\s+NK\d+$/i, '').trim();
+        
+        const nk = this.extractNK(fullName);
+        if (!nk) return this.normalizeBaseName(fullName);
+        
+        const nkPattern = new RegExp(`\\s+${nk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const base = fullName.replace(nkPattern, '').trim();
+        
         return this.normalizeBaseName(base);
     }
     
@@ -310,7 +465,7 @@ class AlphaColorMatch {
             if (dataStarted && line.trim() === 'END_DATA') break;
             if (!dataStarted) continue;
             
-            const match = line.match(/^(\d+)\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
+            const match = line.match(/^(\d+)\.?\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
             
             if (match) {
                 let name = match[2] || match[3];
@@ -409,7 +564,6 @@ class AlphaColorMatch {
     }
     
     findMatches() {
-        // Índices por NK
         const primaryByNK = new Map();
         const secondaryByNK = new Map();
         
@@ -441,15 +595,12 @@ class AlphaColorMatch {
         const allNKs = new Set([...primaryByNK.keys(), ...secondaryByNK.keys()]);
         let groupCounter = 0;
         
-        // Para cada NK, agrupar por equivalencia
         for (const nk of allNKs) {
             const primaryColors = primaryByNK.get(nk) || [];
             const secondaryColors = secondaryByNK.get(nk) || [];
             
-            // Agrupar por grupo de equivalencia
-            const groups = new Map(); // key = grupo de equivalencia, value = { primarios, secundarios }
+            const groups = new Map();
             
-            // Procesar primarios
             for (const pc of primaryColors) {
                 const groupKey = this.getEquivalenceGroup(pc.baseName);
                 const groupIdKey = groupKey ? Array.from(groupKey).sort().join('|') : pc.baseName;
@@ -459,7 +610,6 @@ class AlphaColorMatch {
                 groups.get(groupIdKey).primarios.push(pc);
             }
             
-            // Procesar secundarios
             for (const sc of secondaryColors) {
                 const groupKey = this.getEquivalenceGroup(sc.baseName);
                 const groupIdKey = groupKey ? Array.from(groupKey).sort().join('|') : sc.baseName;
@@ -469,13 +619,11 @@ class AlphaColorMatch {
                 groups.get(groupIdKey).secundarios.push(sc);
             }
             
-            // Para cada grupo, crear resultados
             for (const [groupIdKey, group] of groups) {
                 const { primarios, secundarios, groupKey } = group;
                 const actualGroupId = `group_${nk}_${groupCounter++}`;
                 
                 if (primarios.length > 0 && secundarios.length > 0) {
-                    // Ambos tienen colores en este grupo
                     for (const primary of primarios) {
                         for (const secondary of secundarios) {
                             const isExact = primary.baseName === secondary.baseName;
@@ -496,7 +644,6 @@ class AlphaColorMatch {
                         }
                     }
                 } else if (primarios.length > 0) {
-                    // Solo en principal
                     for (const primary of primarios) {
                         if (!processedPrimary.has(primary.id)) {
                             results.push({
@@ -513,7 +660,6 @@ class AlphaColorMatch {
                         }
                     }
                 } else if (secundarios.length > 0) {
-                    // Solo en secundario
                     for (const secondary of secundarios) {
                         if (!processedSecondary.has(secondary.id)) {
                             results.push({
@@ -531,7 +677,6 @@ class AlphaColorMatch {
                     }
                 }
                 
-                // Buscar complementarios faltantes en la tabla
                 if (groupKey && primarios.length > 0) {
                     const existingNames = new Set();
                     for (const p of primarios) existingNames.add(p.baseName);
@@ -539,7 +684,6 @@ class AlphaColorMatch {
                     
                     for (const equivalentName of groupKey) {
                         if (!existingNames.has(equivalentName)) {
-                            // Falta este nombre, usar el primer primario como fuente
                             const sourceColor = primarios[0].colorData;
                             this.autoAddedItems.push({
                                 nk: nk,
@@ -673,19 +817,12 @@ class AlphaColorMatch {
             
             return `
                 <tr ${rowClass}>
-                    <td><strong>${item.nk}</strong>${cmykPreview} \n
-                    66<
-
-                        ${primaryName}<br>
-                        ${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}
-                      </td>
-                      <td>
-                        ${secondaryName}<br>
-                        ${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}
-                      </td>
-                      <td><span class="${statusClass}">${statusText}</span></td>
-                      <td>${selectionButtons || actionButton || '—'}</td>
-                 </tr>
+                    68<strong>${item.nk}</strong>${cmykPreview}68
+                    68${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}68
+                    68${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}68
+                    68<span class="${statusClass}">${statusText}</span>68
+                    68${selectionButtons || actionButton || '—'}68
+                68
             `;
         }).join('');
     }
@@ -701,11 +838,9 @@ class AlphaColorMatch {
                 if (processedGroups.has(item.groupId)) continue;
                 processedGroups.add(item.groupId);
                 
-                // Obtener valores efectivos UNA VEZ para todo el grupo
                 const cmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
                 const lab = this.getEffectiveLab(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
                 
-                // 1. Color principal
                 if (item.primaryData) {
                     exportItems.push({
                         name: item.primaryData.colorData.name,
@@ -715,7 +850,6 @@ class AlphaColorMatch {
                     });
                 }
                 
-                // 2. Color secundario (para equivalentes)
                 if (item.matchType === 'equivalent' && item.secondaryData) {
                     exportItems.push({
                         name: item.secondaryData.colorData.name,
@@ -725,7 +859,6 @@ class AlphaColorMatch {
                     });
                 }
                 
-                // 3. Complementarios automáticos del grupo (usando los mismos valores efectivos)
                 const groupAutos = this.autoAddedItems.filter(a => a.groupId === item.groupId);
                 for (const auto of groupAutos) {
                     const fullName = `${auto.baseName} ${auto.nk}`;
@@ -739,7 +872,6 @@ class AlphaColorMatch {
             }
         }
         
-        // Agregar pendientes seleccionados (al final)
         for (const item of this.results) {
             if (this.selectedPending.has(item.id)) {
                 if (item.primaryData) {
@@ -850,12 +982,10 @@ class AlphaColorMatch {
     doExport(exportItems) {
         const content = this.generateCGATSContent(exportItems);
         
-        // Obtener nombre personalizado del input
         const fileNameInput = document.getElementById('exportFileName');
         let baseFileName = 'alpha_color_export';
         
         if (fileNameInput && fileNameInput.value.trim() !== '') {
-            // Sanitizar nombre de archivo (solo letras, números, guiones y guiones bajos)
             baseFileName = fileNameInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
             if (baseFileName === '') baseFileName = 'alpha_color_export';
         }

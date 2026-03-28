@@ -5,98 +5,194 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alpha Color Match - Comparador Profesional</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/components/sidebar.css">
+    <link rel="stylesheet" href="css/views/creator.css">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="logo-container">
-                <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="logo-image" onerror="this.style.display='none'">
+    <div class="app-wrapper">
+        <!-- Menú Lateral -->
+        <div class="sidebar-menu">
+            <div class="menu-item active" data-view="comparator">
+                <i class="fas fa-code-compare"></i>
+                <span>Comparar</span>
             </div>
-            <h1 class="title">ALPHA COLOR MATCH</h1>
-            <p>Comparador profesional de colores CMYK - Selección individual de valores por grupo</p>
+            <div class="menu-item" data-view="history">
+                <i class="fas fa-history"></i>
+                <span>Historial</span>
+            </div>
+            <div class="menu-item" data-view="creator">
+                <i class="fas fa-file-alt"></i>
+                <span>Crear TXT</span>
+            </div>
+            <div class="menu-item" data-view="eps">
+                <i class="fas fa-file-image"></i>
+                <span>EPS</span>
+            </div>
         </div>
-        
-        <div class="upload-section">
-            <div class="upload-card">
-                <h3>📁 Archivo Principal</h3>
-                <div class="upload-area">
-                    <input type="file" id="primaryFileInput" accept=".txt" class="file-input">
-                    <label for="primaryFileInput" class="file-label">Seleccionar archivo</label>
-                    <div class="file-info" id="primaryFileInfo">
-                        <span class="filename">Ningún archivo cargado</span>
-                        <span class="record-count"></span>
+
+        <!-- Contenido Principal -->
+        <div class="main-container">
+            <div class="container">
+                <div class="header">
+                    <div class="logo-container">
+                        <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="logo-image" onerror="this.style.display='none'">
+                    </div>
+                    <h1 class="title">ALPHA COLOR MATCH</h1>
+                    <p>Comparador profesional de colores CMYK - Selección individual de valores por grupo</p>
+                </div>
+                
+                <!-- Vista Comparador -->
+                <div id="comparatorView" class="view-content active">
+                    <div class="upload-section">
+                        <div class="upload-card">
+                            <h3>📁 Archivo Principal</h3>
+                            <div class="upload-area">
+                                <input type="file" id="primaryFileInput" accept=".txt" class="file-input">
+                                <label for="primaryFileInput" class="file-label">Seleccionar archivo</label>
+                                <div class="file-info" id="primaryFileInfo">
+                                    <span class="filename">Ningún archivo cargado</span>
+                                    <span class="record-count"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="upload-card">
+                            <h3>🔄 Archivo Secundario</h3>
+                            <div class="upload-area">
+                                <input type="file" id="secondaryFileInput" accept=".txt" class="file-input">
+                                <label for="secondaryFileInput" class="file-label">Seleccionar archivo</label>
+                                <div class="file-info" id="secondaryFileInfo">
+                                    <span class="filename">Ningún archivo cargado</span>
+                                    <span class="record-count"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap;">
+                        <button id="compareBtn" class="compare-btn">🔍 COMPARAR</button>
+                        <button id="replaceAllSecondaryBtn" class="compare-btn" style="background: #b45309;">🔄 Reemplazar NO modificados por SECUNDARIO</button>
+                        <button id="exportBtn" class="compare-btn" style="background: #15803d;" disabled>📥 EXPORTAR ARCHIVO</button>
+                    </div>
+                    
+                    <div class="export-name-section">
+                        <label for="exportFileName">Nombre del archivo a exportar:</label>
+                        <input type="text" id="exportFileName" class="export-name-input" placeholder="alpha_color_export" value="alpha_color_export">
+                        <span class="file-extension">.txt</span>
+                    </div>
+                    
+                    <div id="validationMessage" class="validation-message" style="display: none;"></div>
+                    
+                    <div class="data-grid">
+                        <div class="data-card">
+                            <h3>📁 Datos Principal</h3>
+                            <div class="data-list" id="primaryDataList">
+                                <div class="empty-list">Esperando archivo...</div>
+                            </div>
+                        </div>
+                        <div class="data-card">
+                            <h3>🔄 Datos Secundario</h3>
+                            <div class="data-list" id="secondaryDataList">
+                                <div class="empty-list">Esperando archivo...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="results-panel" id="resultsPanel" style="display: none;">
+                        <div class="results-header">
+                            <h3>📊 Resultados de comparación</h3>
+                            <div class="stats-badge" id="statsBadges"></div>
+                        </div>
+                        <table class="results-table">
+                            <thead>
+                                66<th>NK</th><th>Archivo Principal (CMYK)</th><th>Archivo Secundario (CMYK)</th><th>Estado</th><th>Acción / Selección de valores</th>
+                            </thead>
+                            <tbody id="resultsTableBody"></tbody>
+                          </table>
                     </div>
                 </div>
-            </div>
-            <div class="upload-card">
-                <h3>🔄 Archivo Secundario</h3>
-                <div class="upload-area">
-                    <input type="file" id="secondaryFileInput" accept=".txt" class="file-input">
-                    <label for="secondaryFileInput" class="file-label">Seleccionar archivo</label>
-                    <div class="file-info" id="secondaryFileInfo">
-                        <span class="filename">Ningún archivo cargado</span>
-                        <span class="record-count"></span>
+
+                <!-- Vista Historial -->
+                <div id="historyView" class="view-content">
+                    <div class="history-header">
+                        <h3>📜 Historial de Comparaciones</h3>
+                        <button id="clearHistoryBtn" class="btn-outline">🗑️ Limpiar historial</button>
+                    </div>
+                    <div class="history-list" id="historyList">
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <p>No hay historial de comparaciones</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        
-        <div style="text-align: center; display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap;">
-            <button id="compareBtn" class="compare-btn">🔍 COMPARAR</button>
-            <button id="replaceAllSecondaryBtn" class="compare-btn" style="background: #b45309;">🔄 Reemplazar NO modificados por SECUNDARIO</button>
-            <button id="exportBtn" class="compare-btn" style="background: #15803d;" disabled>📥 EXPORTAR ARCHIVO</button>
-        </div>
-        
-        <!-- Nombre personalizado para exportación -->
-        <div class="export-name-section">
-            <label for="exportFileName">Nombre del archivo a exportar:</label>
-            <input type="text" id="exportFileName" class="export-name-input" placeholder="alpha_color_export" value="alpha_color_export">
-            <span class="file-extension">.txt</span>
-        </div>
-        
-        <div id="validationMessage" class="validation-message" style="display: none;"></div>
-        
-        <div class="data-grid">
-            <div class="data-card">
-                <h3>📁 Datos Principal</h3>
-                <div class="data-list" id="primaryDataList">
-                    <div class="empty-list">Esperando archivo...</div>
+
+                <!-- Vista Crear Nuevo TXT -->
+                <div id="creatorView" class="view-content">
+                    <div class="creator-header">
+                        <h3>✨ Crear Nuevo Archivo TXT</h3>
+                        <div class="creator-header-buttons">
+                            <button id="loadTxtBtn" class="btn-secondary">📁 Cargar TXT</button>
+                            <button id="downloadTxtBtn" class="btn-primary" disabled>💾 Exportar</button>
+                        </div>
+                    </div>
+                    
+                    <div class="database-selector">
+                        <label for="databaseSelect">📂 Base de datos:</label>
+                        <select id="databaseSelect" class="database-select">
+                            <option value="">-- Seleccionar base de datos --</option>
+                            <option value="db1">Base de datos 1 (ejemplo)</option>
+                            <option value="db2">Base de datos 2 (ejemplo)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="creator-controls">
+                        <button id="addColorRowBtn" class="btn-success">➕ Agregar color</button>
+                    </div>
+                    
+                    <div class="table-wrapper creator-table">
+                        <table class="data-table" id="creatorTable">
+                            <thead>
+                                60<th style="width: 40px">#</th>
+                                <th>Nombre del Color</th>
+                                <th style="width: 80px">NK</th>
+                                <th style="width: 100px">Cian</th>
+                                <th style="width: 100px">Magenta</th>
+                                <th style="width: 100px">Yellow</th>
+                                <th style="width: 100px">Black</th>
+                                <th style="width: 100px">L*</th>
+                                <th style="width: 100px">a*</th>
+                                <th style="width: 100px">b*</th>
+                                <th style="width: 100px">Estado</th>
+                                <th style="width: 80px">Acción</th>
+                            </thead>
+                            <tbody id="creatorTableBody">
+                                60<td colspan="12" class="empty-state">Agregue colores para comenzar</td>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Vista EPS -->
+                <div id="epsView" class="view-content">
+                    <div class="help-content">
+                        <h3>📄 Exportar a EPS</h3>
+                        <div class="help-section">
+                            <p>Próximamente: Funcionalidad para exportar a formato EPS.</p>
+                            <p>Esta característica estará disponible en una próxima actualización.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    ✅ Las coincidencias exactas y equivalentes se muestran con sus valores CMYK.<br>
+                    🎨 Para cada grupo de colores (mismo NK), elige qué valores usar: <span style="color:#00e5ff;">Principal (Azul Eléctrico)</span> o <span style="color:#b45309;">Secundario (Naranja)</span>.<br>
+                    🔒 Los grupos marcados como "Manual" mantienen su selección al usar "Reemplazar NO modificados".<br>
+                    ➕ Para colores pendientes, decide si <span style="color:#15803d;">AGREGAR</span> o <span style="color:#991b1b;">ELIMINAR</span> (al elegir uno, el otro se deshabilita).<br>
+                    ✨ Los complementarios faltantes según la tabla se <span style="color:#eab308;">AGREGAN AUTOMÁTICAMENTE</span>.<br>
+                    ⚠️ No podrás exportar hasta que todos los pendientes estén decididos (Agregar o Eliminar).
                 </div>
             </div>
-            <div class="data-card">
-                <h3>🔄 Datos Secundario</h3>
-                <div class="data-list" id="secondaryDataList">
-                    <div class="empty-list">Esperando archivo...</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="results-panel" id="resultsPanel" style="display: none;">
-            <div class="results-header">
-                <h3>📊 Resultados de comparación</h3>
-                <div class="stats-badge" id="statsBadges"></div>
-            </div>
-            <table class="results-table">
-                <thead>
-                    <tr>
-                        <th>NK</th>
-                        <th>Archivo Principal (CMYK)</th>
-                        <th>Archivo Secundario (CMYK)</th>
-                        <th>Estado</th>
-                        <th>Acción / Selección de valores</th>
-                    </thead>
-                <tbody id="resultsTableBody"></tbody>
-             </table>
-        </div>
-        
-        <div class="footer">
-            ✅ Las coincidencias exactas y equivalentes se muestran con sus valores CMYK.<br>
-            🎨 Para cada grupo de colores (mismo NK), elige qué valores usar: <span style="color:#00e5ff;">Principal (Azul Eléctrico)</span> o <span style="color:#b45309;">Secundario (Naranja)</span>.<br>
-            🔒 Los grupos marcados como "Manual" mantienen su selección al usar "Reemplazar NO modificados".<br>
-            ➕ Para colores pendientes, decide si <span style="color:#15803d;">AGREGAR</span> o <span style="color:#991b1b;">ELIMINAR</span> (al elegir uno, el otro se deshabilita).<br>
-            ✨ Los complementarios faltantes según la tabla se <span style="color:#eab308;">AGREGAN AUTOMÁTICAMENTE</span>.<br>
-            ⚠️ No podrás exportar hasta que todos los pendientes estén decididos (Agregar o Eliminar).
         </div>
     </div>
 

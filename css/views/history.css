@@ -1,0 +1,133 @@
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.history-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #eab308;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-item {
+    background: #0c0c12;
+    border: 1px solid #2d3748;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    transition: border-color 0.2s;
+}
+
+.history-item:hover {
+    border-color: #4b5563;
+}
+
+.history-date {
+    color: #6b7280;
+    font-size: 0.75rem;
+}
+
+.history-stats {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+}
+
+.history-actions {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #1f1f2a;
+}
+
+.history-actions summary {
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: #818cf8;
+    user-select: none;
+}
+
+.history-actions summary:hover {
+    color: #a5b4fc;
+}
+
+.actions-log {
+    margin-top: 0.5rem;
+    padding-left: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.action-log-item {
+    font-size: 0.7rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid #1f1f2a;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.action-date {
+    color: #6b7280;
+    font-family: monospace;
+}
+
+.action-type {
+    font-weight: 600;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+}
+
+.action-type.keep {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.action-type.replace {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.action-type.add {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.action-type.undo {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+}
+
+.action-color {
+    color: #e2e8f0;
+}
+
+.action-reason {
+    color: #9ca3af;
+    font-style: italic;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding-left: 0.5rem;
+    border-left: 2px solid #4b5563;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}

@@ -1,0 +1,114 @@
+/* ============================================ */
+/* SIDEBAR - Menú lateral */
+/* ============================================ */
+
+.app-wrapper {
+    display: flex;
+    min-height: 100vh;
+    gap: 1.5rem;
+}
+
+.main-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-menu {
+    width: 85px;
+    background: #1f2937;
+    border-radius: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    padding: 20px 0;
+    position: sticky;
+    top: 1rem;
+    height: fit-content;
+    margin-top: 1rem;
+}
+
+.menu-item {
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #cbd5e1;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    gap: 0.25rem;
+}
+
+.menu-item i {
+    font-size: 22px;
+}
+
+.menu-item span {
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.menu-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+.menu-item.active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+}
+
+/* Vista de contenido */
+.view-content {
+    display: none;
+}
+
+.view-content.active {
+    display: block;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .app-wrapper {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .sidebar-menu {
+        width: 100%;
+        flex-direction: row;
+        justify-content: center;
+        border-radius: 30px;
+        padding: 12px;
+        gap: 0.5rem;
+        position: static;
+    }
+    
+    .menu-item {
+        width: 50px;
+        height: 50px;
+        border-radius: 15px;
+    }
+    
+    .menu-item i {
+        font-size: 18px;
+    }
+    
+    .menu-item span {
+        font-size: 8px;
+    }
+    
+    .main-container {
+        width: 100%;
+    }
+}

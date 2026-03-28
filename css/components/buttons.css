@@ -1,0 +1,98 @@
+.compare-btn {
+    background: #2d4ed6;
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Rubik', sans-serif;
+}
+
+.compare-btn:hover {
+    transform: translateY(-1px);
+}
+
+.compare-btn:disabled {
+    background: #4b5563;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.small-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-family: 'Rubik', sans-serif;
+}
+
+.btn-success {
+    background: #15803d;
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background: #166534;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: #991b1b;
+    color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #7f1a1a;
+    transform: translateY(-1px);
+}
+
+.btn-success:disabled,
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-family: 'Rubik', sans-serif;
+}
+
+.btn-primary {
+    background: #2d4ed6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1e40af;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #2d3748;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #1a202c;
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .compare-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+}

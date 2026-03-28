@@ -1,0 +1,37 @@
+.help-content {
+    background: #0c0c12;
+    border: 1px solid #2d3748;
+    border-radius: 1rem;
+    padding: 2rem;
+}
+
+.help-content h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+    color: #00e5ff;
+}
+
+.help-section {
+    margin-bottom: 1.5rem;
+}
+
+.help-section h4 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    color: #fbbf24;
+}
+
+.help-section p {
+    color: #9ca3af;
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+}
+
+.help-section ul {
+    margin-left: 1.5rem;
+    color: #9ca3af;
+}
+
+.help-section li {
+    margin-bottom: 0.25rem;
+}
