@@ -10,9 +10,12 @@
 // - Normalización elimina "TM" para mejor coincidencia
 // - Soporte para punto después del número correlativo (ej: "1. Nombre")
 // - Etiquetas HTML correctas en renderResults
+// - Vista Crear TXT con CreatorView integrado
+// - Vista EPS para exportar archivos .eps
 // ============================================================
 
 import { CreatorView } from './modules/views/creatorView.js';
+import { EPSView } from './modules/views/epsView.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -86,8 +89,9 @@ class AlphaColorMatch {
             ["01P TM DARK STEEL GREY", "01P DK STEEL GREY", "01P DARK STEEL GREY"]
         ];
         
-        // Inicializar CreatorView
+        // Inicializar vistas
         this.creatorView = null;
+        this.epsView = null;
         
         // Construir grupos de equivalencia (expansión transitiva)
         this.equivalenceGroups = this.buildEquivalenceGroups();
@@ -174,6 +178,7 @@ class AlphaColorMatch {
     init() {
         this.bindEvents();
         this.initCreatorView();
+        this.initEPSView();
         this.initViews();
         console.log('✅ Alpha Color Match - Versión Corregida');
     }
@@ -189,6 +194,12 @@ class AlphaColorMatch {
             }
         }
         this.creatorView = new CreatorView(this, equivalencyMap);
+        console.log('✅ CreatorView inicializado');
+    }
+    
+    initEPSView() {
+        this.epsView = new EPSView(this);
+        console.log('✅ EPSView inicializado');
     }
     
     initViews() {
@@ -216,11 +227,14 @@ class AlphaColorMatch {
                 }
             });
             
+            if (viewName === 'creator' && this.creatorView) {
+                this.creatorView.renderTable();
+            }
+            if (viewName === 'eps' && this.epsView) {
+                this.epsView.loadColors();
+            }
             if (viewName === 'history') {
                 if (this.loadHistory) this.loadHistory();
-            }
-            if (viewName === 'creator') {
-                if (this.creatorView) this.creatorView.renderTable();
             }
         };
         

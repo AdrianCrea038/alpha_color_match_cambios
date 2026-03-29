@@ -1,37 +1,239 @@
-.help-content {
+/* ============================================ */
+/* EPS VIEW - Estilos para exportar a EPS */
+/* ============================================ */
+
+.eps-container {
     background: #0c0c12;
     border: 1px solid #2d3748;
     border-radius: 1rem;
-    padding: 2rem;
+    padding: 1.5rem;
 }
 
-.help-content h3 {
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
-    color: #00e5ff;
-}
-
-.help-section {
+.eps-header {
     margin-bottom: 1.5rem;
 }
 
-.help-section h4 {
-    font-size: 1.1rem;
+.eps-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #eab308;
     margin-bottom: 0.5rem;
+}
+
+.eps-header p {
+    color: #9ca3af;
+    font-size: 0.85rem;
+}
+
+.eps-options {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #111117;
+    border-radius: 0.75rem;
+    border: 1px solid #2d3748;
+    flex-wrap: wrap;
+}
+
+.option-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.option-group label {
+    font-size: 0.85rem;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.eps-select {
+    background: #1f1f2a;
+    border: 1px solid #4b5563;
+    border-radius: 2rem;
+    padding: 0.4rem 1rem;
+    color: #e2e8f0;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.eps-select:hover {
+    border-color: #6b7280;
+}
+
+.eps-select:focus {
+    outline: none;
+    border-color: #4f46e5;
+}
+
+.eps-color-list {
+    margin-bottom: 1.5rem;
+}
+
+.eps-color-list h4 {
+    font-size: 0.9rem;
+    color: #9ca3af;
+    margin-bottom: 0.75rem;
+}
+
+.color-list {
+    background: #111117;
+    border: 1px solid #2d3748;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.color-list-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #2d3748;
+    background: #0a0a0a;
+}
+
+.select-all {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.select-all input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.color-items {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.color-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #1e1e2c;
+    transition: background 0.2s;
+}
+
+.color-item:hover {
+    background: #1a1a24;
+}
+
+.color-item input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.color-swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.5rem;
+    border: 1px solid #4b5563;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.color-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.color-name {
+    font-weight: 600;
+    color: #e2e8f0;
+    font-size: 0.85rem;
+}
+
+.color-nk {
+    font-size: 0.7rem;
     color: #fbbf24;
+    font-family: monospace;
 }
 
-.help-section p {
+.color-cmyk {
+    font-size: 0.7rem;
     color: #9ca3af;
-    line-height: 1.5;
-    margin-bottom: 0.5rem;
+    font-family: monospace;
 }
 
-.help-section ul {
-    margin-left: 1.5rem;
-    color: #9ca3af;
+.eps-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
 }
 
-.help-section li {
-    margin-bottom: 0.25rem;
+.eps-actions button {
+    padding: 0.6rem 1.2rem;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.eps-actions button:first-child {
+    background: #2d4ed6;
+    color: white;
+}
+
+.eps-actions button:first-child:hover:not(:disabled) {
+    background: #1e40af;
+    transform: translateY(-1px);
+}
+
+.eps-actions button:first-child:disabled {
+    background: #4b5563;
+    cursor: not-allowed;
+}
+
+.eps-actions button:last-child {
+    background: #2d3748;
+    color: #e2e8f0;
+}
+
+.eps-actions button:last-child:hover {
+    background: #4a5568;
+    transform: translateY(-1px);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #6b7280;
+}
+
+@media (max-width: 768px) {
+    .eps-options {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .option-group {
+        justify-content: space-between;
+    }
+    
+    .color-item {
+        flex-wrap: wrap;
+    }
+    
+    .color-swatch {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .eps-actions {
+        flex-direction: column;
+    }
+    
+    .eps-actions button {
+        width: 100%;
+    }
 }
