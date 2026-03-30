@@ -721,125 +721,125 @@ class AlphaColorMatch {
         console.log(`📊 RESULTADOS: ${results.length}, Auto-agregados: ${this.autoAddedItems.length}`);
     }
     
-    renderResults(results) {
-        const panel = document.getElementById('resultsPanel');
-        const tbody = document.getElementById('resultsTableBody');
-        const statsContainer = document.getElementById('statsBadges');
+renderResults(results) {
+    const panel = document.getElementById('resultsPanel');
+    const tbody = document.getElementById('resultsTableBody');
+    const statsContainer = document.getElementById('statsBadges');
+    
+    if (!panel || !tbody) return;
+    
+    panel.style.display = 'block';
+    
+    const exactMatches = results.filter(r => r.matchType === 'exact').length;
+    const equivalentMatches = results.filter(r => r.matchType === 'equivalent').length;
+    const pendingPrimary = results.filter(r => r.matchType === 'pending_primary').length;
+    const pendingSecondary = results.filter(r => r.matchType === 'pending_secondary').length;
+    const selectedCount = this.selectedPending.size;
+    const deletedCount = this.deletedPending.size;
+    
+    statsContainer.innerHTML = `
+        <span class="badge match">✅ Exactas: ${exactMatches}</span>
+        <span class="badge" style="background:#b45309;">🔄 Equivalentes: ${equivalentMatches}</span>
+        <span class="badge missing">❌ Pendientes Principal: ${pendingPrimary}</span>
+        <span class="badge secondary">➕ Pendientes Secundario: ${pendingSecondary}</span>
+        <span class="badge" style="background:#15803d;">✓ Agregados: ${selectedCount}</span>
+        <span class="badge" style="background:#991b1b;">🗑️ Eliminados: ${deletedCount}</span>
+        <span class="badge" style="background:#eab308;">✨ Auto-agregados: ${this.autoAddedItems.length}</span>
+    `;
+    
+    tbody.innerHTML = results.map(item => {
+        let rowClass = '';
+        let statusClass = '';
+        let statusText = '';
+        let actionButton = '';
+        let selectionButtons = '';
+        let cmykPreview = '';
         
-        if (!panel || !tbody) return;
-        
-        panel.style.display = 'block';
-        
-        const exactMatches = results.filter(r => r.matchType === 'exact').length;
-        const equivalentMatches = results.filter(r => r.matchType === 'equivalent').length;
-        const pendingPrimary = results.filter(r => r.matchType === 'pending_primary').length;
-        const pendingSecondary = results.filter(r => r.matchType === 'pending_secondary').length;
-        const selectedCount = this.selectedPending.size;
-        const deletedCount = this.deletedPending.size;
-        
-        statsContainer.innerHTML = `
-            <span class="badge match">✅ Exactas: ${exactMatches}</span>
-            <span class="badge" style="background:#b45309;">🔄 Equivalentes: ${equivalentMatches}</span>
-            <span class="badge missing">❌ Pendientes Principal: ${pendingPrimary}</span>
-            <span class="badge secondary">➕ Pendientes Secundario: ${pendingSecondary}</span>
-            <span class="badge" style="background:#15803d;">✓ Agregados: ${selectedCount}</span>
-            <span class="badge" style="background:#991b1b;">🗑️ Eliminados: ${deletedCount}</span>
-            <span class="badge" style="background:#eab308;">✨ Auto-agregados: ${this.autoAddedItems.length}</span>
-        `;
-        
-        tbody.innerHTML = results.map(item => {
-            let rowClass = '';
-            let statusClass = '';
-            let statusText = '';
-            let actionButton = '';
-            let selectionButtons = '';
-            let cmykPreview = '';
+        if (item.matchType === 'exact' || item.matchType === 'equivalent') {
+            rowClass = item.matchType === 'exact' ? 'style="background: rgba(21, 128, 61, 0.1);"' : 'style="background: rgba(180, 83, 9, 0.1);"';
+            statusClass = item.matchType === 'exact' ? 'match-badge yes' : 'match-badge' + ' style="background:#b45309;"';
+            statusText = item.matchType === 'exact' ? '✅ COINCIDENCIA' : '🔄 EQUIVALENTE';
             
-            if (item.matchType === 'exact' || item.matchType === 'equivalent') {
-                rowClass = item.matchType === 'exact' ? 'style="background: rgba(21, 128, 61, 0.1);"' : 'style="background: rgba(180, 83, 9, 0.1);"';
-                statusClass = item.matchType === 'exact' ? 'match-badge yes' : 'match-badge' + ' style="background:#b45309;"';
-                statusText = item.matchType === 'exact' ? '✅ COINCIDENCIA' : '🔄 EQUIVALENTE';
-                
-                const currentSelection = this.getGroupSelection(item.groupId);
-                const isManual = this.manualGroupSelections.has(item.groupId);
-                
-                const effectiveCmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
-                if (effectiveCmyk) {
-                    cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">Valor usado: C:${effectiveCmyk[0].toFixed(1)} M:${effectiveCmyk[1].toFixed(1)} Y:${effectiveCmyk[2].toFixed(1)} K:${effectiveCmyk[3].toFixed(1)}</div>`;
-                }
-                
-                selectionButtons = `
-                    <div class="selection-buttons">
-                        <button class="selection-btn ${currentSelection === 'primary' ? 'active-primary' : ''}" 
-                                onclick="window.app.setGroupSelection('${item.groupId}', 'primary')">
-                            📁 Principal<br>
-                            <span class="cmyk-small">C:${item.primaryData?.colorData.cmyk[0].toFixed(1)} M:${item.primaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.primaryData?.colorData.cmyk[2].toFixed(1)} K:${item.primaryData?.colorData.cmyk[3].toFixed(1)}</span>
-                        </button>
-                        <button class="selection-btn ${currentSelection === 'secondary' ? 'active-secondary' : ''}" 
-                                onclick="window.app.setGroupSelection('${item.groupId}', 'secondary')">
-                            🔄 Secundario<br>
-                            <span class="cmyk-small">C:${item.secondaryData?.colorData.cmyk[0].toFixed(1)} M:${item.secondaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.secondaryData?.colorData.cmyk[2].toFixed(1)} K:${item.secondaryData?.colorData.cmyk[3].toFixed(1)}</span>
-                        </button>
-                        ${isManual ? '<span class="manual-badge" style="font-size:0.6rem; color:#fbbf24;">🔒 Manual</span>' : ''}
-                    </div>
-                `;
-                
-            } else {
-                const isAdded = this.selectedPending.has(item.id);
-                const isDeleted = this.deletedPending.has(item.id);
-                const isDecided = isAdded || isDeleted;
-                
-                if (!isDecided) {
-                    rowClass = 'style="background: rgba(153, 27, 27, 0.1);"';
-                    statusClass = 'match-badge no';
-                    statusText = '❌ PENDIENTE';
-                } else if (isAdded) {
-                    rowClass = 'style="background: rgba(21, 128, 61, 0.2);"';
-                    statusClass = 'match-badge yes';
-                    statusText = '✓ AGREGADO';
-                } else {
-                    rowClass = 'style="background: rgba(153, 27, 27, 0.2);"';
-                    statusClass = 'match-badge no';
-                    statusText = '🗑️ ELIMINADO';
-                }
-                
-                actionButton = `
-                    <div class="pending-buttons">
-                        <button class="small-btn btn-success" 
-                                onclick="window.app.togglePendingAdd('${item.id}')"
-                                ${isAdded ? 'disabled style="opacity:0.5;"' : ''}>
-                            ➕ Agregar
-                        </button>
-                        <button class="small-btn btn-danger" 
-                                onclick="window.app.togglePendingDelete('${item.id}')"
-                                ${isDeleted ? 'disabled style="opacity:0.5;"' : ''}>
-                            🗑️ Eliminar
-                        </button>
-                    </div>
-                `;
-                
-                const colorData = item.primaryData?.colorData || item.secondaryData?.colorData;
-                if (colorData) {
-                    cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">CMYK: ${colorData.cmyk.map(v => v.toFixed(1)).join(', ')}</div>`;
-                }
+            const currentSelection = this.getGroupSelection(item.groupId);
+            const isManual = this.manualGroupSelections.has(item.groupId);
+            
+            const effectiveCmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
+            if (effectiveCmyk) {
+                cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">Valor usado: C:${effectiveCmyk[0].toFixed(1)} M:${effectiveCmyk[1].toFixed(1)} Y:${effectiveCmyk[2].toFixed(1)} K:${effectiveCmyk[3].toFixed(1)}</div>`;
             }
             
-            const primaryName = item.primaryData ? item.primaryData.baseName : '—';
-            const secondaryName = item.secondaryData ? item.secondaryData.baseName : '—';
-            const primaryCmyk = item.primaryData?.colorData?.cmyk;
-            const secondaryCmyk = item.secondaryData?.colorData?.cmyk;
-            
-            return `
-                <tr ${rowClass}>
-                    68<strong>${item.nk}</strong>${cmykPreview}68
-                    68${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}68
-                    68${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}68
-                    68<span class="${statusClass}">${statusText}</span>68
-                    68${selectionButtons || actionButton || '—'}68
-                68
+            selectionButtons = `
+                <div class="selection-buttons">
+                    <button class="selection-btn ${currentSelection === 'primary' ? 'active-primary' : ''}" 
+                            onclick="window.app.setGroupSelection('${item.groupId}', 'primary')">
+                        📁 Principal<br>
+                        <span class="cmyk-small">C:${item.primaryData?.colorData.cmyk[0].toFixed(1)} M:${item.primaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.primaryData?.colorData.cmyk[2].toFixed(1)} K:${item.primaryData?.colorData.cmyk[3].toFixed(1)}</span>
+                    </button>
+                    <button class="selection-btn ${currentSelection === 'secondary' ? 'active-secondary' : ''}" 
+                            onclick="window.app.setGroupSelection('${item.groupId}', 'secondary')">
+                        🔄 Secundario<br>
+                        <span class="cmyk-small">C:${item.secondaryData?.colorData.cmyk[0].toFixed(1)} M:${item.secondaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.secondaryData?.colorData.cmyk[2].toFixed(1)} K:${item.secondaryData?.colorData.cmyk[3].toFixed(1)}</span>
+                    </button>
+                    ${isManual ? '<span class="manual-badge" style="font-size:0.6rem; color:#fbbf24;">🔒 Manual</span>' : ''}
+                </div>
             `;
-        }).join('');
-    }
+            
+        } else {
+            const isAdded = this.selectedPending.has(item.id);
+            const isDeleted = this.deletedPending.has(item.id);
+            const isDecided = isAdded || isDeleted;
+            
+            if (!isDecided) {
+                rowClass = 'style="background: rgba(153, 27, 27, 0.1);"';
+                statusClass = 'match-badge no';
+                statusText = '❌ PENDIENTE';
+            } else if (isAdded) {
+                rowClass = 'style="background: rgba(21, 128, 61, 0.2);"';
+                statusClass = 'match-badge yes';
+                statusText = '✓ AGREGADO';
+            } else {
+                rowClass = 'style="background: rgba(153, 27, 27, 0.2);"';
+                statusClass = 'match-badge no';
+                statusText = '🗑️ ELIMINADO';
+            }
+            
+            actionButton = `
+                <div class="pending-buttons">
+                    <button class="small-btn btn-success" 
+                            onclick="window.app.togglePendingAdd('${item.id}')"
+                            ${isAdded ? 'disabled style="opacity:0.5;"' : ''}>
+                        ➕ Agregar
+                    </button>
+                    <button class="small-btn btn-danger" 
+                            onclick="window.app.togglePendingDelete('${item.id}')"
+                            ${isDeleted ? 'disabled style="opacity:0.5;"' : ''}>
+                        🗑️ Eliminar
+                    </button>
+                </div>
+            `;
+            
+            const colorData = item.primaryData?.colorData || item.secondaryData?.colorData;
+            if (colorData) {
+                cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">CMYK: ${colorData.cmyk.map(v => v.toFixed(1)).join(', ')}</div>`;
+            }
+        }
+        
+        const primaryName = item.primaryData ? item.primaryData.baseName : '—';
+        const secondaryName = item.secondaryData ? item.secondaryData.baseName : '—';
+        const primaryCmyk = item.primaryData?.colorData?.cmyk;
+        const secondaryCmyk = item.secondaryData?.colorData?.cmyk;
+        
+        return `
+            <tr ${rowClass}>
+                <td><strong>${item.nk}</strong>${cmykPreview}</td>
+                <td>${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}</td>
+                <td>${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}</td>
+                <td><span class="${statusClass}">${statusText}</span></td>
+                <td>${selectionButtons || actionButton || '—'}</td>
+            </tr>
+        `;
+    }).join('');
+}
     
     buildExportItems() {
         const exportItems = [];

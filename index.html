@@ -109,7 +109,7 @@
                                 66<th>NK</th><th>Archivo Principal (CMYK)</th><th>Archivo Secundario (CMYK)</th><th>Estado</th><th>Acción / Selección de valores</th>
                             </thead>
                             <tbody id="resultsTableBody"></tbody>
-                          </table>
+                           </table>
                     </div>
                 </div>
 
@@ -137,6 +137,20 @@
                         </div>
                     </div>
                     
+                    <!-- Selector de Plotter global -->
+                    <div class="plotter-selector">
+                        <label for="globalPlotter">🖨️ Plotter (1-17):</label>
+                        <select id="globalPlotter" class="plotter-select">
+                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                            <option value="13">13</option><option value="14" selected>14</option>
+                            <option value="15">15</option><option value="16">16</option><option value="17">17</option>
+                        </select>
+                        <span class="plotter-info">(Valor único para todos los colores del archivo)</span>
+                    </div>
+                    
                     <div class="database-selector">
                         <label for="databaseSelect">📂 Base de datos:</label>
                         <select id="databaseSelect" class="database-select">
@@ -153,34 +167,49 @@
                     <div class="table-wrapper creator-table">
                         <table class="data-table" id="creatorTable">
                             <thead>
-                                60<th style="width: 40px">#</th>
-                                <th>Nombre del Color</th>
-                                <th style="width: 80px">NK</th>
-                                <th style="width: 100px">Cian</th>
-                                <th style="width: 100px">Magenta</th>
-                                <th style="width: 100px">Yellow</th>
-                                <th style="width: 100px">Black</th>
-                                <th style="width: 100px">L*</th>
-                                <th style="width: 100px">a*</th>
-                                <th style="width: 100px">b*</th>
-                                <th style="width: 100px">Estado</th>
-                                <th style="width: 80px">Acción</th>
+                                60<th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
+                                <th style="width:100px">Cian</th><th style="width:100px">Magenta</th><th style="width:100px">Yellow</th>
+                                <th style="width:100px">Black</th><th style="width:100px">L*</th><th style="width:100px">a*</th>
+                                <th style="width:100px">b*</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
                             </thead>
                             <tbody id="creatorTableBody">
-                                60<td colspan="12" class="empty-state">Agregue colores para comenzar</td>
+                                60<td colspan="12" class="empty-state">Agregue colores para comenzar<\/td>60
                             </tbody>
-                        </table>
+                         </table>
                     </div>
                 </div>
 
                 <!-- Vista EPS -->
                 <div id="epsView" class="view-content">
-                    <div class="help-content">
+                    <div class="eps-header">
                         <h3>📄 Exportar a EPS</h3>
-                        <div class="help-section">
-                            <p>Próximamente: Funcionalidad para exportar a formato EPS.</p>
-                            <p>Esta característica estará disponible en una próxima actualización.</p>
+                        <div class="eps-header-buttons">
+                            <button id="refreshEpsPreviewBtn" class="btn-secondary">🔄 Actualizar preview</button>
+                            <button id="exportEpsBtn" class="btn-primary">📥 Exportar EPS</button>
                         </div>
+                    </div>
+                    
+                    <div id="epsStats" class="eps-stats"></div>
+                    
+                    <div class="eps-preview-title">
+                        <span>📐 Vista previa (escala reducida: 10cm → 100px)</span>
+                        <span style="font-size:0.7rem; color:#9ca3af;">Orden: Oscuros → Claros | Separación: 5mm</span>
+                    </div>
+                    
+                    <div id="epsPreviewContainer" class="eps-preview-container">
+                        <div class="empty-state"><div class="empty-icon">🎨</div><p>Cargando preview...</p></div>
+                    </div>
+                    
+                    <div class="eps-info">
+                        <p>📌 El archivo EPS se generará con las siguientes características:</p>
+                        <ul>
+                            <li>Cada muestra: 10cm × 10cm</li>
+                            <li>Separación entre muestras: 5mm</li>
+                            <li>Tipografía: Arial / Helvetica (universal)</li>
+                            <li>Orden: Oscuros → Claros (por luminosidad L*)</li>
+                            <li>Solo se incluyen colores <strong>pendientes</strong> (sin ✅)</li>
+                            <li>Plotter: valor seleccionado en la sección "Crear TXT"</li>
+                        </ul>
                     </div>
                 </div>
                 

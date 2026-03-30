@@ -1,263 +1,49 @@
 // ============================================================
-// EPS VIEW - Exportar colores a formato EPS
-// Genera archivos .eps con recuadro único de 10cm x 10cm
-// - Espacio de color CMYK (para Ergosoft e Illustrator)
-// - Texto "Plotter:" arriba izquierda
-// - Valores CMYK arriba derecha (descendente)
-// - Nombre del color abajo izquierda
-// - Tipografía Sans Serif (Helvetica)
+// EPS VIEW - Exportar colores pendientes a EPS
+// Versión con textos (Plotter, CMYK, nombre) y tipografía Arial
+// Estructura de spot color que ya funciona
 // ============================================================
 
 export class EPSView {
     constructor(app) {
         this.app = app;
-        this.colors = [];
+        this.previewContainer = null;
+        this.exportBtn = null;
+        this.refreshBtn = null;
+        
         this.init();
     }
     
     init() {
-        this.render();
-        this.attachEvents();
-    }
-    
-    render() {
-        const container = document.getElementById('epsView');
-        if (!container) return;
+        this.previewContainer = document.getElementById('epsPreviewContainer');
+        this.exportBtn = document.getElementById('exportEpsBtn');
+        this.refreshBtn = document.getElementById('refreshEpsPreviewBtn');
         
-        container.innerHTML = `
-            <div class="eps-container">
-                <div class="eps-header">
-                    <h3>📄 Exportar a EPS</h3>
-                    <p>Selecciona los colores para generar archivos .eps en modo CMYK (10cm x 10cm)</p>
-                </div>
-                
-                <div class="eps-options">
-                    <div class="option-group">
-                        <label for="epsSize">Tamaño del recuadro:</label>
-                        <select id="epsSize" class="eps-select">
-                            <option value="10">10 cm x 10 cm</option>
-                            <option value="15">15 cm x 15 cm</option>
-                            <option value="20">20 cm x 20 cm</option>
-                        </select>
-                    </div>
-                    <div class="option-group">
-                        <label for="epsFontSize">Tamaño de texto:</label>
-                        <select id="epsFontSize" class="eps-select">
-                            <option value="12">12 pt</option>
-                            <option value="14">14 pt</option>
-                            <option value="17" selected>17 pt</option>
-                            <option value="20">20 pt</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="eps-color-list">
-                    <h4>Colores disponibles:</h4>
-                    <div id="epsColorList" class="color-list">
-                        <div class="empty-state">Cargando colores...</div>
-                    </div>
-                </div>
-                
-                <div class="eps-actions">
-                    <button id="exportSelectedEpsBtn" class="btn-primary" disabled>📥 Exportar seleccionados (.eps)</button>
-                    <button id="refreshColorsBtn" class="btn-secondary">🔄 Actualizar colores</button>
-                </div>
-            </div>
-        `;
-        
-        this.attachEvents();
-    }
-    
-    attachEvents() {
-        const exportBtn = document.getElementById('exportSelectedEpsBtn');
-        const refreshBtn = document.getElementById('refreshColorsBtn');
-        
-        if (exportBtn) {
-            exportBtn.onclick = () => this.exportSelected();
+        if (this.exportBtn) {
+            this.exportBtn.onclick = () => this.exportEPS();
         }
         
-        if (refreshBtn) {
-            refreshBtn.onclick = () => this.loadColors();
+        if (this.refreshBtn) {
+            this.refreshBtn.onclick = () => this.renderPreview();
         }
         
-        this.loadColors();
+        document.addEventListener('colorStatusChanged', () => {
+            this.renderPreview();
+        });
+        
+        this.renderPreview();
     }
     
-    loadColors() {
-        const colors = [];
-        
-        if (this.app && this.app.results && this.app.results.length > 0) {
-            for (const result of this.app.results) {
-                if (result.primaryData && result.primaryData.colorData) {
-                    colors.push({
-                        id: result.id,
-                        name: result.primaryData.baseName || result.name,
-                        nk: result.nk,
-                        cmyk: result.cmykPrimary || result.cmykSecondary,
-                        lab: result.labPrimary || result.labSecondary
-                    });
-                }
-            }
+    getPendingColorsFromCreator() {
+        if (this.app && this.app.creatorView && this.app.creatorView.getPendingColors) {
+            return this.app.creatorView.getPendingColors();
         }
-        
-        if (colors.length === 0 && this.app && this.app.creatorView && this.app.creatorView.colors) {
-            for (const color of this.app.creatorView.colors) {
-                colors.push({
-                    id: color.id,
-                    name: color.name,
-                    nk: color.nk,
-                    cmyk: [color.cmyk.c, color.cmyk.m, color.cmyk.y, color.cmyk.k],
-                    lab: [color.lab.l, color.lab.a, color.lab.b]
-                });
-            }
-        }
-        
-        this.colors = colors;
-        this.renderColorList();
+        return [];
     }
     
-    renderColorList() {
-        const container = document.getElementById('epsColorList');
-        const exportBtn = document.getElementById('exportSelectedEpsBtn');
-        
-        if (!container) return;
-        
-        if (this.colors.length === 0) {
-            container.innerHTML = '<div class="empty-state">No hay colores disponibles. Carga un archivo TXT o agrega colores en "Crear TXT".</div>';
-            if (exportBtn) exportBtn.disabled = true;
-            return;
-        }
-        
-        container.innerHTML = `
-            <div class="color-list-header">
-                <label class="select-all">
-                    <input type="checkbox" id="selectAllColors"> Seleccionar todos (${this.colors.length})
-                </label>
-            </div>
-            <div class="color-items">
-                ${this.colors.map(color => `
-                    <div class="color-item" data-id="${color.id}">
-                        <input type="checkbox" class="color-checkbox" data-id="${color.id}" data-name="${color.name}" data-cmyk="${color.cmyk.join(',')}">
-                        <div class="color-swatch" style="background: ${this.cmykToRgb(color.cmyk[0], color.cmyk[1], color.cmyk[2], color.cmyk[3])};"></div>
-                        <div class="color-info">
-                            <span class="color-name">${this.escapeHtml(color.name)}</span>
-                            <span class="color-nk">${color.nk || ''}</span>
-                            <span class="color-cmyk">C:${color.cmyk[0].toFixed(1)} M:${color.cmyk[1].toFixed(1)} Y:${color.cmyk[2].toFixed(1)} K:${color.cmyk[3].toFixed(1)}</span>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-        
-        if (exportBtn) exportBtn.disabled = false;
-        
-        const selectAll = document.getElementById('selectAllColors');
-        if (selectAll) {
-            selectAll.onclick = (e) => {
-                const checkboxes = document.querySelectorAll('.color-checkbox');
-                checkboxes.forEach(cb => cb.checked = e.target.checked);
-            };
-        }
-    }
-    
-    calculateLuminance(c, m, y, k) {
-        const r = 255 * (1 - c / 100) * (1 - k / 100);
-        const g = 255 * (1 - m / 100) * (1 - k / 100);
-        const b = 255 * (1 - y / 100) * (1 - k / 100);
-        return (0.299 * r + 0.587 * g + 0.114 * b);
-    }
-    
-    getTextColor(c, m, y, k) {
-        const luminance = this.calculateLuminance(c, m, y, k);
-        return luminance > 128 ? [0, 0, 0] : [1, 1, 1];
-    }
-    
-    cmToPoints(cm) {
-        return cm * 28.3464567;
-    }
-    
-    generateEPS(color, sizeCm = 10, fontSizePt = 17) {
-        const name = color.name || 'Color';
-        const c = color.cmyk[0];
-        const m = color.cmyk[1];
-        const y = color.cmyk[2];
-        const k = color.cmyk[3];
-        
-        const boxSize = this.cmToPoints(sizeCm);
-        const margin = boxSize * 0.05;
-        const textColor = this.getTextColor(c, m, y, k);
-        
-        const cleanName = name.replace(/[^a-zA-Z0-9áéíóúñÑ]/g, '_');
-        
-        const topY = boxSize - margin - fontSizePt;
-        const bottomY = margin + fontSizePt;
-        const leftX = margin;
-        const rightX = boxSize - margin;
-        
-        // Convertir CMYK a valores entre 0 y 1 para PostScript
-        const cPs = (c / 100).toFixed(6);
-        const mPs = (m / 100).toFixed(6);
-        const yPs = (y / 100).toFixed(6);
-        const kPs = (k / 100).toFixed(6);
-        
-        return `%!PS-Adobe-3.0 EPSF-3.0
-%%BoundingBox: 0 0 ${boxSize} ${boxSize}
-%%Title: ${cleanName}
-%%Creator: Alpha Color Match
-%%CreationDate: ${new Date().toLocaleDateString()}
-%%LanguageLevel: 2
-%%DocumentProcessColors: Cyan Magenta Yellow Black
-%%EndComments
-
-% Configurar página
-0 0 ${boxSize} ${boxSize} rectclip
-
-% Dibujar fondo blanco exterior
-1 1 1 setrgbcolor
-0 0 ${boxSize} ${boxSize} rectfill
-
-% Configurar color CMYK para el recuadro
-${cPs} ${mPs} ${yPs} ${kPs} setcmykcolor
-
-% Dibujar recuadro principal
-0 0 ${boxSize} ${boxSize} rectfill
-
-% Configurar color para texto (negro)
-0 0 0 setrgbcolor
-
-% Seleccionar fuente SANS SERIF
-/Helvetica findfont
-${fontSizePt} scalefont
-setfont
-
-% Texto "Plotter:" en esquina superior izquierda
-${leftX} ${topY} moveto
-(Plotter:) show
-
-% Valores CMYK en esquina superior derecha
-(C: ${Math.round(c)}) dup stringwidth pop
-${rightX} exch sub ${topY} moveto
-show
-
-(M: ${Math.round(m)}) dup stringwidth pop
-${rightX} exch sub ${topY - fontSizePt * 1.2} moveto
-show
-
-(Y: ${Math.round(y)}) dup stringwidth pop
-${rightX} exch sub ${topY - fontSizePt * 2.4} moveto
-show
-
-(K: ${Math.round(k)}) dup stringwidth pop
-${rightX} exch sub ${topY - fontSizePt * 3.6} moveto
-show
-
-% Nombre del color en esquina inferior izquierda
-${leftX} ${bottomY} moveto
-(${name}) show
-
-% Finalizar
-showpage
-%%EOF`;
+    getPendingColorsSorted() {
+        const pendingColors = this.getPendingColorsFromCreator();
+        return [...pendingColors].sort((a, b) => a.lab.l - b.lab.l);
     }
     
     cmykToRgb(c, m, y, k) {
@@ -267,61 +53,255 @@ showpage
         return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
     }
     
-    exportSelected() {
-        const selectedCheckboxes = document.querySelectorAll('.color-checkbox:checked');
-        const sizeSelect = document.getElementById('epsSize');
-        const fontSizeSelect = document.getElementById('epsFontSize');
+    renderPreview() {
+        if (!this.previewContainer) return;
         
-        const sizeCm = sizeSelect ? parseInt(sizeSelect.value) : 10;
-        const fontSizePt = fontSizeSelect ? parseInt(fontSizeSelect.value) : 17;
+        const colors = this.getPendingColorsSorted();
+        const plotterValue = this.app && this.app.creatorView ? this.app.creatorView.getGlobalPlotter() : 14;
         
-        if (selectedCheckboxes.length === 0) {
-            alert('⚠️ Seleccione al menos un color para exportar.');
+        if (colors.length === 0) {
+            this.previewContainer.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🎨</div>
+                    <p>No hay colores pendientes para mostrar</p>
+                    <p style="font-size: 0.7rem;">Los colores aprobados (✅ Bueno) no aparecen en el EPS</p>
+                </div>
+            `;
             return;
         }
         
-        if (selectedCheckboxes.length === 1) {
-            const cb = selectedCheckboxes[0];
-            const cmyk = cb.dataset.cmyk.split(',').map(Number);
-            const color = {
-                name: cb.dataset.name,
-                cmyk: cmyk
-            };
-            const epsContent = this.generateEPS(color, sizeCm, fontSizePt);
-            const fileName = `${color.name.replace(/[^a-zA-Z0-9áéíóúñÑ]/g, '_')}.eps`;
-            this.downloadFile(epsContent, fileName);
-        } else {
-            alert(`Se exportarán ${selectedCheckboxes.length} archivos .eps. Cada uno se descargará por separado.`);
-            
-            selectedCheckboxes.forEach((cb, index) => {
-                setTimeout(() => {
-                    const cmyk = cb.dataset.cmyk.split(',').map(Number);
-                    const color = {
-                        name: cb.dataset.name,
-                        cmyk: cmyk
-                    };
-                    const epsContent = this.generateEPS(color, sizeCm, fontSizePt);
-                    const fileName = `${color.name.replace(/[^a-zA-Z0-9áéíóúñÑ]/g, '_')}.eps`;
-                    this.downloadFile(epsContent, fileName);
-                }, index * 500);
-            });
+        const boxSize = 100;
+        const margin = 5;
+        const maxCols = 5;
+        
+        this.previewContainer.style.display = 'flex';
+        this.previewContainer.style.flexDirection = 'column';
+        this.previewContainer.style.gap = `${margin}px`;
+        
+        const rows = [];
+        for (let i = 0; i < colors.length; i += maxCols) {
+            rows.push(colors.slice(i, i + maxCols));
+        }
+        
+        this.previewContainer.innerHTML = rows.map(row => {
+            return `
+                <div style="display: flex; gap: ${margin}px; justify-content: flex-start;">
+                    ${row.map(color => {
+                        const rgb = this.cmykToRgb(color.cmyk.c, color.cmyk.m, color.cmyk.y, color.cmyk.k);
+                        const spotName = `${color.name} ${color.nk}`.toUpperCase();
+                        
+                        return `
+                            <div class="eps-preview-box" style="
+                                width: ${boxSize}px;
+                                height: ${boxSize}px;
+                                background: ${rgb};
+                                border: 1px solid #4b5563;
+                                border-radius: 4px;
+                                font-family: Arial, Helvetica, sans-serif;
+                                font-size: 9px;
+                                color: white;
+                                text-shadow: 0 0 2px black;
+                                overflow: hidden;
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: space-between;
+                                padding: 4px;
+                                flex-shrink: 0;
+                            ">
+                                <div style="text-align: left; font-weight: bold;">Plotter: ${plotterValue}</div>
+                                <div style="text-align: right;">
+                                    C:${color.cmyk.c.toFixed(0)}<br>
+                                    M:${color.cmyk.m.toFixed(0)}<br>
+                                    Y:${color.cmyk.y.toFixed(0)}<br>
+                                    K:${color.cmyk.k.toFixed(0)}
+                                </div>
+                                <div style="text-align: left; font-size: 8px; word-break: break-word;">${this.escapeHtml(spotName)}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }).join('');
+        
+        const statsDiv = document.getElementById('epsStats');
+        if (statsDiv) {
+            statsDiv.innerHTML = `
+                <strong>📊 Resumen EPS:</strong> ${colors.length} colores pendientes | Plotter: ${plotterValue} | Orden: Oscuros → Claros | Máx 5 colores por fila
+            `;
         }
     }
     
-    downloadFile(content, fileName) {
-        const blob = new Blob([content], { type: 'application/postscript' });
+    generateEPSContent() {
+        const colors = this.getPendingColorsSorted();
+        const plotterValue = this.app && this.app.creatorView ? this.app.creatorView.getGlobalPlotter() : 14;
+        
+        if (colors.length === 0) {
+            return null;
+        }
+        
+        const cmToPoints = 28.3465;
+        const boxSize = Math.round(10 * cmToPoints); // 10cm en puntos
+        const margin = Math.round(0.5 * cmToPoints); // 5mm en puntos
+        const cols = Math.min(colors.length, 5);
+        const rows = Math.ceil(colors.length / cols);
+        
+        const pageWidth = (boxSize + margin) * cols + margin;
+        const pageHeight = (boxSize + margin) * rows + margin;
+        
+        let eps = `%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 ${pageWidth} ${pageHeight}
+%%Title: Alpha Color Match EPS Export
+%%Creator: Alpha Color Match
+%%CreationDate: ${new Date().toLocaleString()}
+%%LanguageLevel: 2
+%%EndComments
+
+`;
+        
+        // Agregar cada spot color en el encabezado
+        for (let i = 0; i < colors.length; i++) {
+            const color = colors[i];
+            const spotName = `${color.name} ${color.nk}`.toUpperCase();
+            const c = (color.cmyk.c / 100).toFixed(6);
+            const m = (color.cmyk.m / 100).toFixed(6);
+            const yVal = (color.cmyk.y / 100).toFixed(6);
+            const k = (color.cmyk.k / 100).toFixed(6);
+            
+            eps += `%%DocumentCustomColors: (${this.escapePS(spotName)})
+%%CMYKCustomColor: ${c} ${m} ${yVal} ${k} (${this.escapePS(spotName)})
+`;
+        }
+        
+        eps += `%%EndComments
+
+% Definir tipografía Arial (Helvetica en PostScript)
+/Helvetica findfont 12 scalefont setfont
+
+% Definir función para dibujar rectángulo
+/drawRect {
+    newpath
+    4 2 roll
+    moveto
+    1 index 0 rlineto
+    0 exch rlineto
+    neg 0 rlineto
+    closepath
+    fill
+} def
+
+% Definir función para dibujar texto
+/drawText {
+    /txt exch def
+    /y exch def
+    /x exch def
+    newpath
+    x y moveto
+    txt show
+} def
+
+`;
+        
+        // Definir cada spot color
+        for (let i = 0; i < colors.length; i++) {
+            const color = colors[i];
+            const spotName = `${color.name} ${color.nk}`.toUpperCase();
+            const c = (color.cmyk.c / 100).toFixed(6);
+            const m = (color.cmyk.m / 100).toFixed(6);
+            const yVal = (color.cmyk.y / 100).toFixed(6);
+            const k = (color.cmyk.k / 100).toFixed(6);
+            
+            eps += `/SpotColor${i} {
+    [/Separation (${this.escapePS(spotName)}) /DeviceCMYK {
+        ${c} ${m} ${yVal} ${k}
+    } ] setcolorspace
+} def
+
+`;
+        }
+        
+        // Dibujar cada rectángulo con su texto
+        for (let i = 0; i < colors.length; i++) {
+            const color = colors[i];
+            const col = i % 5;
+            const row = Math.floor(i / 5);
+            
+            const x = margin + col * (boxSize + margin);
+            const y = pageHeight - margin - (row + 1) * (boxSize + margin);
+            const spotName = `${color.name} ${color.nk}`.toUpperCase();
+            const cInt = Math.round(color.cmyk.c);
+            const mInt = Math.round(color.cmyk.m);
+            const yInt = Math.round(color.cmyk.y);
+            const kInt = Math.round(color.cmyk.k);
+            
+            // Posiciones para el texto
+            const textX = x + 8;
+            const plotterY = y + boxSize - 12;
+            const cmykY = y + boxSize - 28;
+            const nameY = y + 18;
+            
+            eps += `% Color ${i + 1}: ${spotName}
+SpotColor${i}
+
+% Dibujar rectángulo
+${x} ${y} ${boxSize} ${boxSize} drawRect
+
+% Dibujar texto (Plotter)
+0 0 0 setrgbcolor
+/Helvetica findfont 12 scalefont setfont
+${textX} ${plotterY} moveto (Plotter: ${plotterValue}) show
+
+% Dibujar valores CMYK
+/Helvetica findfont 10 scalefont setfont
+${textX} ${cmykY} moveto (C:${cInt}  M:${mInt}  Y:${yInt}  K:${kInt}) show
+
+% Dibujar nombre del spot
+/Helvetica findfont 10 scalefont setfont
+${textX} ${nameY} moveto (${this.escapePS(spotName)}) show
+
+`;
+        }
+        
+        eps += `showpage
+%%EOF`;
+        
+        return eps;
+    }
+    
+    exportEPS() {
+        const epsContent = this.generateEPSContent();
+        
+        if (!epsContent) {
+            alert('⚠️ No hay colores pendientes para exportar a EPS.');
+            return;
+        }
+        
+        console.log('📄 EPS generado con', this.getPendingColorsSorted().length, 'colores');
+        
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        const fileName = `alpha_colors_${timestamp}.eps`;
+        
+        const blob = new Blob([epsContent], { type: 'application/postscript' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = fileName;
-        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        alert(`✅ Archivo EPS exportado con ${this.getPendingColorsSorted().length} colores.`);
     }
     
     escapeHtml(str) {
         if (!str) return '';
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    
+    escapePS(str) {
+        if (!str) return '';
+        return str.replace(/[()\\]/g, '\\$&');
+    }
+    
+    refreshPreview() {
+        this.renderPreview();
     }
 }

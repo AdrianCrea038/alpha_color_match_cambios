@@ -2,6 +2,7 @@
 // CREATOR VIEW - Crear Nuevo Archivo TXT
 // - Nombre del color NO editable (solo se asigna al cargar/agregar)
 // - Botón Agregar con modal y motivo obligatorio
+// - Plotter global (1-17) para todos los colores del archivo
 // ============================================================
 
 export class CreatorView {
@@ -12,11 +13,13 @@ export class CreatorView {
         this.nextId = 1;
         this.historyLog = [];
         this.currentUser = 'usuario';
+        this.globalPlotter = 14;
         
         this.tableBody = null;
         this.downloadBtn = null;
         this.addBtn = null;
         this.loadFileBtn = null;
+        this.plotterSelect = null;
         this.databaseSelect = null;
         
         this.init();
@@ -27,9 +30,18 @@ export class CreatorView {
         this.downloadBtn = document.getElementById('downloadTxtBtn');
         this.addBtn = document.getElementById('addColorRowBtn');
         this.loadFileBtn = document.getElementById('loadTxtBtn');
+        this.plotterSelect = document.getElementById('globalPlotter');
         this.databaseSelect = document.getElementById('databaseSelect');
         
         if (!this.tableBody) return;
+        
+        if (this.plotterSelect) {
+            this.plotterSelect.value = this.globalPlotter;
+            this.plotterSelect.addEventListener('change', (e) => {
+                this.globalPlotter = parseInt(e.target.value);
+                console.log(`🎨 Plotter global cambiado a: ${this.globalPlotter}`);
+            });
+        }
         
         if (this.addBtn) {
             this.addBtn.onclick = () => this.showAddColorModal();
@@ -46,7 +58,14 @@ export class CreatorView {
         this.resetTable();
     }
     
-    // Mostrar modal para agregar color con motivo obligatorio
+    getGlobalPlotter() {
+        return this.globalPlotter;
+    }
+    
+    getPendingColors() {
+        return this.colors.filter(color => !color.isLocked);
+    }
+    
     showAddColorModal() {
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
@@ -105,7 +124,6 @@ export class CreatorView {
                 return;
             }
             
-            // Agregar el color
             this.addColor({
                 name: name,
                 nk: 'NK001',
@@ -114,7 +132,6 @@ export class CreatorView {
                 isLocked: false
             });
             
-            // Registrar en historial
             this.addToHistory(this.nextId - 1, 'ADD', reason);
             
             closeModal();
@@ -173,6 +190,8 @@ export class CreatorView {
         color.isLocked = true;
         this.addToHistory(colorId, 'LOCK', 'Color marcado como bueno');
         this.renderTable();
+        
+        document.dispatchEvent(new CustomEvent('colorStatusChanged'));
     }
     
     unlockColor(colorId, reason) {
@@ -187,6 +206,9 @@ export class CreatorView {
         color.isLocked = false;
         this.addToHistory(colorId, 'UNLOCK', reason);
         this.renderTable();
+        
+        document.dispatchEvent(new CustomEvent('colorStatusChanged'));
+        
         return true;
     }
     
@@ -217,6 +239,8 @@ export class CreatorView {
         }
         
         this.renderTable();
+        
+        document.dispatchEvent(new CustomEvent('colorStatusChanged'));
     }
     
     addToHistory(colorId, action, reason) {
@@ -408,7 +432,6 @@ export class CreatorView {
         this.colors = [];
         this.nextId = 1;
         this.historyLog = [];
-        // No agregar color por defecto, el usuario debe agregar manualmente con motivo
         this.renderTable();
     }
     
