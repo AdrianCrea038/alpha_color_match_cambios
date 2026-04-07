@@ -7,7 +7,7 @@
     padding: 0.75rem;
     background: #0c0c12;
     border: 1px solid #2d3748;
-    border-radius: 2rem;
+    border-radius: 8px;
     flex-wrap: wrap;
 }
 
@@ -20,7 +20,7 @@
 .export-name-input {
     background: #1f1f2a;
     border: 1px solid #4b5563;
-    border-radius: 2rem;
+    border-radius: 6px;
     padding: 0.5rem 1rem;
     color: #e2e8f0;
     font-family: 'Rubik', monospace;
@@ -45,7 +45,7 @@
 .validation-message {
     background: rgba(180, 83, 9, 0.2);
     border: 1px solid #b45309;
-    border-radius: 0.5rem;
+    border-radius: 6px;
     padding: 0.75rem;
     margin-bottom: 1rem;
     text-align: center;
@@ -57,7 +57,7 @@
     .export-name-section {
         flex-direction: column;
         align-items: stretch;
-        border-radius: 1rem;
+        border-radius: 8px;
     }
     
     .export-name-input {

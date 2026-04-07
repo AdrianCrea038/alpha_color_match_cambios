@@ -97,6 +97,96 @@ class AlphaColorMatch {
         this.equivalenceGroups = this.buildEquivalenceGroups();
         
         this.init();
+        this.loadFromLocalStorage();
+    }
+    
+    // ============================================================
+    // LOCALSTORAGE - Guardar y cargar datos
+    // ============================================================
+    
+    saveToLocalStorage() {
+        const dataToSave = {
+            primaryData: this.primaryData,
+            secondaryData: this.secondaryData,
+            results: this.results,
+            selectedPending: Array.from(this.selectedPending),
+            deletedPending: Array.from(this.deletedPending),
+            groupSelections: Array.from(this.groupSelections.entries()),
+            manualGroupSelections: Array.from(this.manualGroupSelections),
+            autoAddedItems: this.autoAddedItems
+        };
+        localStorage.setItem('alphaColorMatchData', JSON.stringify(dataToSave));
+        console.log('💾 Datos guardados en localStorage');
+    }
+    
+    loadFromLocalStorage() {
+        const savedData = localStorage.getItem('alphaColorMatchData');
+        if (savedData) {
+            try {
+                const data = JSON.parse(savedData);
+                this.primaryData = data.primaryData || [];
+                this.secondaryData = data.secondaryData || [];
+                this.results = data.results || [];
+                this.selectedPending = new Set(data.selectedPending || []);
+                this.deletedPending = new Set(data.deletedPending || []);
+                this.groupSelections = new Map(data.groupSelections || []);
+                this.manualGroupSelections = new Set(data.manualGroupSelections || []);
+                this.autoAddedItems = data.autoAddedItems || [];
+                
+                // Actualizar UI con los datos cargados
+                this.updateUIFromLoadedData();
+                console.log('📂 Datos cargados desde localStorage');
+            } catch (e) {
+                console.error('Error al cargar datos:', e);
+            }
+        }
+    }
+    
+    clearCache() {
+        if (confirm('¿Estás seguro de que quieres limpiar toda la caché? Se perderán los datos no exportados.')) {
+            localStorage.removeItem('alphaColorMatchData');
+            this.primaryData = [];
+            this.secondaryData = [];
+            this.results = [];
+            this.selectedPending.clear();
+            this.deletedPending.clear();
+            this.groupSelections.clear();
+            this.manualGroupSelections.clear();
+            this.autoAddedItems = [];
+            
+            // Limpiar UI
+            this.updateFileInfo('primary', 'Ningún archivo cargado', 0);
+            this.updateFileInfo('secondary', 'Ningún archivo cargado', 0);
+            this.renderDataList('primary', []);
+            this.renderDataList('secondary', []);
+            
+            const panel = document.getElementById('resultsPanel');
+            if (panel) panel.style.display = 'none';
+            
+            const exportBtn = document.getElementById('exportBtn');
+            if (exportBtn) exportBtn.disabled = true;
+            
+            alert('✅ Caché limpiada correctamente');
+            console.log('🗑️ Caché limpiada');
+        }
+    }
+    
+    updateUIFromLoadedData() {
+        // Actualizar vistas si hay datos
+        if (this.primaryData.length > 0) {
+            this.updateFileInfo('primary', 'Datos cargados desde caché', this.primaryData.length);
+            this.renderDataList('primary', this.primaryData);
+        }
+        
+        if (this.secondaryData.length > 0) {
+            this.updateFileInfo('secondary', 'Datos cargados desde caché', this.secondaryData.length);
+            this.renderDataList('secondary', this.secondaryData);
+        }
+        
+        if (this.results.length > 0) {
+            this.renderResults(this.results);
+            this.validateExportReady();
+        }
     }
     
     buildEquivalenceGroups() {
@@ -180,6 +270,13 @@ class AlphaColorMatch {
         this.initCreatorView();
         this.initEPSView();
         this.initViews();
+        
+        // Agregar evento para limpiar caché
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        if (clearCacheBtn) {
+            clearCacheBtn.addEventListener('click', () => this.clearCache());
+        }
+        
         console.log('✅ Alpha Color Match - Versión Corregida');
     }
     
@@ -284,6 +381,7 @@ class AlphaColorMatch {
         console.log(`🎨 Grupo ${groupId}: usando valores ${source === 'primary' ? 'PRINCIPAL' : 'SECUNDARIO'} (manual)`);
         this.renderResults(this.results);
         this.validateExportReady();
+        this.saveToLocalStorage();
     }
     
     getGroupSelection(groupId) {
@@ -307,6 +405,7 @@ class AlphaColorMatch {
         console.log(`🔄 Reemplazados ${groups.size} grupos NO modificados a valores SECUNDARIO`);
         this.renderResults(this.results);
         this.validateExportReady();
+        this.saveToLocalStorage();
     }
     
     togglePendingAdd(itemId) {
@@ -314,6 +413,7 @@ class AlphaColorMatch {
         this.deletedPending.delete(itemId);
         this.renderResults(this.results);
         this.validateExportReady();
+        this.saveToLocalStorage();
         console.log(`➕ Pendiente agregado: ${itemId}`);
     }
     
@@ -322,6 +422,7 @@ class AlphaColorMatch {
         this.deletedPending.add(itemId);
         this.renderResults(this.results);
         this.validateExportReady();
+        this.saveToLocalStorage();
         console.log(`🗑️ Pendiente eliminado: ${itemId}`);
     }
     
@@ -507,6 +608,7 @@ class AlphaColorMatch {
             this.primaryData = this.parseTxtContent(content);
             this.updateFileInfo('primary', file.name, this.primaryData.length);
             this.renderDataList('primary', this.primaryData);
+            this.saveToLocalStorage();
             console.log(`✅ Principal: ${this.primaryData.length} colores`);
         };
         reader.readAsText(file);
@@ -521,6 +623,7 @@ class AlphaColorMatch {
             this.secondaryData = this.parseTxtContent(content);
             this.updateFileInfo('secondary', file.name, this.secondaryData.length);
             this.renderDataList('secondary', this.secondaryData);
+            this.saveToLocalStorage();
             console.log(`✅ Secundario: ${this.secondaryData.length} colores`);
         };
         reader.readAsText(file);
@@ -575,6 +678,7 @@ class AlphaColorMatch {
         this.autoAddedItems = [];
         console.log('🔍 Comparando archivos...');
         this.findMatches();
+        this.saveToLocalStorage();
     }
     
     findMatches() {

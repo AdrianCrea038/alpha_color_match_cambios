@@ -22,10 +22,9 @@
     gap: 0.75rem;
 }
 
-/* Botones principales */
 .creator-header-buttons button {
-    padding: 0.6rem 1.2rem;
-    border-radius: 2rem;
+    padding: 0.55rem 1.2rem;
+    border-radius: 6px;
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
@@ -60,7 +59,6 @@
     transform: none;
 }
 
-/* Selector de base de datos */
 .database-selector {
     margin-bottom: 1.5rem;
     display: flex;
@@ -68,7 +66,7 @@
     gap: 1rem;
     padding: 0.75rem 1rem;
     background: #111117;
-    border-radius: 0.75rem;
+    border-radius: 8px;
     border: 1px solid #2d3748;
     flex-wrap: wrap;
 }
@@ -82,7 +80,7 @@
 .database-select {
     background: #1f1f2a;
     border: 1px solid #4b5563;
-    border-radius: 2rem;
+    border-radius: 6px;
     padding: 0.5rem 1rem;
     color: #e2e8f0;
     font-size: 0.85rem;
@@ -101,7 +99,6 @@
     box-shadow: 0 0 5px rgba(79, 70, 229, 0.3);
 }
 
-/* Controles */
 .creator-controls {
     display: flex;
     gap: 1rem;
@@ -110,8 +107,8 @@
 }
 
 .creator-controls button {
-    padding: 0.6rem 1.2rem;
-    border-radius: 2rem;
+    padding: 0.55rem 1.2rem;
+    border-radius: 6px;
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
@@ -126,12 +123,11 @@
     transform: translateY(-1px);
 }
 
-/* Tabla */
 .table-wrapper {
     overflow-x: auto;
     max-height: 550px;
     overflow-y: auto;
-    border-radius: 1rem;
+    border-radius: 8px;
     border: 1px solid #2d3748;
     background: #0c0c12;
 }
@@ -163,13 +159,12 @@
     vertical-align: middle;
 }
 
-/* Inputs */
 .creator-table input {
     width: 100%;
     background: #1e1e2c;
     border: 1px solid #4b5563;
     color: #e2e8f0;
-    border-radius: 0.4rem;
+    border-radius: 6px;
     padding: 0.4rem;
     font-size: 0.75rem;
     font-family: monospace;
@@ -188,7 +183,6 @@
     cursor: not-allowed;
 }
 
-/* Filas bloqueadas */
 .creator-table tr.locked-row {
     background: rgba(21, 128, 61, 0.1);
     border-left: 3px solid #15803d;
@@ -198,7 +192,6 @@
     border-left: 3px solid #15803d;
 }
 
-/* Número de fila */
 .row-number {
     font-weight: bold;
     color: #fbbf24;
@@ -206,7 +199,6 @@
     font-size: 0.8rem;
 }
 
-/* Estado */
 .status-cell {
     text-align: center;
 }
@@ -214,7 +206,7 @@
 .status-badge {
     display: inline-block;
     padding: 0.25rem 0.6rem;
-    border-radius: 2rem;
+    border-radius: 20px;
     font-size: 0.7rem;
     font-weight: 600;
 }
@@ -225,7 +217,6 @@
     box-shadow: 0 0 5px rgba(21, 128, 61, 0.3);
 }
 
-/* Botones de acción */
 .actions-cell {
     text-align: center;
     white-space: nowrap;
@@ -234,7 +225,7 @@
 .btn-lock, .btn-modify {
     width: 32px;
     height: 32px;
-    border-radius: 0.5rem;
+    border-radius: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -266,7 +257,6 @@
     box-shadow: 0 2px 8px rgba(180, 83, 9, 0.4);
 }
 
-/* Estado vacío */
 .empty-state {
     text-align: center;
     padding: 3rem;
@@ -279,7 +269,6 @@
     opacity: 0.5;
 }
 
-/* Modal */
 .modal-content .form-group {
     margin-bottom: 1rem;
 }
@@ -289,7 +278,7 @@
     width: 100%;
     background: #1e1e2c;
     border: 1px solid #4b5563;
-    border-radius: 0.5rem;
+    border-radius: 6px;
     padding: 0.6rem;
     color: #e2e8f0;
     font-size: 0.85rem;
@@ -310,7 +299,6 @@
     display: block;
 }
 
-/* Responsive */
 @media (max-width: 1200px) {
     .creator-table {
         overflow-x: auto;

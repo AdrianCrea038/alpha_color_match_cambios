@@ -21,7 +21,7 @@
 .modal-content {
     background: #0c0c12;
     border: 1px solid #2d3748;
-    border-radius: 1rem;
+    border-radius: 10px;
     max-width: 900px;
     width: 90%;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -33,7 +33,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 1rem 1rem 0 0;
+    border-radius: 10px 10px 0 0;
 }
 
 .modal-header h3 {

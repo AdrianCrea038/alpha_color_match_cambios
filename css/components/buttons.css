@@ -1,98 +1,332 @@
+/* ============================================ */
+/* BOTONES - Estilo outline moderno */
+/* Sin rellenos, sin velos, sin opacidad extra */
+/* Incluye: Comparar, Historial, Crear TXT, EPS */
+/* ============================================ */
+
+/* Botón COMPARAR */
 .compare-btn {
-    background: #2d4ed6;
-    color: white;
-    border: none;
-    padding: 0.75rem 2rem;
-    border-radius: 2rem;
-    font-size: 1rem;
+    background: transparent !important;
+    color: #00e5ff;
+    border: 1.5px solid #00e5ff;
+    padding: 0.65rem 1.8rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     font-family: 'Rubik', sans-serif;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.3);
 }
 
 .compare-btn:hover {
-    transform: translateY(-1px);
+    background: rgba(0, 229, 255, 0.1) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.5);
 }
 
 .compare-btn:disabled {
-    background: #4b5563;
+    opacity: 0.4;
     cursor: not-allowed;
     transform: none;
+    box-shadow: none;
 }
 
-.small-btn {
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.7rem;
+/* Botón "Reemplazar valor secundario" */
+#replaceAllSecondaryBtn {
+    background: transparent !important;
+    color: #f97316;
+    border: 1.5px solid #f97316;
+    padding: 0.65rem 1.8rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Rubik', sans-serif;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.3);
+}
+
+#replaceAllSecondaryBtn:hover {
+    background: rgba(249, 115, 22, 0.1) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 0 14px rgba(249, 115, 22, 0.5);
+}
+
+/* Botón "Exportar archivo" */
+#exportBtn {
+    background: transparent !important;
+    color: #4ade80;
+    border: 1.5px solid #4ade80;
+    padding: 0.65rem 1.8rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Rubik', sans-serif;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+}
+
+#exportBtn:hover:not(:disabled) {
+    background: rgba(74, 222, 128, 0.1) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.5);
+}
+
+#exportBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ============================================ */
+/* BOTONES SECCIÓN HISTORIAL */
+/* ============================================ */
+
+/* Botón "Limpiar historial" */
+#clearHistoryBtn {
+    background: transparent !important;
+    color: #9ca3af;
+    border: 1.5px solid #9ca3af;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
-    border: none;
-    font-family: 'Rubik', sans-serif;
+    box-shadow: 0 0 4px rgba(156, 163, 175, 0.2);
 }
 
-.btn-success {
-    background: #15803d;
-    color: white;
-}
-
-.btn-success:hover:not(:disabled) {
-    background: #166534;
+#clearHistoryBtn:hover {
+    background: rgba(156, 163, 175, 0.1) !important;
     transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(156, 163, 175, 0.3);
 }
 
-.btn-danger {
-    background: #991b1b;
-    color: white;
-}
+/* ============================================ */
+/* BOTONES SECCIÓN CREAR TXT */
+/* ============================================ */
 
-.btn-danger:hover:not(:disabled) {
-    background: #7f1a1a;
-    transform: translateY(-1px);
-}
-
-.btn-success:disabled,
-.btn-danger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.btn {
-    padding: 0.6rem 1.2rem;
-    border-radius: 2rem;
+/* Botones: Cargar TXT, Exportar, Agregar color */
+.creator-header-buttons button {
+    padding: 0.55rem 1.2rem;
+    border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
-    border: none;
+    background: transparent !important;
+    border: 1.5px solid #00e5ff;
+    color: #00e5ff;
+    box-shadow: 0 0 4px rgba(0, 229, 255, 0.2);
+}
+
+.creator-header-buttons button:hover {
+    background: rgba(0, 229, 255, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+/* Botón "Agregar color" (verde) */
+.creator-controls button {
+    padding: 0.55rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent !important;
+    border: 1.5px solid #4ade80;
+    color: #4ade80;
+    box-shadow: 0 0 4px rgba(74, 222, 128, 0.2);
+}
+
+.creator-controls button:hover {
+    background: rgba(74, 222, 128, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
+}
+
+/* ============================================ */
+/* BOTONES SECCIÓN EPS */
+/* ============================================ */
+
+/* Botones: Actualizar preview, Exportar EPS */
+.eps-header-buttons button {
+    padding: 0.55rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent !important;
+    border: 1.5px solid #00e5ff;
+    color: #00e5ff;
+    box-shadow: 0 0 4px rgba(0, 229, 255, 0.2);
+}
+
+.eps-header-buttons button:hover {
+    background: rgba(0, 229, 255, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+}
+
+/* Botón "Exportar EPS" (verde) */
+.eps-header-buttons button:last-child {
+    border-color: #4ade80;
+    color: #4ade80;
+    box-shadow: 0 0 4px rgba(74, 222, 128, 0.2);
+}
+
+.eps-header-buttons button:last-child:hover {
+    background: rgba(74, 222, 128, 0.1) !important;
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
+}
+
+/* ============================================ */
+/* BOTONES PEQUEÑOS (Agregar/Eliminar pendientes) */
+/* ============================================ */
+
+.small-btn {
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent !important;
     font-family: 'Rubik', sans-serif;
 }
 
-.btn-primary {
-    background: #2d4ed6;
-    color: white;
+.btn-success {
+    color: #4ade80;
+    border: 1px solid #4ade80;
+    box-shadow: 0 0 4px rgba(74, 222, 128, 0.2);
 }
 
-.btn-primary:hover {
-    background: #1e40af;
+.btn-success:hover:not(:disabled) {
+    background: rgba(74, 222, 128, 0.1) !important;
     transform: translateY(-1px);
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
+}
+
+.btn-danger {
+    color: #f87171;
+    border: 1px solid #f87171;
+    box-shadow: 0 0 4px rgba(248, 113, 113, 0.2);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.4);
+}
+
+.btn-success:disabled,
+.btn-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ============================================ */
+/* BOTONES DE SELECCIÓN EN TABLA */
+/* ============================================ */
+
+.selection-btn {
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid #4b5563;
+    background: transparent !important;
+    color: #e2e8f0;
+    text-align: center;
+    font-family: 'Rubik', sans-serif;
+}
+
+.selection-btn:hover {
+    transform: translateY(-1px);
+    border-color: #00e5ff;
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+.selection-btn.active-primary {
+    background: rgba(0, 229, 255, 0.15) !important;
+    border-color: #00e5ff !important;
+    color: #00e5ff !important;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.5) !important;
+}
+
+.selection-btn.active-secondary {
+    background: rgba(249, 115, 22, 0.15) !important;
+    border-color: #f97316 !important;
+    color: #f97316 !important;
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.4) !important;
+}
+
+/* ============================================ */
+/* BOTONES GENÉRICOS */
+/* ============================================ */
+
+.btn {
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent !important;
+    font-family: 'Rubik', sans-serif;
+    color: #00e5ff;
+    border: 1.5px solid #00e5ff;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.2);
+}
+
+.btn:hover {
+    background: rgba(0, 229, 255, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
 }
 
 .btn-secondary {
-    background: #2d3748;
-    color: white;
+    color: #9ca3af;
+    border: 1.5px solid #9ca3af;
+    box-shadow: 0 0 4px rgba(156, 163, 175, 0.2);
 }
 
 .btn-secondary:hover {
-    background: #1a202c;
-    transform: translateY(-1px);
+    background: rgba(156, 163, 175, 0.1) !important;
+    box-shadow: 0 0 8px rgba(156, 163, 175, 0.3);
 }
+
+/* ============================================ */
+/* RESPONSIVE */
+/* ============================================ */
 
 @media (max-width: 768px) {
     .compare-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
+        padding: 0.5rem 1.2rem;
+        font-size: 0.8rem;
+    }
+    
+    .selection-btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.65rem;
+    }
+    
+    .creator-header-buttons button,
+    .eps-header-buttons button,
+    .creator-controls button {
+        padding: 0.45rem 1rem;
+        font-size: 0.75rem;
     }
 }
