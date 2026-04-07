@@ -1,7 +1,7 @@
 // ============================================================
 // EPS VIEW - Exportar colores pendientes a EPS
-// Versión con textos (Plotter, CMYK, nombre) y tipografía Arial
-// Estructura de spot color que ya funciona
+// Versión CORREGIDA - Usa la estructura que funciona
+// Basado en el código de prueba que SÍ generaba el rectángulo
 // ============================================================
 
 export class EPSView {
@@ -131,6 +131,9 @@ export class EPSView {
         }
     }
     
+    // ============================================================
+    // ESTRUCTURA EPS CORREGIDA - Basada en el código que FUNCIONA
+    // ============================================================
     generateEPSContent() {
         const colors = this.getPendingColorsSorted();
         const plotterValue = this.app && this.app.creatorView ? this.app.creatorView.getGlobalPlotter() : 14;
@@ -139,9 +142,11 @@ export class EPSView {
             return null;
         }
         
-        const cmToPoints = 28.3465;
-        const boxSize = Math.round(10 * cmToPoints); // 10cm en puntos
-        const margin = Math.round(0.5 * cmToPoints); // 5mm en puntos
+        // Tamaño en puntos (1 punto = 1/72 pulgada)
+        // 10cm = 283.464566929 puntos
+        const cmToPoints = 28.3464566929;
+        const boxSize = 10 * cmToPoints; // 283.464566929 puntos
+        const margin = 0.5 * cmToPoints; // 5mm = 14.1732283465 puntos
         const cols = Math.min(colors.length, 5);
         const rows = Math.ceil(colors.length / cols);
         
@@ -149,16 +154,16 @@ export class EPSView {
         const pageHeight = (boxSize + margin) * rows + margin;
         
         let eps = `%!PS-Adobe-3.0 EPSF-3.0
-%%BoundingBox: 0 0 ${pageWidth} ${pageHeight}
+%%BoundingBox: 0 0 ${Math.round(pageWidth)} ${Math.round(pageHeight)}
+%%HiResBoundingBox: 0 0 ${pageWidth} ${pageHeight}
 %%Title: Alpha Color Match EPS Export
 %%Creator: Alpha Color Match
-%%CreationDate: ${new Date().toLocaleString()}
 %%LanguageLevel: 2
-%%EndComments
-
+%%Pages: 1
+%%DocumentProcessColors: Cyan Magenta Yellow Black
 `;
         
-        // Agregar cada spot color en el encabezado
+        // Agregar cada spot color al encabezado
         for (let i = 0; i < colors.length; i++) {
             const color = colors[i];
             const spotName = `${color.name} ${color.nk}`.toUpperCase();
@@ -174,94 +179,87 @@ export class EPSView {
         
         eps += `%%EndComments
 
-% Definir tipografía Arial (Helvetica en PostScript)
-/Helvetica findfont 12 scalefont setfont
+%%BeginProlog
+/boxSize ${boxSize} def
+/margin ${margin} def
+/cols ${cols} def
+/rows ${rows} def
+/pageWidth ${pageWidth} def
+/pageHeight ${pageHeight} def
 
-% Definir función para dibujar rectángulo
-/drawRect {
-    newpath
-    4 2 roll
-    moveto
-    1 index 0 rlineto
-    0 exch rlineto
-    neg 0 rlineto
-    closepath
-    fill
-} def
+/Helvetica findfont 10 scalefont setfont
+%%EndProlog
 
-% Definir función para dibujar texto
-/drawText {
-    /txt exch def
-    /y exch def
-    /x exch def
-    newpath
-    x y moveto
-    txt show
-} def
+%%Page: 1 1
+%%BeginPageSetup
+<< /PageSize [pageWidth pageHeight] >> setpagedevice
+0 0 translate
+%%EndPageSetup
+
+gsave
+1 1 1 setrgbcolor
+0 0 pageWidth pageHeight rectfill
 
 `;
         
-        // Definir cada spot color
+        // Dibujar cada rectángulo con su spot color
         for (let i = 0; i < colors.length; i++) {
             const color = colors[i];
             const spotName = `${color.name} ${color.nk}`.toUpperCase();
-            const c = (color.cmyk.c / 100).toFixed(6);
-            const m = (color.cmyk.m / 100).toFixed(6);
-            const yVal = (color.cmyk.y / 100).toFixed(6);
-            const k = (color.cmyk.k / 100).toFixed(6);
-            
-            eps += `/SpotColor${i} {
-    [/Separation (${this.escapePS(spotName)}) /DeviceCMYK {
-        ${c} ${m} ${yVal} ${k}
-    } ] setcolorspace
-} def
-
-`;
-        }
-        
-        // Dibujar cada rectángulo con su texto
-        for (let i = 0; i < colors.length; i++) {
-            const color = colors[i];
             const col = i % 5;
             const row = Math.floor(i / 5);
             
             const x = margin + col * (boxSize + margin);
             const y = pageHeight - margin - (row + 1) * (boxSize + margin);
-            const spotName = `${color.name} ${color.nk}`.toUpperCase();
+            
+            const cDec = (color.cmyk.c / 100).toFixed(6);
+            const mDec = (color.cmyk.m / 100).toFixed(6);
+            const yDec = (color.cmyk.y / 100).toFixed(6);
+            const kDec = (color.cmyk.k / 100).toFixed(6);
+            
             const cInt = Math.round(color.cmyk.c);
             const mInt = Math.round(color.cmyk.m);
             const yInt = Math.round(color.cmyk.y);
             const kInt = Math.round(color.cmyk.k);
             
-            // Posiciones para el texto
-            const textX = x + 8;
-            const plotterY = y + boxSize - 12;
-            const cmykY = y + boxSize - 28;
-            const nameY = y + 18;
+            // Posiciones para texto
+            const textX = x + 10;
+            const plotterY = y + boxSize - 15;
+            const cmykY = y + boxSize - 35;
+            const nameY = y + 20;
             
-            eps += `% Color ${i + 1}: ${spotName}
-SpotColor${i}
+            eps += `% ============================================
+% Color ${i + 1}: ${this.escapePS(spotName)}
+% ============================================
 
-% Dibujar rectángulo
-${x} ${y} ${boxSize} ${boxSize} drawRect
+% SPOT COLOR - ESTRUCTURA QUE FUNCIONA
+[/Separation (${this.escapePS(spotName)}) /DeviceCMYK { ${cDec} ${mDec} ${yDec} ${kDec} }] setcolorspace
+newpath
+${x} ${y} moveto
+${x + boxSize} ${y} lineto
+${x + boxSize} ${y + boxSize} lineto
+${x} ${y + boxSize} lineto
+closepath
+fill
 
-% Dibujar texto (Plotter)
+% TEXTO PLOTTER
 0 0 0 setrgbcolor
 /Helvetica findfont 12 scalefont setfont
 ${textX} ${plotterY} moveto (Plotter: ${plotterValue}) show
 
-% Dibujar valores CMYK
+% TEXTO CMYK
 /Helvetica findfont 10 scalefont setfont
 ${textX} ${cmykY} moveto (C:${cInt}  M:${mInt}  Y:${yInt}  K:${kInt}) show
 
-% Dibujar nombre del spot
-/Helvetica findfont 10 scalefont setfont
+% TEXTO NOMBRE DEL SPOT
+/Helvetica findfont 8 scalefont setfont
 ${textX} ${nameY} moveto (${this.escapePS(spotName)}) show
 
 `;
         }
         
-        eps += `showpage
+        eps += `grestore
+showpage
 %%EOF`;
         
         return eps;
