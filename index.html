@@ -20,8 +20,8 @@
                 <span>Comparar</span>
             </div>
             <div class="menu-item" data-view="history">
-                <i class="fas fa-history"></i>
-                <span>Historial</span>
+                <i class="fas fa-inbox"></i>
+                <span>Bandeja</span>
             </div>
             <div class="menu-item" data-view="creator">
                 <i class="fas fa-file-alt"></i>
@@ -119,16 +119,15 @@
                     </div>
                 </div>
 
-                <!-- Vista Historial -->
+                <!-- Vista Bandeja de Entrada -->
                 <div id="historyView" class="view-content">
                     <div class="history-header">
-                        <h3>📜 Historial de Comparaciones</h3>
-                        <button id="clearHistoryBtn" class="btn-outline">🗑️ Limpiar historial</button>
-                    </div>
+                        <h3>📬 Bandeja de Entrada</h3>
+                                            </div>
                     <div class="history-list" id="historyList">
                         <div class="empty-state">
                             <div class="empty-icon">📭</div>
-                            <p>No hay historial de comparaciones</p>
+                            <p>No hay registros en la bandeja</p>
                         </div>
                     </div>
                 </div>
@@ -148,6 +147,7 @@
                             </div>
                             <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar archivo</button>
                             <button id="downloadTxtBtn" class="btn-primary" disabled>💾 Exportar</button>
+                            <button id="sendToInboxBtn" class="btn-secondary" style="background:#2d4ed6;" disabled>📤 Enviar a Bandeja</button>
                         </div>
                     </div>
                     

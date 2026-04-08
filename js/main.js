@@ -5,6 +5,7 @@
 import { CreatorView } from './modules/views/creatorView.js';
 import { EPSView } from './modules/views/epsView.js';
 import { DevelopmentView } from './modules/views/developmentView.js';
+import { HistoryView } from './modules/views/historyView.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -19,6 +20,12 @@ class AlphaColorMatch {
         
         // Librería de TXTs por plotter
         this.libraryTxts = []; // { plotter, name, content, uploadDate }
+        
+        // Bandeja de entrada (inbox)
+        this.inboxItems = []; // { id, filename, content, user, reason, date, colorCount, plotter, isRead }
+        
+        // Usuario actual (temporal)
+        this.currentUser = 'usuario_admin';
         
         // Tabla de equivalencia de nombres
         this.equivalencyRows = [
@@ -82,12 +89,14 @@ class AlphaColorMatch {
         this.creatorView = null;
         this.epsView = null;
         this.developmentView = null;
+        this.historyView = null;
         
         this.equivalenceGroups = this.buildEquivalenceGroups();
         
         this.init();
         this.loadFromLocalStorage();
         this.loadLibraryTxtsFromLocalStorage();
+        this.loadInboxFromLocalStorage();
     }
     
     saveToLocalStorage() {
@@ -200,12 +209,108 @@ class AlphaColorMatch {
         return false;
     }
     
+    // ============================================================
+    // BANDEJA DE ENTRADA (INBOX)
+    // ============================================================
+    
+    saveInboxToLocalStorage() {
+        localStorage.setItem('alphaColorMatchInbox', JSON.stringify(this.inboxItems));
+        console.log('💾 Bandeja de entrada guardada');
+    }
+    
+    loadInboxFromLocalStorage() {
+        const saved = localStorage.getItem('alphaColorMatchInbox');
+        if (saved) {
+            try {
+                this.inboxItems = JSON.parse(saved);
+                console.log('📂 Bandeja de entrada cargada:', this.inboxItems.length, 'mensajes');
+            } catch(e) {
+                console.error(e);
+                this.inboxItems = [];
+            }
+        }
+    }
+    
+    addToInbox(filename, content, reason, plotter, colorCount) {
+        const newItem = {
+            id: Date.now(),
+            filename: filename,
+            content: content,
+            user: this.currentUser,
+            reason: reason,
+            date: new Date().toISOString(),
+            colorCount: colorCount,
+            plotter: plotter,
+            isRead: false
+        };
+        this.inboxItems.unshift(newItem);
+        this.saveInboxToLocalStorage();
+        console.log(`📬 Mensaje enviado a bandeja: "${filename}"`);
+        return newItem;
+    }
+    
+    getInboxItems() {
+        return this.inboxItems;
+    }
+    
+    markInboxAsRead(id) {
+        const item = this.inboxItems.find(i => i.id === id);
+        if (item) {
+            item.isRead = true;
+            this.saveInboxToLocalStorage();
+            console.log(`✅ Mensaje ${id} marcado como leído`);
+            return true;
+        }
+        return false;
+    }
+    
+    markInboxAsUnread(id) {
+        const item = this.inboxItems.find(i => i.id === id);
+        if (item) {
+            item.isRead = false;
+            this.saveInboxToLocalStorage();
+            console.log(`📩 Mensaje ${id} marcado como no leído`);
+            return true;
+        }
+        return false;
+    }
+    
+    deleteFromInbox(id) {
+        const index = this.inboxItems.findIndex(i => i.id === id);
+        if (index !== -1) {
+            this.inboxItems.splice(index, 1);
+            this.saveInboxToLocalStorage();
+            console.log(`🗑️ Mensaje ${id} eliminado de la bandeja`);
+            return true;
+        }
+        return false;
+    }
+    
+    // ============================================================
+    // CARGAR DESDE BANDEJA A SECUNDARIO
+    // ============================================================
+    
+    loadSecondaryFromInbox(content, filename) {
+        try {
+            this.secondaryData = this.parseTxtContent(content);
+            this.updateFileInfo('secondary', filename, this.secondaryData.length);
+            this.renderDataList('secondary', this.secondaryData);
+            this.saveToLocalStorage();
+            console.log(`✅ Secundario cargado desde bandeja: ${filename} (${this.secondaryData.length} colores)`);
+            return true;
+        } catch (error) {
+            console.error('Error al cargar desde bandeja:', error);
+            return false;
+        }
+    }
+    
     clearCache() {
         if (confirm('¿Estás seguro de que quieres limpiar toda la caché? Se perderán los datos no exportados.')) {
             localStorage.removeItem('alphaColorMatchData');
             localStorage.removeItem('alphaColorMatchEquivalencyRows');
             localStorage.removeItem('developmentColors');
             localStorage.removeItem('alphaColorMatchLibrary');
+            localStorage.removeItem('alphaColorMatchInbox');
             this.primaryData = [];
             this.secondaryData = [];
             this.results = [];
@@ -215,6 +320,7 @@ class AlphaColorMatch {
             this.manualGroupSelections.clear();
             this.autoAddedItems = [];
             this.libraryTxts = [];
+            this.inboxItems = [];
             
             this.equivalencyRows = [
                 ["00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
@@ -399,6 +505,7 @@ class AlphaColorMatch {
         this.initCreatorView();
         this.initEPSView();
         this.initDevelopmentView();
+        this.initHistoryView();
         this.initViews();
         
         const clearCacheBtn = document.getElementById('clearCacheBtn');
@@ -433,6 +540,11 @@ class AlphaColorMatch {
         console.log('✅ DevelopmentView inicializado');
     }
     
+    initHistoryView() {
+        this.historyView = new HistoryView(this);
+        console.log('✅ HistoryView (Bandeja) inicializado');
+    }
+    
     initViews() {
         const menuItems = document.querySelectorAll('.menu-item');
         const views = {
@@ -465,8 +577,8 @@ class AlphaColorMatch {
             if (viewName === 'development' && this.developmentView) {
                 this.developmentView.render();
             }
-            if (viewName === 'history') {
-                if (this.loadHistory) this.loadHistory();
+            if (viewName === 'history' && this.historyView) {
+                this.historyView.render();
             }
         };
         

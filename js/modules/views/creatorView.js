@@ -3,6 +3,7 @@
 // - Ahora carga desde librería interna (no desde archivo local)
 // - Selección de plotter y archivo TXT de la librería
 // - Plotter global (1-17) para todos los colores del archivo
+// - Botón "Enviar a Bandeja" (solo cuando todos los colores están aprobados)
 // ============================================================
 
 export class CreatorView {
@@ -17,12 +18,10 @@ export class CreatorView {
         
         this.tableBody = null;
         this.downloadBtn = null;
-        this.addBtn = null;
-        this.loadFileBtn = null;
         this.plotterSelect = null;
-        this.databaseSelect = null;
         this.librarySelect = null;
         this.loadLibraryBtn = null;
+        this.sendToInboxBtn = null;
         
         this.init();
     }
@@ -30,11 +29,10 @@ export class CreatorView {
     init() {
         this.tableBody = document.getElementById('creatorTableBody');
         this.downloadBtn = document.getElementById('downloadTxtBtn');
-        this.addBtn = document.getElementById('addColorRowBtn');
         this.plotterSelect = document.getElementById('globalPlotter');
-        this.databaseSelect = document.getElementById('databaseSelect');
         this.librarySelect = document.getElementById('libraryFileSelect');
         this.loadLibraryBtn = document.getElementById('loadLibraryBtn');
+        this.sendToInboxBtn = document.getElementById('sendToInboxBtn');
         
         if (!this.tableBody) return;
         
@@ -51,12 +49,12 @@ export class CreatorView {
             this.loadLibraryBtn.onclick = () => this.loadFromLibrary();
         }
         
-        if (this.addBtn) {
-            this.addBtn.onclick = () => this.showAddColorModal();
-        }
-        
         if (this.downloadBtn) {
             this.downloadBtn.onclick = () => this.download();
+        }
+        
+        if (this.sendToInboxBtn) {
+            this.sendToInboxBtn.onclick = () => this.showSendToInboxModal();
         }
         
         this.updateLibrarySelect();
@@ -150,6 +148,7 @@ export class CreatorView {
         } else {
             alert('⚠️ No se encontraron colores en el archivo.');
         }
+        this.checkAndUpdateSendButton();
     }
     
     getGlobalPlotter() {
@@ -158,68 +157,6 @@ export class CreatorView {
     
     getPendingColors() {
         return this.colors.filter(color => !color.isLocked);
-    }
-    
-    showAddColorModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 450px;">
-                <div class="modal-header" style="background: #15803d;">
-                    <h3 style="color: white;">➕ Agregar nuevo color</h3>
-                    <button class="modal-close" style="color: white;">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="newColorName">Nombre del color:</label>
-                        <input type="text" id="newColorName" class="color-name-input" placeholder="Ej: 10F TM WHITE" style="width:100%; padding:0.5rem; margin-top:0.25rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
-                    </div>
-                    <div class="form-group" style="margin-top: 1rem;">
-                        <label for="newColorNK">NK (Código de tela):</label>
-                        <input type="text" id="newColorNK" class="nk-input" placeholder="Ej: NK1022684 o T36943" style="width:100%; padding:0.5rem; margin-top:0.25rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
-                    </div>
-                    <div class="form-group" style="margin-top: 1rem;">
-                        <label for="addColorReason">Motivo de la adición:</label>
-                        <textarea id="addColorReason" class="undo-reason-input" rows="3" placeholder="Ej: Nuevo color necesario para el proyecto..."></textarea>
-                    </div>
-                    <p style="color: #fbbf24; font-size: 0.75rem; margin-top: 0.5rem;">⚠️ El motivo es obligatorio para agregar el color.</p>
-                </div>
-                <div class="modal-buttons">
-                    <button class="btn btn-secondary cancel-add">Cancelar</button>
-                    <button class="btn btn-primary confirm-add">Agregar</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        setTimeout(() => modal.classList.add('active'), 10);
-        
-        const closeModal = () => {
-            modal.classList.remove('active');
-            setTimeout(() => modal.remove(), 300);
-        };
-        
-        const nameInput = modal.querySelector('#newColorName');
-        const nkInput = modal.querySelector('#newColorNK');
-        const reasonTextarea = modal.querySelector('#addColorReason');
-        const confirmBtn = modal.querySelector('.confirm-add');
-        
-        modal.querySelector('.modal-close').onclick = closeModal;
-        modal.querySelector('.cancel-add').onclick = closeModal;
-        
-        confirmBtn.onclick = () => {
-            const name = nameInput.value.trim();
-            const nk = nkInput.value.trim();
-            const reason = reasonTextarea.value.trim();
-            if (!name) { alert('⚠️ Debe ingresar el nombre del color.'); return; }
-            if (!nk) { alert('⚠️ Debe ingresar el NK.'); return; }
-            if (!reason) { alert('⚠️ El motivo es obligatorio.'); return; }
-            this.addColor({ name, nk, cmyk: { c: 0, m: 0, y: 0, k: 0 }, lab: { l: 100, a: 0, b: 0 }, isLocked: false });
-            this.addToHistory(this.nextId - 1, 'ADD', reason);
-            closeModal();
-        };
-        
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     getComplementaryName(name) {
@@ -259,6 +196,7 @@ export class CreatorView {
         this.addToHistory(colorId, 'LOCK', 'Color marcado como bueno');
         this.renderTable();
         document.dispatchEvent(new CustomEvent('colorStatusChanged'));
+        this.checkAndUpdateSendButton();
     }
     
     unlockColor(colorId, reason) {
@@ -272,6 +210,7 @@ export class CreatorView {
         this.addToHistory(colorId, 'UNLOCK', reason);
         this.renderTable();
         document.dispatchEvent(new CustomEvent('colorStatusChanged'));
+        this.checkAndUpdateSendButton();
         return true;
     }
     
@@ -304,8 +243,9 @@ export class CreatorView {
     renderTable() {
         if (!this.tableBody) return;
         if (this.colors.length === 0) {
-            this.tableBody.innerHTML = '<tr><td colspan="12" class="empty-state">Agregue colores para comenzar<\/td><\/tr>';
+            this.tableBody.innerHTML = '<tr><td colspan="12" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td><\/tr>';
             if (this.downloadBtn) this.downloadBtn.disabled = true;
+            this.checkAndUpdateSendButton();
             return;
         }
         
@@ -339,6 +279,7 @@ export class CreatorView {
         if (this.downloadBtn) this.downloadBtn.disabled = !hasValidData;
         this.attachInputEvents();
         this.attachActionEvents();
+        this.checkAndUpdateSendButton();
     }
     
     attachInputEvents() {
@@ -439,6 +380,7 @@ export class CreatorView {
         this.nextId = 1;
         this.historyLog = [];
         this.renderTable();
+        this.checkAndUpdateSendButton();
     }
     
     getExportData() {
@@ -498,6 +440,92 @@ export class CreatorView {
         a.click();
         URL.revokeObjectURL(url);
         alert(`✅ Archivo exportado con ${exportItems.length} registros`);
+    }
+    
+    showSendToInboxModal() {
+        const exportItems = this.getExportData();
+        if (exportItems.length === 0) {
+            alert('No hay datos para enviar a la bandeja.');
+            return;
+        }
+        
+        const content = this.generateCGATSContent(exportItems);
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        const fileName = `color_creator_${timestamp}.txt`;
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 450px;">
+                <div class="modal-header" style="background: #2d4ed6;">
+                    <h3 style="color: white;">📤 Enviar a Bandeja de Entrada</h3>
+                    <button class="modal-close" style="color: white;">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Archivo:</strong> ${fileName}</p>
+                    <p><strong>Colores:</strong> ${exportItems.length}</p>
+                    <p><strong>Plotter:</strong> ${this.globalPlotter}</p>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label for="sendReason">Motivo del envío:</label>
+                        <textarea id="sendReason" rows="3" placeholder="Ej: Envío de paleta para producción del plotter..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
+                    </div>
+                    <p style="color: #fbbf24; font-size: 0.75rem; margin-top: 0.5rem;">⚠️ El motivo es obligatorio para enviar a la bandeja.</p>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn btn-secondary cancel-send">Cancelar</button>
+                    <button class="btn btn-primary confirm-send">✅ Enviar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        setTimeout(() => modal.classList.add('active'), 10);
+        
+        const closeModal = () => {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 300);
+        };
+        
+        const reasonTextarea = modal.querySelector('#sendReason');
+        
+        modal.querySelector('.modal-close').onclick = closeModal;
+        modal.querySelector('.cancel-send').onclick = closeModal;
+        
+        modal.querySelector('.confirm-send').onclick = () => {
+            const reason = reasonTextarea.value.trim();
+            if (!reason) {
+                alert('⚠️ Debe ingresar un motivo para enviar a la bandeja.');
+                return;
+            }
+            
+            if (this.app) {
+                this.app.addToInbox(fileName, content, reason, this.globalPlotter, exportItems.length);
+                alert(`✅ Archivo enviado a la bandeja de entrada.\nMotivo: ${reason}`);
+                closeModal();
+            } else {
+                alert('❌ Error al enviar a la bandeja.');
+                closeModal();
+            }
+        };
+        
+        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+    }
+    
+    checkAndUpdateSendButton() {
+        if (!this.sendToInboxBtn) return;
+        
+        const allLocked = this.colors.length > 0 && this.colors.every(color => color.isLocked === true);
+        
+        if (allLocked && this.colors.length > 0) {
+            this.sendToInboxBtn.disabled = false;
+            this.sendToInboxBtn.style.opacity = '1';
+            this.sendToInboxBtn.title = "Enviar a bandeja de entrada";
+        } else {
+            this.sendToInboxBtn.disabled = true;
+            this.sendToInboxBtn.style.opacity = '0.5';
+            const pendingCount = this.colors.filter(c => !c.isLocked).length;
+            this.sendToInboxBtn.title = `Faltan ${pendingCount} colores por aprobar para enviar`;
+        }
     }
     
     escapeHtml(str) {
