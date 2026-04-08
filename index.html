@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components/sidebar.css">
     <link rel="stylesheet" href="css/views/creator.css">
+    <link rel="stylesheet" href="css/views/development.css">
 </head>
 <body>
     <div class="app-wrapper">
@@ -29,6 +30,10 @@
             <div class="menu-item" data-view="eps">
                 <i class="fas fa-file-image"></i>
                 <span>EPS</span>
+            </div>
+            <div class="menu-item" data-view="development">
+                <i class="fas fa-palette"></i>
+                <span>Desarrollo</span>
             </div>
         </div>
 
@@ -133,7 +138,15 @@
                     <div class="creator-header">
                         <h3>✨ Crear Nuevo Archivo TXT</h3>
                         <div class="creator-header-buttons">
-                            <button id="loadTxtBtn" class="btn-secondary">📁 Cargar TXT</button>
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="color: #00e5ff; font-size: 0.85rem; font-weight: 500; background: rgba(0, 229, 255, 0.1); padding: 0.3rem 0.8rem; border-radius: 2rem; border: 1px solid rgba(0, 229, 255, 0.3);">
+                                    <i class="fas fa-file-alt"></i> TXT Paleta
+                                </span>
+                                <select id="libraryFileSelect" class="plotter-select" style="min-width: 220px;">
+                                    <option value="">-- Seleccionar archivo --</option>
+                                </select>
+                            </div>
+                            <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar archivo</button>
                             <button id="downloadTxtBtn" class="btn-primary" disabled>💾 Exportar</button>
                         </div>
                     </div>
@@ -152,19 +165,6 @@
                         <span class="plotter-info">(Valor único para todos los colores del archivo)</span>
                     </div>
                     
-                    <div class="database-selector">
-                        <label for="databaseSelect">📂 Base de datos:</label>
-                        <select id="databaseSelect" class="database-select">
-                            <option value="">-- Seleccionar base de datos --</option>
-                            <option value="db1">Base de datos 1 (ejemplo)</option>
-                            <option value="db2">Base de datos 2 (ejemplo)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="creator-controls">
-                        <button id="addColorRowBtn" class="btn-success">➕ Agregar color</button>
-                    </div>
-                    
                     <div class="table-wrapper creator-table">
                         <table class="data-table" id="creatorTable">
                             <thead>
@@ -174,7 +174,7 @@
                                 <th style="width:100px">b*</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
                             </thead>
                             <tbody id="creatorTableBody">
-                                60<td colspan="12" class="empty-state">Agregue colores para comenzar<\/td>60
+                                60<td colspan="12" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td>60
                             </tbody>
                          </table>
                     </div>
@@ -212,6 +212,10 @@
                             <li>Plotter: valor seleccionado en la sección "Crear TXT"</li>
                         </ul>
                     </div>
+                </div>
+
+                <!-- Vista Desarrollo -->
+                <div id="developmentView" class="view-content">
                 </div>
                 
                 <div class="footer">

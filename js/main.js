@@ -1,21 +1,10 @@
 // ============================================================
 // ALPHA COLOR MATCH - VERSIÓN FINAL CORREGIDA
-// - Agrupación correcta por NK + nombre normalizado de tabla
-// - Complementarios usan valores efectivos del grupo
-// - Pares equivalentes comparten los mismos valores CMYK
-// - Validación de pendientes funciona correctamente
-// - Nombre de archivo personalizable al exportar
-// - Detección inteligente de NK's por patrones
-// - Tabla de equivalencia expandida a 4 columnas
-// - Normalización elimina "TM" para mejor coincidencia
-// - Soporte para punto después del número correlativo (ej: "1. Nombre")
-// - Etiquetas HTML correctas en renderResults
-// - Vista Crear TXT con CreatorView integrado
-// - Vista EPS para exportar archivos .eps
 // ============================================================
 
 import { CreatorView } from './modules/views/creatorView.js';
 import { EPSView } from './modules/views/epsView.js';
+import { DevelopmentView } from './modules/views/developmentView.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -28,9 +17,12 @@ class AlphaColorMatch {
         this.manualGroupSelections = new Set();
         this.autoAddedItems = [];
         
-        // Tabla de equivalencia de nombres expandida a 4 columnas
+        // Librería de TXTs por plotter
+        this.libraryTxts = []; // { plotter, name, content, uploadDate }
+        
+        // Tabla de equivalencia de nombres
         this.equivalencyRows = [
-            ["00A BLACK", "03S TM Black", "03T TM BLACK"],
+            ["00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
             ["06F ANTHRACITE", "05X TM Anthracite"],
             ["01V WOLF GREY", "03T Blue Grey", "03T TM Blue Grey"],
             ["01P DK STEEL GREY", "01P DARK STEEL GREY"],
@@ -82,27 +74,21 @@ class AlphaColorMatch {
             ["71R VOLT"],
             ["3GU HYPER TURQ"],
             ["4KB DARK TURQUOISE"],
-            ["87F BRIGHT CERAMIC", "87F TM BRIGHT CERAMIC"],
-            // NUEVAS FILAS AGREGADAS
-            ["03T TM BLUE GREY", "03T Blue Grey", "01V WOLF GREY"],
-            ["03T TM PEWTER GREY", "03T PEWTER GREY", "08Q PEWTER GREY", "08Q TM PEWTER GREY"],
-            ["01P TM DARK STEEL GREY", "01P DK STEEL GREY", "01P DARK STEEL GREY"]
+            ["87F BRIGHT CERAMIC", "87F TM BRIGHT CERAMIC"]
         ];
         
-        // Inicializar vistas
+        this.loadEquivalencyRowsFromLocalStorage();
+        
         this.creatorView = null;
         this.epsView = null;
+        this.developmentView = null;
         
-        // Construir grupos de equivalencia (expansión transitiva)
         this.equivalenceGroups = this.buildEquivalenceGroups();
         
         this.init();
         this.loadFromLocalStorage();
+        this.loadLibraryTxtsFromLocalStorage();
     }
-    
-    // ============================================================
-    // LOCALSTORAGE - Guardar y cargar datos
-    // ============================================================
     
     saveToLocalStorage() {
         const dataToSave = {
@@ -132,8 +118,6 @@ class AlphaColorMatch {
                 this.groupSelections = new Map(data.groupSelections || []);
                 this.manualGroupSelections = new Set(data.manualGroupSelections || []);
                 this.autoAddedItems = data.autoAddedItems || [];
-                
-                // Actualizar UI con los datos cargados
                 this.updateUIFromLoadedData();
                 console.log('📂 Datos cargados desde localStorage');
             } catch (e) {
@@ -142,9 +126,86 @@ class AlphaColorMatch {
         }
     }
     
+    saveEquivalencyRowsToLocalStorage() {
+        localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(this.equivalencyRows));
+        console.log('💾 Tabla de equivalencias guardada en localStorage');
+    }
+    
+    loadEquivalencyRowsFromLocalStorage() {
+        const savedRows = localStorage.getItem('alphaColorMatchEquivalencyRows');
+        if (savedRows) {
+            try {
+                const rows = JSON.parse(savedRows);
+                if (rows && rows.length > 0) {
+                    this.equivalencyRows = rows;
+                    console.log('📂 Tabla de equivalencias cargada desde localStorage');
+                }
+            } catch (e) {
+                console.error('Error al cargar equivalencyRows:', e);
+            }
+        }
+    }
+    
+    saveLibraryTxtsToLocalStorage() {
+        localStorage.setItem('alphaColorMatchLibrary', JSON.stringify(this.libraryTxts));
+        console.log('💾 Librería de TXTs guardada');
+    }
+    
+    loadLibraryTxtsFromLocalStorage() {
+        const saved = localStorage.getItem('alphaColorMatchLibrary');
+        if (saved) {
+            try {
+                this.libraryTxts = JSON.parse(saved);
+                console.log('📂 Librería de TXTs cargada:', this.libraryTxts.length, 'archivos');
+            } catch(e) {
+                console.error(e);
+                this.libraryTxts = [];
+            }
+        }
+    }
+    
+    addTxtToLibrary(plotter, name, content) {
+        const existingIndex = this.libraryTxts.findIndex(t => t.plotter === plotter && t.name === name);
+        if (existingIndex !== -1) {
+            this.libraryTxts[existingIndex] = {
+                plotter: parseInt(plotter),
+                name: name,
+                content: content,
+                uploadDate: new Date().toISOString()
+            };
+        } else {
+            this.libraryTxts.push({
+                plotter: parseInt(plotter),
+                name: name,
+                content: content,
+                uploadDate: new Date().toISOString()
+            });
+        }
+        this.saveLibraryTxtsToLocalStorage();
+        console.log(`📚 TXT "${name}" agregado a librería del plotter ${plotter}`);
+    }
+    
+    getTxtsByPlotter(plotter) {
+        return this.libraryTxts.filter(t => t.plotter === parseInt(plotter));
+    }
+    
+    deleteTxtFromLibrary(plotter, name) {
+        const index = this.libraryTxts.findIndex(t => t.plotter === parseInt(plotter) && t.name === name);
+        if (index !== -1) {
+            this.libraryTxts.splice(index, 1);
+            this.saveLibraryTxtsToLocalStorage();
+            console.log(`📚 TXT "${name}" eliminado de librería del plotter ${plotter}`);
+            return true;
+        }
+        return false;
+    }
+    
     clearCache() {
         if (confirm('¿Estás seguro de que quieres limpiar toda la caché? Se perderán los datos no exportados.')) {
             localStorage.removeItem('alphaColorMatchData');
+            localStorage.removeItem('alphaColorMatchEquivalencyRows');
+            localStorage.removeItem('developmentColors');
+            localStorage.removeItem('alphaColorMatchLibrary');
             this.primaryData = [];
             this.secondaryData = [];
             this.results = [];
@@ -153,8 +214,65 @@ class AlphaColorMatch {
             this.groupSelections.clear();
             this.manualGroupSelections.clear();
             this.autoAddedItems = [];
+            this.libraryTxts = [];
             
-            // Limpiar UI
+            this.equivalencyRows = [
+                ["00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
+                ["06F ANTHRACITE", "05X TM Anthracite"],
+                ["01V WOLF GREY", "03T Blue Grey", "03T TM Blue Grey"],
+                ["01P DK STEEL GREY", "01P DARK STEEL GREY"],
+                ["08Q TM PEWTER GREY", "03T PEWTER GREY", "08Q PEWTER GREY", "03T TM PEWTER GREY"],
+                ["06H FLINT GREY"],
+                ["10F WHITE", "10F TM WHITE"],
+                ["15A TM NATURAL", "15A NATURAL"],
+                ["77C GOLD"],
+                ["79W TEAM GOLD", "79X TM Vegas Gold"],
+                ["79Y TM Bright Gold", "79Q SUNDOWN"],
+                ["79V CLUB GOLD"],
+                ["76I UNIVERSITY GOLD"],
+                ["79U GOLD DART"],
+                ["77C TONAL GOLD"],
+                ["PMS 132 OLD GOLD"],
+                ["PMS 1255C OLD GOLD"],
+                ["79S YELLOW STRIKE", "79S TM Yellow Strike"],
+                ["PMS 109C NEW YELLOW"],
+                ["81F DESERT ORANGE", "81F TM DESERT ORANGE"],
+                ["89L TEAM ORANGE", "82U TM ORANGE"],
+                ["89M Uni Orange"],
+                ["89N Brilliant Orange"],
+                ["65N UNIVERSITY RED", "65N UNI RED", "54V TM Scarlet"],
+                ["66P DEEP MAROON", "67Y TM Dark Maroon"],
+                ["69W TM CRIMSON", "69W TEAM CRIMSON"],
+                ["69X TEAM MAROON", "69Y TM CARDINAL"],
+                ["6DL GYM RED"],
+                ["39Y GORGE GREEN", "31V TM Dark Green"],
+                ["31W CLASSIC GREEN", "3EM TM Kelly Green"],
+                ["2DH MEDIUM OLIVE", "2DH TM Medium Olive"],
+                ["3EY PRO GREEN"],
+                ["PMS 361C LEVEL GREEN"],
+                ["4EV GAME ROYAL", "49V TM ROYAL"],
+                ["4EY VALOR BLUE", "4CV TM LIGHT BLUE"],
+                ["4ES AERO BLUE", "4ES  TM AERO BLUE"],
+                ["44A TIDAL BLUE"],
+                ["41S COLLEGE NAVY", "43V TM NAVY"],
+                ["4EW RUSH BLUE"],
+                ["48Y ITALY BLUE"],
+                ["44U SIGNAL BLUE"],
+                ["56N FIELD PURPLE", "52V TM Purple"],
+                ["52M NEW ORCHID"],
+                ["55U URBAN LILAC"],
+                ["66Z PINK FIRE II", "66Z PINK FIRE", "6DR TM Pink Fire"],
+                ["2AQ TM Brown", "20Q   DARK CINDER"],
+                ["2DI SEAL BROWN"],
+                ["33B OCHRE"],
+                ["TAN PMS 720C"],
+                ["71R VOLT"],
+                ["3GU HYPER TURQ"],
+                ["4KB DARK TURQUOISE"],
+                ["87F BRIGHT CERAMIC", "87F TM BRIGHT CERAMIC"]
+            ];
+            this.buildEquivalenceGroups();
+            
             this.updateFileInfo('primary', 'Ningún archivo cargado', 0);
             this.updateFileInfo('secondary', 'Ningún archivo cargado', 0);
             this.renderDataList('primary', []);
@@ -172,7 +290,6 @@ class AlphaColorMatch {
     }
     
     updateUIFromLoadedData() {
-        // Actualizar vistas si hay datos
         if (this.primaryData.length > 0) {
             this.updateFileInfo('primary', 'Datos cargados desde caché', this.primaryData.length);
             this.renderDataList('primary', this.primaryData);
@@ -189,6 +306,23 @@ class AlphaColorMatch {
         }
     }
     
+    showNotification(title, message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = 'floating-notification';
+        notification.innerHTML = `
+            <div class="notification-content ${type}">
+                <strong>${title}</strong><br>
+                <span style="font-size: 0.8rem;">${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.classList.add('show'), 10);
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 300);
+        }, 2500);
+    }
+    
     buildEquivalenceGroups() {
         const nameToGroup = new Map();
         const groups = [];
@@ -196,7 +330,6 @@ class AlphaColorMatch {
         for (const row of this.equivalencyRows) {
             const names = row.filter(name => name && name.trim() !== '');
             if (names.length === 0) continue;
-            
             const normalizedNames = names.map(name => this.normalizeBaseName(name));
             
             let existingGroup = null;
@@ -208,7 +341,6 @@ class AlphaColorMatch {
             }
             
             let targetGroup = existingGroup;
-            
             if (!targetGroup) {
                 targetGroup = new Set();
                 groups.push(targetGroup);
@@ -250,12 +382,9 @@ class AlphaColorMatch {
         const norm1 = this.normalizeBaseName(baseName1);
         const norm2 = this.normalizeBaseName(baseName2);
         if (norm1 === norm2) return true;
-        
         const group1 = this.getEquivalenceGroup(baseName1);
         const group2 = this.getEquivalenceGroup(baseName2);
-        
         if (group1 && group2 && group1 === group2) return true;
-        
         return false;
     }
     
@@ -269,9 +398,9 @@ class AlphaColorMatch {
         this.bindEvents();
         this.initCreatorView();
         this.initEPSView();
+        this.initDevelopmentView();
         this.initViews();
         
-        // Agregar evento para limpiar caché
         const clearCacheBtn = document.getElementById('clearCacheBtn');
         if (clearCacheBtn) {
             clearCacheBtn.addEventListener('click', () => this.clearCache());
@@ -299,36 +428,42 @@ class AlphaColorMatch {
         console.log('✅ EPSView inicializado');
     }
     
+    initDevelopmentView() {
+        this.developmentView = new DevelopmentView(this);
+        console.log('✅ DevelopmentView inicializado');
+    }
+    
     initViews() {
         const menuItems = document.querySelectorAll('.menu-item');
         const views = {
             comparator: document.getElementById('comparatorView'),
             history: document.getElementById('historyView'),
             creator: document.getElementById('creatorView'),
-            eps: document.getElementById('epsView')
+            eps: document.getElementById('epsView'),
+            development: document.getElementById('developmentView')
         };
         
         const switchView = (viewName) => {
             Object.values(views).forEach(view => {
                 if (view) view.classList.remove('active');
             });
-            
             if (views[viewName]) {
                 views[viewName].classList.add('active');
             }
-            
             menuItems.forEach(item => {
                 item.classList.remove('active');
                 if (item.dataset.view === viewName) {
                     item.classList.add('active');
                 }
             });
-            
             if (viewName === 'creator' && this.creatorView) {
                 this.creatorView.renderTable();
             }
             if (viewName === 'eps' && this.epsView) {
-                this.epsView.loadColors();
+                this.epsView.renderPreview();
+            }
+            if (viewName === 'development' && this.developmentView) {
+                this.developmentView.render();
             }
             if (viewName === 'history') {
                 if (this.loadHistory) this.loadHistory();
@@ -355,21 +490,17 @@ class AlphaColorMatch {
         const replaceAllSecondaryBtn = document.getElementById('replaceAllSecondaryBtn');
         
         if (primaryInput) {
-            primaryInput.addEventListener('change', (e) => this.loadPrimaryFile(e.target.files[0]));
+            primaryInput.addEventListener('change', (e) => this.loadPrimaryFile(e));
         }
-        
         if (secondaryInput) {
-            secondaryInput.addEventListener('change', (e) => this.loadSecondaryFile(e.target.files[0]));
+            secondaryInput.addEventListener('change', (e) => this.loadSecondaryFile(e));
         }
-        
         if (compareBtn) {
             compareBtn.addEventListener('click', () => this.compareFiles());
         }
-        
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.showPreviewAndExport());
         }
-        
         if (replaceAllSecondaryBtn) {
             replaceAllSecondaryBtn.addEventListener('click', () => this.replaceAllWithSecondary());
         }
@@ -397,15 +528,24 @@ class AlphaColorMatch {
                 }
             }
         }
-        
         for (const groupId of groups) {
             this.groupSelections.set(groupId, 'secondary');
         }
-        
         console.log(`🔄 Reemplazados ${groups.size} grupos NO modificados a valores SECUNDARIO`);
         this.renderResults(this.results);
         this.validateExportReady();
         this.saveToLocalStorage();
+        
+        const replaceBtn = document.getElementById('replaceAllSecondaryBtn');
+        const originalText = replaceBtn.innerHTML;
+        replaceBtn.innerHTML = `✅ REEMPLAZADOS ${groups.size} GRUPOS!`;
+        replaceBtn.style.opacity = '0.7';
+        setTimeout(() => {
+            replaceBtn.innerHTML = originalText;
+            replaceBtn.style.opacity = '1';
+        }, 1500);
+        
+        this.showNotification('Valores actualizados', `${groups.size} grupos cambiados a valor secundario`, 'info');
     }
     
     togglePendingAdd(itemId) {
@@ -433,14 +573,11 @@ class AlphaColorMatch {
     validateExportReady() {
         const exportBtn = document.getElementById('exportBtn');
         if (!exportBtn) return;
-        
         const pendingUndecided = this.results.filter(item => 
             (item.matchType === 'pending_primary' || item.matchType === 'pending_secondary') && 
             !this.isPendingDecided(item.id)
         );
-        
         const isReady = pendingUndecided.length === 0;
-        
         if (isReady) {
             exportBtn.disabled = false;
             exportBtn.title = "Listo para exportar";
@@ -448,7 +585,6 @@ class AlphaColorMatch {
             exportBtn.disabled = true;
             exportBtn.title = `Faltan ${pendingUndecided.length} pendientes por decidir (Agregar/Eliminar)`;
         }
-        
         const validationMsg = document.getElementById('validationMessage');
         if (validationMsg) {
             if (pendingUndecided.length > 0) {
@@ -458,7 +594,6 @@ class AlphaColorMatch {
                 validationMsg.style.display = 'none';
             }
         }
-        
         return isReady;
     }
     
@@ -472,54 +607,21 @@ class AlphaColorMatch {
     
     extractNK(fullName) {
         if (!fullName) return null;
-        
         const words = fullName.trim().split(/\s+/);
         if (words.length === 0) return null;
         
         const patterns = [
-            {
-                name: 'NK_pattern',
-                test: (str) => /^NK[-]?[A-Z0-9]+/i.test(str),
-                minWords: 1,
-                maxWords: 3
-            },
-            {
-                name: 'numbers_only',
-                test: (str) => /^[\d\-]{4,12}$/.test(str),
-                minWords: 1,
-                maxWords: 1
-            },
-            {
-                name: 'alphanumeric',
-                test: (str) => /^[A-Z]{1,4}[\d]{1,4}[A-Z]{0,2}$/i.test(str) || /^[\d]{1,4}[A-Z]{1,4}$/i.test(str),
-                minWords: 1,
-                maxWords: 1
-            },
-            {
-                name: 'letter_number',
-                test: (str) => /^[A-Z][\d]{3,6}[A-Z]{0,2}$/i.test(str),
-                minWords: 1,
-                maxWords: 1
-            },
-            {
-                name: 'number_letter',
-                test: (str) => /^[\d]{3,6}[A-Z]{1,4}$/i.test(str),
-                minWords: 1,
-                maxWords: 1
-            },
-            {
-                name: 'specific_words',
-                test: (str) => ['STANDARD', 'COLORS', 'GREY', 'WHITE', 'BLACK', 'BLUE', 'GOLD', 'SILVER'].includes(str.toUpperCase()),
-                minWords: 1,
-                maxWords: 1
-            }
+            { name: 'NK_pattern', test: (str) => /^NK[-]?[A-Z0-9]+/i.test(str), minWords: 1, maxWords: 3 },
+            { name: 'numbers_only', test: (str) => /^[\d\-]{4,12}$/.test(str), minWords: 1, maxWords: 1 },
+            { name: 'alphanumeric', test: (str) => /^[A-Z]{1,4}[\d]{1,4}[A-Z]{0,2}$/i.test(str) || /^[\d]{1,4}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 },
+            { name: 'letter_number', test: (str) => /^[A-Z][\d]{3,6}[A-Z]{0,2}$/i.test(str), minWords: 1, maxWords: 1 },
+            { name: 'number_letter', test: (str) => /^[\d]{3,6}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 },
+            { name: 'specific_words', test: (str) => ['STANDARD', 'COLORS', 'GREY', 'WHITE', 'BLACK', 'BLUE', 'GOLD', 'SILVER'].includes(str.toUpperCase()), minWords: 1, maxWords: 1 }
         ];
         
         for (let wordCount = 1; wordCount <= 3; wordCount++) {
             if (words.length < wordCount) continue;
-            
             const candidate = words.slice(-wordCount).join(' ');
-            
             for (const pattern of patterns) {
                 if (wordCount >= pattern.minWords && wordCount <= pattern.maxWords) {
                     if (pattern.test(candidate)) {
@@ -529,7 +631,6 @@ class AlphaColorMatch {
                 }
             }
         }
-        
         const lastWord = words[words.length - 1];
         console.log(`⚠️ NK no detectado con patrones, usando última palabra: "${lastWord}"`);
         return lastWord;
@@ -537,13 +638,10 @@ class AlphaColorMatch {
     
     extractBaseName(fullName) {
         if (!fullName) return '';
-        
         const nk = this.extractNK(fullName);
         if (!nk) return this.normalizeBaseName(fullName);
-        
         const nkPattern = new RegExp(`\\s+${nk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
         const base = fullName.replace(nkPattern, '').trim();
-        
         return this.normalizeBaseName(base);
     }
     
@@ -572,16 +670,11 @@ class AlphaColorMatch {
         
         for (let line of lines) {
             if (line.trim() === '') continue;
-            
-            if (line.trim() === 'BEGIN_DATA') {
-                dataStarted = true;
-                continue;
-            }
+            if (line.trim() === 'BEGIN_DATA') { dataStarted = true; continue; }
             if (dataStarted && line.trim() === 'END_DATA') break;
             if (!dataStarted) continue;
             
             const match = line.match(/^(\d+)\.?\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
-            
             if (match) {
                 let name = match[2] || match[3];
                 if (name) {
@@ -594,14 +687,13 @@ class AlphaColorMatch {
                 }
             }
         }
-        
         console.log(`📄 Parseados ${records.length} registros`);
         return records;
     }
     
-    async loadPrimaryFile(file) {
+    async loadPrimaryFile(event) {
+        const file = event.target.files[0];
         if (!file) return;
-        
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target.result;
@@ -610,13 +702,18 @@ class AlphaColorMatch {
             this.renderDataList('primary', this.primaryData);
             this.saveToLocalStorage();
             console.log(`✅ Principal: ${this.primaryData.length} colores`);
+            alert(`✅ Archivo principal cargado: ${this.primaryData.length} colores`);
+        };
+        reader.onerror = (e) => {
+            console.error('Error al leer archivo:', e);
+            alert('❌ Error al leer el archivo. Verifica que sea un TXT válido.');
         };
         reader.readAsText(file);
     }
     
-    async loadSecondaryFile(file) {
+    async loadSecondaryFile(event) {
+        const file = event.target.files[0];
         if (!file) return;
-        
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target.result;
@@ -625,6 +722,11 @@ class AlphaColorMatch {
             this.renderDataList('secondary', this.secondaryData);
             this.saveToLocalStorage();
             console.log(`✅ Secundario: ${this.secondaryData.length} colores`);
+            alert(`✅ Archivo secundario cargado: ${this.secondaryData.length} colores`);
+        };
+        reader.onerror = (e) => {
+            console.error('Error al leer archivo:', e);
+            alert('❌ Error al leer el archivo. Verifica que sea un TXT válido.');
         };
         reader.readAsText(file);
     }
@@ -642,21 +744,14 @@ class AlphaColorMatch {
     renderDataList(type, data) {
         const container = document.getElementById(`${type}DataList`);
         if (!container) return;
-        
         if (!data || data.length === 0) {
             container.innerHTML = '<div class="empty-list">Sin datos cargados</div>';
             return;
         }
-        
         container.innerHTML = data.map(color => {
             const nk = this.extractNK(color.name);
             const baseName = this.extractBaseName(color.name);
-            return `
-                <div class="data-item">
-                    <span class="nk">${nk || 'SIN NK'}</span>
-                    <span class="name">${baseName}</span>
-                </div>
-            `;
+            return `<div class="data-item"><span class="nk">${nk || 'SIN NK'}</span><span class="name">${baseName}</span></div>`;
         }).join('');
     }
     
@@ -665,12 +760,10 @@ class AlphaColorMatch {
             alert('⚠️ Cargue archivo principal');
             return;
         }
-        
         if (this.secondaryData.length === 0) {
             alert('⚠️ Cargue archivo secundario');
             return;
         }
-        
         this.selectedPending.clear();
         this.deletedPending.clear();
         this.groupSelections.clear();
@@ -679,6 +772,17 @@ class AlphaColorMatch {
         console.log('🔍 Comparando archivos...');
         this.findMatches();
         this.saveToLocalStorage();
+        
+        const compareBtn = document.getElementById('compareBtn');
+        const originalText = compareBtn.innerHTML;
+        compareBtn.innerHTML = '✅ COMPARADO!';
+        compareBtn.style.opacity = '0.7';
+        setTimeout(() => {
+            compareBtn.innerHTML = originalText;
+            compareBtn.style.opacity = '1';
+        }, 1500);
+        
+        this.showNotification('Comparación completada', `${this.results.length} registros procesados`, 'success');
     }
     
     findMatches() {
@@ -716,7 +820,6 @@ class AlphaColorMatch {
         for (const nk of allNKs) {
             const primaryColors = primaryByNK.get(nk) || [];
             const secondaryColors = secondaryByNK.get(nk) || [];
-            
             const groups = new Map();
             
             for (const pc of primaryColors) {
@@ -746,7 +849,6 @@ class AlphaColorMatch {
                         for (const secondary of secundarios) {
                             const isExact = primary.baseName === secondary.baseName;
                             const matchType = isExact ? 'exact' : 'equivalent';
-                            
                             results.push({
                                 id: `primary_${primary.id}`,
                                 groupId: actualGroupId,
@@ -799,7 +901,6 @@ class AlphaColorMatch {
                     const existingNames = new Set();
                     for (const p of primarios) existingNames.add(p.baseName);
                     for (const s of secundarios) existingNames.add(s.baseName);
-                    
                     for (const equivalentName of groupKey) {
                         if (!existingNames.has(equivalentName)) {
                             const sourceColor = primarios[0].colorData;
@@ -817,175 +918,128 @@ class AlphaColorMatch {
         }
         
         results.sort((a, b) => a.nk.localeCompare(b.nk));
-        
         this.results = results;
         this.renderResults(results);
         this.validateExportReady();
-        
         console.log(`📊 RESULTADOS: ${results.length}, Auto-agregados: ${this.autoAddedItems.length}`);
     }
     
-renderResults(results) {
-    const panel = document.getElementById('resultsPanel');
-    const tbody = document.getElementById('resultsTableBody');
-    const statsContainer = document.getElementById('statsBadges');
-    
-    if (!panel || !tbody) return;
-    
-    panel.style.display = 'block';
-    
-    const exactMatches = results.filter(r => r.matchType === 'exact').length;
-    const equivalentMatches = results.filter(r => r.matchType === 'equivalent').length;
-    const pendingPrimary = results.filter(r => r.matchType === 'pending_primary').length;
-    const pendingSecondary = results.filter(r => r.matchType === 'pending_secondary').length;
-    const selectedCount = this.selectedPending.size;
-    const deletedCount = this.deletedPending.size;
-    
-    statsContainer.innerHTML = `
-        <span class="badge match">✅ Exactas: ${exactMatches}</span>
-        <span class="badge" style="background:#b45309;">🔄 Equivalentes: ${equivalentMatches}</span>
-        <span class="badge missing">❌ Pendientes Principal: ${pendingPrimary}</span>
-        <span class="badge secondary">➕ Pendientes Secundario: ${pendingSecondary}</span>
-        <span class="badge" style="background:#15803d;">✓ Agregados: ${selectedCount}</span>
-        <span class="badge" style="background:#991b1b;">🗑️ Eliminados: ${deletedCount}</span>
-        <span class="badge" style="background:#eab308;">✨ Auto-agregados: ${this.autoAddedItems.length}</span>
-    `;
-    
-    tbody.innerHTML = results.map(item => {
-        let rowClass = '';
-        let statusClass = '';
-        let statusText = '';
-        let actionButton = '';
-        let selectionButtons = '';
-        let cmykPreview = '';
+    renderResults(results) {
+        const panel = document.getElementById('resultsPanel');
+        const tbody = document.getElementById('resultsTableBody');
+        const statsContainer = document.getElementById('statsBadges');
+        if (!panel || !tbody) return;
+        panel.style.display = 'block';
         
-        if (item.matchType === 'exact' || item.matchType === 'equivalent') {
-            rowClass = item.matchType === 'exact' ? 'style="background: rgba(21, 128, 61, 0.1);"' : 'style="background: rgba(180, 83, 9, 0.1);"';
-            statusClass = item.matchType === 'exact' ? 'match-badge yes' : 'match-badge' + ' style="background:#b45309;"';
-            statusText = item.matchType === 'exact' ? '✅ COINCIDENCIA' : '🔄 EQUIVALENTE';
-            
-            const currentSelection = this.getGroupSelection(item.groupId);
-            const isManual = this.manualGroupSelections.has(item.groupId);
-            
-            const effectiveCmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
-            if (effectiveCmyk) {
-                cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">Valor usado: C:${effectiveCmyk[0].toFixed(1)} M:${effectiveCmyk[1].toFixed(1)} Y:${effectiveCmyk[2].toFixed(1)} K:${effectiveCmyk[3].toFixed(1)}</div>`;
-            }
-            
-            selectionButtons = `
-                <div class="selection-buttons">
-                    <button class="selection-btn ${currentSelection === 'primary' ? 'active-primary' : ''}" 
-                            onclick="window.app.setGroupSelection('${item.groupId}', 'primary')">
-                        📁 Principal<br>
-                        <span class="cmyk-small">C:${item.primaryData?.colorData.cmyk[0].toFixed(1)} M:${item.primaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.primaryData?.colorData.cmyk[2].toFixed(1)} K:${item.primaryData?.colorData.cmyk[3].toFixed(1)}</span>
-                    </button>
-                    <button class="selection-btn ${currentSelection === 'secondary' ? 'active-secondary' : ''}" 
-                            onclick="window.app.setGroupSelection('${item.groupId}', 'secondary')">
-                        🔄 Secundario<br>
-                        <span class="cmyk-small">C:${item.secondaryData?.colorData.cmyk[0].toFixed(1)} M:${item.secondaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.secondaryData?.colorData.cmyk[2].toFixed(1)} K:${item.secondaryData?.colorData.cmyk[3].toFixed(1)}</span>
-                    </button>
-                    ${isManual ? '<span class="manual-badge" style="font-size:0.6rem; color:#fbbf24;">🔒 Manual</span>' : ''}
-                </div>
-            `;
-            
-        } else {
-            const isAdded = this.selectedPending.has(item.id);
-            const isDeleted = this.deletedPending.has(item.id);
-            const isDecided = isAdded || isDeleted;
-            
-            if (!isDecided) {
-                rowClass = 'style="background: rgba(153, 27, 27, 0.1);"';
-                statusClass = 'match-badge no';
-                statusText = '❌ PENDIENTE';
-            } else if (isAdded) {
-                rowClass = 'style="background: rgba(21, 128, 61, 0.2);"';
-                statusClass = 'match-badge yes';
-                statusText = '✓ AGREGADO';
-            } else {
-                rowClass = 'style="background: rgba(153, 27, 27, 0.2);"';
-                statusClass = 'match-badge no';
-                statusText = '🗑️ ELIMINADO';
-            }
-            
-            actionButton = `
-                <div class="pending-buttons">
-                    <button class="small-btn btn-success" 
-                            onclick="window.app.togglePendingAdd('${item.id}')"
-                            ${isAdded ? 'disabled style="opacity:0.5;"' : ''}>
-                        ➕ Agregar
-                    </button>
-                    <button class="small-btn btn-danger" 
-                            onclick="window.app.togglePendingDelete('${item.id}')"
-                            ${isDeleted ? 'disabled style="opacity:0.5;"' : ''}>
-                        🗑️ Eliminar
-                    </button>
-                </div>
-            `;
-            
-            const colorData = item.primaryData?.colorData || item.secondaryData?.colorData;
-            if (colorData) {
-                cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">CMYK: ${colorData.cmyk.map(v => v.toFixed(1)).join(', ')}</div>`;
-            }
-        }
+        const exactMatches = results.filter(r => r.matchType === 'exact').length;
+        const equivalentMatches = results.filter(r => r.matchType === 'equivalent').length;
+        const pendingPrimary = results.filter(r => r.matchType === 'pending_primary').length;
+        const pendingSecondary = results.filter(r => r.matchType === 'pending_secondary').length;
+        const selectedCount = this.selectedPending.size;
+        const deletedCount = this.deletedPending.size;
         
-        const primaryName = item.primaryData ? item.primaryData.baseName : '—';
-        const secondaryName = item.secondaryData ? item.secondaryData.baseName : '—';
-        const primaryCmyk = item.primaryData?.colorData?.cmyk;
-        const secondaryCmyk = item.secondaryData?.colorData?.cmyk;
-        
-        return `
-            <tr ${rowClass}>
-                <td><strong>${item.nk}</strong>${cmykPreview}</td>
-                <td>${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}</td>
-                <td>${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}</td>
-                <td><span class="${statusClass}">${statusText}</span></td>
-                <td>${selectionButtons || actionButton || '—'}</td>
-            </tr>
+        statsContainer.innerHTML = `
+            <span class="badge match">✅ Exactas: ${exactMatches}</span>
+            <span class="badge" style="background:#b45309;">🔄 Equivalentes: ${equivalentMatches}</span>
+            <span class="badge missing">❌ Pendientes Principal: ${pendingPrimary}</span>
+            <span class="badge secondary">➕ Pendientes Secundario: ${pendingSecondary}</span>
+            <span class="badge" style="background:#15803d;">✓ Agregados: ${selectedCount}</span>
+            <span class="badge" style="background:#991b1b;">🗑️ Eliminados: ${deletedCount}</span>
+            <span class="badge" style="background:#eab308;">✨ Auto-agregados: ${this.autoAddedItems.length}</span>
         `;
-    }).join('');
-}
+        
+        tbody.innerHTML = results.map(item => {
+            let rowClass = '';
+            let statusClass = '';
+            let statusText = '';
+            let actionButton = '';
+            let selectionButtons = '';
+            let cmykPreview = '';
+            
+            if (item.matchType === 'exact' || item.matchType === 'equivalent') {
+                rowClass = item.matchType === 'exact' ? 'style="background: rgba(21, 128, 61, 0.1);"' : 'style="background: rgba(180, 83, 9, 0.1);"';
+                statusClass = item.matchType === 'exact' ? 'match-badge yes' : 'match-badge' + ' style="background:#b45309;"';
+                statusText = item.matchType === 'exact' ? '✅ COINCIDENCIA' : '🔄 EQUIVALENTE';
+                const currentSelection = this.getGroupSelection(item.groupId);
+                const isManual = this.manualGroupSelections.has(item.groupId);
+                const effectiveCmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
+                if (effectiveCmyk) {
+                    cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">Valor usado: C:${effectiveCmyk[0].toFixed(1)} M:${effectiveCmyk[1].toFixed(1)} Y:${effectiveCmyk[2].toFixed(1)} K:${effectiveCmyk[3].toFixed(1)}</div>`;
+                }
+                selectionButtons = `
+                    <div class="selection-buttons">
+                        <button class="selection-btn ${currentSelection === 'primary' ? 'active-primary' : ''}" onclick="window.app.setGroupSelection('${item.groupId}', 'primary')">📁 Principal<br><span class="cmyk-small">C:${item.primaryData?.colorData.cmyk[0].toFixed(1)} M:${item.primaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.primaryData?.colorData.cmyk[2].toFixed(1)} K:${item.primaryData?.colorData.cmyk[3].toFixed(1)}</span></button>
+                        <button class="selection-btn ${currentSelection === 'secondary' ? 'active-secondary' : ''}" onclick="window.app.setGroupSelection('${item.groupId}', 'secondary')">🔄 Secundario<br><span class="cmyk-small">C:${item.secondaryData?.colorData.cmyk[0].toFixed(1)} M:${item.secondaryData?.colorData.cmyk[1].toFixed(1)} Y:${item.secondaryData?.colorData.cmyk[2].toFixed(1)} K:${item.secondaryData?.colorData.cmyk[3].toFixed(1)}</span></button>
+                        ${isManual ? '<span class="manual-badge" style="font-size:0.6rem; color:#fbbf24;">🔒 Manual</span>' : ''}
+                    </div>
+                `;
+            } else {
+                const isAdded = this.selectedPending.has(item.id);
+                const isDeleted = this.deletedPending.has(item.id);
+                const isDecided = isAdded || isDeleted;
+                if (!isDecided) {
+                    rowClass = 'style="background: rgba(153, 27, 27, 0.1);"';
+                    statusClass = 'match-badge no';
+                    statusText = '❌ PENDIENTE';
+                } else if (isAdded) {
+                    rowClass = 'style="background: rgba(21, 128, 61, 0.2);"';
+                    statusClass = 'match-badge yes';
+                    statusText = '✓ AGREGADO';
+                } else {
+                    rowClass = 'style="background: rgba(153, 27, 27, 0.2);"';
+                    statusClass = 'match-badge no';
+                    statusText = '🗑️ ELIMINADO';
+                }
+                actionButton = `
+                    <div class="pending-buttons">
+                        <button class="small-btn btn-success" onclick="window.app.togglePendingAdd('${item.id}')" ${isAdded ? 'disabled style="opacity:0.5;"' : ''}>➕ Agregar</button>
+                        <button class="small-btn btn-danger" onclick="window.app.togglePendingDelete('${item.id}')" ${isDeleted ? 'disabled style="opacity:0.5;"' : ''}>🗑️ Eliminar</button>
+                    </div>
+                `;
+                const colorData = item.primaryData?.colorData || item.secondaryData?.colorData;
+                if (colorData) {
+                    cmykPreview = `<div style="font-size:0.65rem; color:#9ca3af; margin-top:0.25rem;">CMYK: ${colorData.cmyk.map(v => v.toFixed(1)).join(', ')}</div>`;
+                }
+            }
+            
+            const primaryName = item.primaryData ? item.primaryData.baseName : '—';
+            const secondaryName = item.secondaryData ? item.secondaryData.baseName : '—';
+            const primaryCmyk = item.primaryData?.colorData?.cmyk;
+            const secondaryCmyk = item.secondaryData?.colorData?.cmyk;
+            
+            return `
+                <tr ${rowClass}>
+                    <td><strong>${item.nk}</strong>${cmykPreview}</td>
+                    <td>${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}</td>
+                    <td>${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}</td>
+                    <td><span class="${statusClass}">${statusText}</span></td>
+                    <td>${selectionButtons || actionButton || '—'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
     
     buildExportItems() {
         const exportItems = [];
         const processedGroups = new Set();
-        
         const sortedResults = [...this.results].sort((a, b) => a.nk.localeCompare(b.nk));
         
         for (const item of sortedResults) {
             if (item.matchType === 'exact' || item.matchType === 'equivalent') {
                 if (processedGroups.has(item.groupId)) continue;
                 processedGroups.add(item.groupId);
-                
                 const cmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
                 const lab = this.getEffectiveLab(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
-                
                 if (item.primaryData) {
-                    exportItems.push({
-                        name: item.primaryData.colorData.name,
-                        cmyk: cmyk,
-                        lab: lab,
-                        type: item.matchType
-                    });
+                    exportItems.push({ name: item.primaryData.colorData.name, cmyk: cmyk, lab: lab, type: item.matchType });
                 }
-                
                 if (item.matchType === 'equivalent' && item.secondaryData) {
-                    exportItems.push({
-                        name: item.secondaryData.colorData.name,
-                        cmyk: cmyk,
-                        lab: lab,
-                        type: item.matchType
-                    });
+                    exportItems.push({ name: item.secondaryData.colorData.name, cmyk: cmyk, lab: lab, type: item.matchType });
                 }
-                
                 const groupAutos = this.autoAddedItems.filter(a => a.groupId === item.groupId);
                 for (const auto of groupAutos) {
                     const fullName = `${auto.baseName} ${auto.nk}`;
-                    exportItems.push({
-                        name: fullName,
-                        cmyk: cmyk,
-                        lab: lab,
-                        type: 'auto_added'
-                    });
+                    exportItems.push({ name: fullName, cmyk: cmyk, lab: lab, type: 'auto_added' });
                 }
             }
         }
@@ -993,19 +1047,9 @@ renderResults(results) {
         for (const item of this.results) {
             if (this.selectedPending.has(item.id)) {
                 if (item.primaryData) {
-                    exportItems.push({
-                        name: item.primaryData.colorData.name,
-                        cmyk: [...item.primaryData.colorData.cmyk],
-                        lab: [...item.primaryData.colorData.lab],
-                        type: 'added'
-                    });
+                    exportItems.push({ name: item.primaryData.colorData.name, cmyk: [...item.primaryData.colorData.cmyk], lab: [...item.primaryData.colorData.lab], type: 'added' });
                 } else if (item.secondaryData) {
-                    exportItems.push({
-                        name: item.secondaryData.colorData.name,
-                        cmyk: [...item.secondaryData.colorData.cmyk],
-                        lab: [...item.secondaryData.colorData.lab],
-                        type: 'added'
-                    });
+                    exportItems.push({ name: item.secondaryData.colorData.name, cmyk: [...item.secondaryData.colorData.cmyk], lab: [...item.secondaryData.colorData.lab], type: 'added' });
                 }
             }
         }
@@ -1016,38 +1060,27 @@ renderResults(results) {
     generateCGATSContent(exportItems) {
         const today = new Date();
         const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-        
-        let content = 'CGATS.17\n';
-        content += 'ORIGINATOR\t"ALPHA COLOR MATCH"\n';
-        content += 'FILE_DESCRIPTOR\t""\n';
-        content += `CREATED\t"${dateStr}"\n`;
-        content += 'NUMBER_OF_FIELDS\t9\n';
-        content += 'BEGIN_DATA_FORMAT\n';
-        content += 'SAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\n';
-        content += 'END_DATA_FORMAT\n';
-        content += `NUMBER_OF_SETS\t${exportItems.length}\n`;
-        content += 'BEGIN_DATA\n\n';
-        
+        let content = 'CGATS.17\nORIGINATOR\t"ALPHA COLOR MATCH"\nFILE_DESCRIPTOR\t""\n';
+        content += `CREATED\t"${dateStr}"\nNUMBER_OF_FIELDS\t9\nBEGIN_DATA_FORMAT\nSAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\nNUMBER_OF_SETS\t${exportItems.length}\nBEGIN_DATA\n\n`;
         exportItems.forEach((item, index) => {
             const counter = index + 1;
-            content += `${counter}. "${item.name}" `;
-            content += `${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} `;
-            content += `${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
+            content += `${counter}. "${item.name}" ${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} ${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
         });
-        
         content += '\nEND_DATA\n';
         return content;
     }
     
     showPreviewAndExport() {
         const exportItems = this.buildExportItems();
-        
         if (exportItems.length === 0) {
             alert('No hay datos para exportar. Asegúrate de haber comparado y seleccionado pendientes.');
             return;
         }
-        
         const content = this.generateCGATSContent(exportItems);
+        const exactCount = exportItems.filter(i => i.type === 'exact').length;
+        const equivalentCount = exportItems.filter(i => i.type === 'equivalent').length;
+        const addedCount = exportItems.filter(i => i.type === 'added').length;
+        const autoAddedCount = exportItems.filter(i => i.type === 'auto_added').length;
         
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
@@ -1060,10 +1093,10 @@ renderResults(results) {
                 <div class="modal-body" style="overflow: auto; max-height: 65vh;">
                     <div style="margin-bottom: 1rem; padding: 0.75rem; background: #1e1e2c; border-radius: 0.5rem;">
                         <strong>📊 Resumen:</strong> ${exportItems.length} registros a exportar
-                        <br><small>✅ Coincidencias exactas: ${exportItems.filter(i => i.type === 'exact').length}</small>
-                        <br><small>🔄 Equivalentes: ${exportItems.filter(i => i.type === 'equivalent').length}</small>
-                        <br><small>➕ Agregados manualmente: ${exportItems.filter(i => i.type === 'added').length}</small>
-                        <br><small>✨ Auto-agregados (tabla): ${exportItems.filter(i => i.type === 'auto_added').length}</small>
+                        <br><small>✅ Coincidencias exactas: ${exactCount}</small>
+                        <br><small style="color: #fbbf24;">🔄 Equivalentes que se agregarán: ${equivalentCount}</small>
+                        <br><small>➕ Agregados manualmente: ${addedCount}</small>
+                        <br><small>✨ Auto-agregados (tabla): ${autoAddedCount}</small>
                     </div>
                     <div style="font-family: monospace; font-size: 0.7rem; background: #0a0a0a; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap;">
                         <pre style="margin: 0; color: #e2e8f0;">${content}</pre>
@@ -1086,31 +1119,23 @@ renderResults(results) {
         
         modal.querySelector('.modal-close').onclick = closeModal;
         modal.querySelector('.cancel-preview').onclick = closeModal;
-        
         modal.querySelector('.confirm-export').onclick = () => {
             this.doExport(exportItems);
             closeModal();
         };
-        
-        modal.onclick = (e) => {
-            if (e.target === modal) closeModal();
-        };
+        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     doExport(exportItems) {
         const content = this.generateCGATSContent(exportItems);
-        
         const fileNameInput = document.getElementById('exportFileName');
         let baseFileName = 'alpha_color_export';
-        
         if (fileNameInput && fileNameInput.value.trim() !== '') {
             baseFileName = fileNameInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
             if (baseFileName === '') baseFileName = 'alpha_color_export';
         }
-        
         const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
         const fullFileName = `${baseFileName}_${timestamp}.txt`;
-        
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1118,7 +1143,6 @@ renderResults(results) {
         a.download = fullFileName;
         a.click();
         URL.revokeObjectURL(url);
-        
         alert(`✅ Archivo exportado con ${exportItems.length} registros en formato CGATS.17`);
     }
 }
