@@ -372,7 +372,7 @@ export class CreatorView {
             closeModal();
         };
         
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+        // ELIMINADO: modal.onclick para que NO se cierre al hacer clic fuera
     }
     
     resetTable() {
@@ -508,7 +508,7 @@ export class CreatorView {
             }
         };
         
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+        // ELIMINADO: modal.onclick para que NO se cierre al hacer clic fuera
     }
     
     checkAndUpdateSendButton() {

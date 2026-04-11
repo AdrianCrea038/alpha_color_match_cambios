@@ -1,11 +1,16 @@
 // ============================================================
-// ALPHA COLOR MATCH - VERSIÓN FINAL CORREGIDA
+// ALPHA COLOR MATCH - VERSIÓN CON LOGIN Y ADMIN
+// CORREGIDO: Carga de archivos y tabla de equivalencias
 // ============================================================
 
 import { CreatorView } from './modules/views/creatorView.js';
 import { EPSView } from './modules/views/epsView.js';
 import { DevelopmentView } from './modules/views/developmentView.js';
 import { HistoryView } from './modules/views/historyView.js';
+import { AssignmentView } from './modules/views/assignmentView.js';
+import { AdminView } from './modules/views/adminView.js';
+import { ReportsView } from './modules/views/reportsView.js';
+import { Auth, PERMISSIONS } from './modules/auth.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -16,18 +21,19 @@ class AlphaColorMatch {
         this.deletedPending = new Set();
         this.groupSelections = new Map();
         this.manualGroupSelections = new Set();
-        this.autoAddedItems = [];
+        this.groupIds = new Map();
         
-        // Librería de TXTs por plotter
-        this.libraryTxts = []; // { plotter, name, content, uploadDate }
-        
-        // Bandeja de entrada (inbox)
-        this.inboxItems = []; // { id, filename, content, user, reason, date, colorCount, plotter, isRead }
-        
-        // Usuario actual (temporal)
+        this.libraryTxts = [];
+        this.inboxItems = [];
         this.currentUser = 'usuario_admin';
         
-        // Tabla de equivalencia de nombres
+        this.pendingCorrections = [];
+        
+        this.auth = new Auth();
+        this.adminView = null;
+        this.reportsView = null;
+        
+        // TABLA DE EQUIVALENCIAS COMPLETA
         this.equivalencyRows = [
             ["00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
             ["06F ANTHRACITE", "05X TM Anthracite"],
@@ -64,7 +70,7 @@ class AlphaColorMatch {
             ["PMS 361C LEVEL GREEN"],
             ["4EV GAME ROYAL", "49V TM ROYAL"],
             ["4EY VALOR BLUE", "4CV TM LIGHT BLUE"],
-            ["4ES AERO BLUE", "4ES  TM AERO BLUE"],
+            ["4ES AERO BLUE", "4ES TM AERO BLUE"],
             ["44A TIDAL BLUE"],
             ["41S COLLEGE NAVY", "43V TM NAVY"],
             ["4EW RUSH BLUE"],
@@ -74,7 +80,7 @@ class AlphaColorMatch {
             ["52M NEW ORCHID"],
             ["55U URBAN LILAC"],
             ["66Z PINK FIRE II", "66Z PINK FIRE", "6DR TM Pink Fire"],
-            ["2AQ TM Brown", "20Q   DARK CINDER"],
+            ["2AQ TM Brown", "20Q DARK CINDER"],
             ["2DI SEAL BROWN"],
             ["33B OCHRE"],
             ["TAN PMS 720C"],
@@ -85,18 +91,396 @@ class AlphaColorMatch {
         ];
         
         this.loadEquivalencyRowsFromLocalStorage();
+        this.loadGroupIdsFromLocalStorage();
         
         this.creatorView = null;
         this.epsView = null;
         this.developmentView = null;
         this.historyView = null;
+        this.assignmentView = null;
         
-        this.equivalenceGroups = this.buildEquivalenceGroups();
+        this.equivalenceMap = this.buildEquivalenceMap();
+        this.groupOrder = this.buildGroupOrder();
+        this.ensureGroupIds();
         
         this.init();
+    }
+    
+    // ============================================================
+    // LOGIN
+    // ============================================================
+    initLogin() {
+        const loginContainer = document.getElementById('loginView');
+        const mainApp = document.getElementById('mainApp');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginUsername = document.getElementById('loginUsername');
+        const loginPassword = document.getElementById('loginPassword');
+        const loginError = document.getElementById('loginError');
+        const togglePassword = document.getElementById('toggleLoginPassword');
+        
+        if (togglePassword) {
+            togglePassword.onclick = () => {
+                const type = loginPassword.getAttribute('type') === 'password' ? 'text' : 'password';
+                loginPassword.setAttribute('type', type);
+                togglePassword.classList.toggle('fa-eye');
+                togglePassword.classList.toggle('fa-eye-slash');
+            };
+        }
+        
+        if (loginBtn) {
+            loginBtn.onclick = () => {
+                const username = loginUsername.value.trim();
+                const password = loginPassword.value;
+                
+                const result = this.auth.login(username, password);
+                
+                if (result.success) {
+                    loginError.style.display = 'none';
+                    loginContainer.style.display = 'none';
+                    mainApp.style.display = 'flex';
+                    this.updateUIForUser();
+                    this.loadSessionData();
+                } else {
+                    loginError.textContent = result.error;
+                    loginError.style.display = 'block';
+                }
+            };
+        }
+        
+        const handleEnter = (e) => {
+            if (e.key === 'Enter') loginBtn.click();
+        };
+        loginUsername.addEventListener('keypress', handleEnter);
+        loginPassword.addEventListener('keypress', handleEnter);
+    }
+    
+    loadSessionData() {
         this.loadFromLocalStorage();
         this.loadLibraryTxtsFromLocalStorage();
         this.loadInboxFromLocalStorage();
+        
+        if (this.creatorView) this.creatorView.renderTable();
+        if (this.epsView) this.epsView.renderPreview();
+        if (this.developmentView) this.developmentView.render();
+        if (this.historyView) this.historyView.render();
+        if (this.assignmentView) {
+            this.assignmentView.updateTxtList();
+            this.assignmentView.renderHistory();
+        }
+        if (this.adminView) this.adminView.render();
+        if (this.reportsView) {
+            this.reportsView.updateFilters();
+            this.reportsView.render();
+        }
+    }
+    
+    updateUIForUser() {
+        const user = this.auth.getCurrentUser();
+        const displaySpan = document.getElementById('currentUserDisplay');
+        if (displaySpan) {
+            displaySpan.textContent = `👤 ${user.username}${user.isMaster ? ' (MASTER)' : ''}`;
+        }
+        
+        const menuItems = document.querySelectorAll('.menu-item');
+        menuItems.forEach(item => {
+            const requiredPerm = item.dataset.perm;
+            if (requiredPerm && !this.auth.hasPermission(requiredPerm)) {
+                item.style.display = 'none';
+            } else {
+                item.style.display = 'flex';
+            }
+        });
+        
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.onclick = () => this.logout();
+        }
+    }
+    
+    logout() {
+        this.auth.logout();
+        const loginContainer = document.getElementById('loginView');
+        const mainApp = document.getElementById('mainApp');
+        loginContainer.style.display = 'flex';
+        mainApp.style.display = 'none';
+        document.getElementById('loginUsername').value = '';
+        document.getElementById('loginPassword').value = '';
+    }
+    
+    // ============================================================
+    // NORMALIZACIÓN
+    // ============================================================
+    normalizeSpaces(str) {
+        if (!str) return '';
+        return str.replace(/\s+/g, ' ').trim();
+    }
+    
+    generateGroupId(groupName) {
+        let id = '';
+        
+        if (groupName.includes('BLACK')) id = 'BLK';
+        else if (groupName.includes('WHITE')) id = 'WHT';
+        else if (groupName.includes('GREY') || groupName.includes('GRAY')) id = 'GRY';
+        else if (groupName.includes('ANTHRACITE')) id = 'ANT';
+        else if (groupName.includes('NATURAL')) id = 'NAT';
+        else if (groupName.includes('GOLD')) id = 'GLD';
+        else if (groupName.includes('SILVER')) id = 'SLV';
+        else if (groupName.includes('RED')) id = 'RED';
+        else if (groupName.includes('MAROON')) id = 'MRN';
+        else if (groupName.includes('CRIMSON')) id = 'CRM';
+        else if (groupName.includes('CARDINAL')) id = 'CRD';
+        else if (groupName.includes('GREEN')) id = 'GRN';
+        else if (groupName.includes('OLIVE')) id = 'OLV';
+        else if (groupName.includes('BLUE')) id = 'BLU';
+        else if (groupName.includes('NAVY')) id = 'NVY';
+        else if (groupName.includes('PURPLE')) id = 'PRP';
+        else if (groupName.includes('ORCHID')) id = 'ORC';
+        else if (groupName.includes('PINK')) id = 'PNK';
+        else if (groupName.includes('ORANGE')) id = 'ORG';
+        else if (groupName.includes('CERAMIC')) id = 'CRM';
+        else if (groupName.includes('YELLOW')) id = 'YEL';
+        else if (groupName.includes('BROWN')) id = 'BRN';
+        else if (groupName.includes('CINDER')) id = 'CIN';
+        else if (groupName.includes('TURQUOISE')) id = 'TRQ';
+        else if (groupName.includes('VOLT')) id = 'VOL';
+        else id = groupName.substring(0, 3).toUpperCase();
+        
+        const existingIds = Array.from(this.groupIds.values());
+        let counter = 1;
+        let finalId = id;
+        while (existingIds.includes(finalId)) {
+            finalId = `${id}_${counter}`;
+            counter++;
+        }
+        
+        return finalId;
+    }
+    
+    ensureGroupIds() {
+        for (const group of this.groupOrder) {
+            if (group.length > 0) {
+                const groupKey = group[0];
+                if (!this.groupIds.has(groupKey)) {
+                    this.groupIds.set(groupKey, this.generateGroupId(groupKey));
+                }
+            }
+        }
+        this.saveGroupIdsToLocalStorage();
+    }
+    
+    saveGroupIdsToLocalStorage() {
+        localStorage.setItem('alphaColorMatchGroupIds', JSON.stringify(Array.from(this.groupIds.entries())));
+    }
+    
+    loadGroupIdsFromLocalStorage() {
+        const saved = localStorage.getItem('alphaColorMatchGroupIds');
+        if (saved) {
+            try {
+                this.groupIds = new Map(JSON.parse(saved));
+            } catch(e) {
+                this.groupIds = new Map();
+            }
+        }
+    }
+    
+    getGroupId(groupKey) {
+        return this.groupIds.get(groupKey) || groupKey.substring(0, 6).toUpperCase();
+    }
+    
+    buildEquivalenceMap() {
+        const map = new Map();
+        
+        for (const row of this.equivalencyRows) {
+            const cleanRow = row.map(name => name ? this.normalizeSpaces(name) : '').filter(n => n);
+            if (cleanRow.length === 0) continue;
+            
+            for (const name of cleanRow) {
+                const searchKey = name.toUpperCase();
+                if (!map.has(searchKey)) {
+                    map.set(searchKey, []);
+                }
+                for (const eqName of cleanRow) {
+                    if (!map.get(searchKey).includes(eqName)) {
+                        map.get(searchKey).push(eqName);
+                    }
+                }
+            }
+        }
+        
+        return map;
+    }
+    
+    buildGroupOrder() {
+        const groups = [];
+        for (const row of this.equivalencyRows) {
+            const cleanRow = row.map(name => name ? this.normalizeSpaces(name) : '').filter(n => n);
+            if (cleanRow.length > 0) {
+                groups.push(cleanRow);
+            }
+        }
+        return groups;
+    }
+    
+    buildEquivalenceGroups() {
+        return this.equivalenceMap;
+    }
+    
+    getGroupKeyForColor(baseName) {
+        const searchKey = baseName.toUpperCase();
+        const equivalents = this.equivalenceMap.get(searchKey);
+        if (equivalents && equivalents.length > 0) {
+            return equivalents[0];
+        }
+        return baseName;
+    }
+    
+    getAllEquivalentNamesExact(baseName) {
+        const searchKey = baseName.toUpperCase();
+        const equivalents = this.equivalenceMap.get(searchKey);
+        if (equivalents && equivalents.length > 0) {
+            return [...equivalents];
+        }
+        return [baseName];
+    }
+    
+    // ============================================================
+    // VALIDACIÓN DE FORMATO CMYK (CORREGIDA - MENOS ESTRICTA)
+    // ============================================================
+    
+    validateCmykFormat(cStr, colorName, channel) {
+        if (!cStr || cStr === '') {
+            return { valid: false, error: `❌ ERROR: "${colorName}" - ${channel} está vacío` };
+        }
+        
+        if (cStr.match(/\.{2,}/)) {
+            return { valid: false, error: `❌ ERROR: "${colorName}" - ${channel}=${cStr} (tiene puntos de más)` };
+        }
+        
+        const num = parseFloat(cStr);
+        if (isNaN(num)) {
+            return { valid: false, error: `❌ ERROR: "${colorName}" - ${channel}=${cStr} (no es un número válido)` };
+        }
+        
+        return { valid: true };
+    }
+    
+    // ============================================================
+    // PARSEO DE ARCHIVO TXT (CORREGIDO - MÁS FLEXIBLE)
+    // ============================================================
+    
+    parseTxtContent(content, fileType = 'primary') {
+        const lines = content.split(/\r?\n/);
+        let dataStarted = false;
+        const records = [];
+        const formatErrors = [];
+        
+        for (let line of lines) {
+            if (line.trim() === '') continue;
+            if (line.trim() === 'BEGIN_DATA') { dataStarted = true; continue; }
+            if (dataStarted && line.trim() === 'END_DATA') break;
+            if (!dataStarted) continue;
+            
+            // Patrón más flexible: acepta número seguido o no de punto
+            const match = line.match(/^(\d+)\.?\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
+            if (match) {
+                let rawName = match[2] || match[3];
+                if (rawName) {
+                    const normalizedName = this.normalizeSpaces(rawName);
+                    const nk = this.extractNK(normalizedName);
+                    const baseName = this.extractBaseName(normalizedName);
+                    
+                    const cStr = match[4];
+                    const mStr = match[5];
+                    const yStr = match[6];
+                    const kStr = match[7];
+                    
+                    const cValidation = this.validateCmykFormat(cStr, normalizedName, 'C');
+                    const mValidation = this.validateCmykFormat(mStr, normalizedName, 'M');
+                    const yValidation = this.validateCmykFormat(yStr, normalizedName, 'Y');
+                    const kValidation = this.validateCmykFormat(kStr, normalizedName, 'K');
+                    
+                    if (!cValidation.valid) formatErrors.push(cValidation.error);
+                    if (!mValidation.valid) formatErrors.push(mValidation.error);
+                    if (!yValidation.valid) formatErrors.push(yValidation.error);
+                    if (!kValidation.valid) formatErrors.push(kValidation.error);
+                    
+                    records.push({
+                        id: match[1],
+                        name: normalizedName,
+                        nk: nk,
+                        baseName: baseName,
+                        cmyk: [parseFloat(cStr), parseFloat(mStr), parseFloat(yStr), parseFloat(kStr)],
+                        lab: [parseFloat(match[8]), parseFloat(match[9]), parseFloat(match[10])]
+                    });
+                }
+            }
+        }
+        
+        if (formatErrors.length > 0) {
+            console.warn('Errores de formato:', formatErrors);
+            // No bloqueamos la carga, solo mostramos advertencia
+            alert(`⚠️ Advertencia: ${formatErrors.length} errores de formato encontrados.\nLos datos se cargarán igualmente.`);
+        }
+        
+        return { records: records, corrections: [] };
+    }
+    
+    async loadPrimaryFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const result = this.parseTxtContent(content, 'primary');
+            
+            if (result.records.length === 0) {
+                alert('❌ No se pudieron cargar datos del archivo principal. Verifique el formato.');
+                this.updateFileInfo('primary', 'ERROR - No se cargaron datos', 0);
+                return;
+            }
+            
+            this.primaryData = result.records;
+            
+            this.updateFileInfo('primary', file.name, this.primaryData.length);
+            this.renderDataList('primary', this.primaryData);
+            this.saveToLocalStorage();
+            
+            alert(`✅ Archivo principal cargado: ${this.primaryData.length} colores`);
+        };
+        reader.onerror = (e) => {
+            alert('❌ Error al leer el archivo.');
+        };
+        reader.readAsText(file);
+    }
+    
+    async loadSecondaryFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const result = this.parseTxtContent(content, 'secondary');
+            
+            if (result.records.length === 0) {
+                alert('❌ No se pudieron cargar datos del archivo secundario. Verifique el formato.');
+                this.updateFileInfo('secondary', 'ERROR - No se cargaron datos', 0);
+                return;
+            }
+            
+            this.secondaryData = result.records;
+            
+            this.updateFileInfo('secondary', file.name, this.secondaryData.length);
+            this.renderDataList('secondary', this.secondaryData);
+            this.saveToLocalStorage();
+            
+            alert(`✅ Archivo secundario cargado: ${this.secondaryData.length} colores`);
+        };
+        reader.onerror = (e) => {
+            alert('❌ Error al leer el archivo.');
+        };
+        reader.readAsText(file);
     }
     
     saveToLocalStorage() {
@@ -107,11 +491,9 @@ class AlphaColorMatch {
             selectedPending: Array.from(this.selectedPending),
             deletedPending: Array.from(this.deletedPending),
             groupSelections: Array.from(this.groupSelections.entries()),
-            manualGroupSelections: Array.from(this.manualGroupSelections),
-            autoAddedItems: this.autoAddedItems
+            manualGroupSelections: Array.from(this.manualGroupSelections)
         };
         localStorage.setItem('alphaColorMatchData', JSON.stringify(dataToSave));
-        console.log('💾 Datos guardados en localStorage');
     }
     
     loadFromLocalStorage() {
@@ -126,9 +508,7 @@ class AlphaColorMatch {
                 this.deletedPending = new Set(data.deletedPending || []);
                 this.groupSelections = new Map(data.groupSelections || []);
                 this.manualGroupSelections = new Set(data.manualGroupSelections || []);
-                this.autoAddedItems = data.autoAddedItems || [];
                 this.updateUIFromLoadedData();
-                console.log('📂 Datos cargados desde localStorage');
             } catch (e) {
                 console.error('Error al cargar datos:', e);
             }
@@ -137,7 +517,6 @@ class AlphaColorMatch {
     
     saveEquivalencyRowsToLocalStorage() {
         localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(this.equivalencyRows));
-        console.log('💾 Tabla de equivalencias guardada en localStorage');
     }
     
     loadEquivalencyRowsFromLocalStorage() {
@@ -147,7 +526,6 @@ class AlphaColorMatch {
                 const rows = JSON.parse(savedRows);
                 if (rows && rows.length > 0) {
                     this.equivalencyRows = rows;
-                    console.log('📂 Tabla de equivalencias cargada desde localStorage');
                 }
             } catch (e) {
                 console.error('Error al cargar equivalencyRows:', e);
@@ -157,7 +535,6 @@ class AlphaColorMatch {
     
     saveLibraryTxtsToLocalStorage() {
         localStorage.setItem('alphaColorMatchLibrary', JSON.stringify(this.libraryTxts));
-        console.log('💾 Librería de TXTs guardada');
     }
     
     loadLibraryTxtsFromLocalStorage() {
@@ -165,9 +542,7 @@ class AlphaColorMatch {
         if (saved) {
             try {
                 this.libraryTxts = JSON.parse(saved);
-                console.log('📂 Librería de TXTs cargada:', this.libraryTxts.length, 'archivos');
             } catch(e) {
-                console.error(e);
                 this.libraryTxts = [];
             }
         }
@@ -191,7 +566,9 @@ class AlphaColorMatch {
             });
         }
         this.saveLibraryTxtsToLocalStorage();
-        console.log(`📚 TXT "${name}" agregado a librería del plotter ${plotter}`);
+        if (this.assignmentView) {
+            this.assignmentView.updateTxtList();
+        }
     }
     
     getTxtsByPlotter(plotter) {
@@ -203,19 +580,16 @@ class AlphaColorMatch {
         if (index !== -1) {
             this.libraryTxts.splice(index, 1);
             this.saveLibraryTxtsToLocalStorage();
-            console.log(`📚 TXT "${name}" eliminado de librería del plotter ${plotter}`);
+            if (this.assignmentView) {
+                this.assignmentView.updateTxtList();
+            }
             return true;
         }
         return false;
     }
     
-    // ============================================================
-    // BANDEJA DE ENTRADA (INBOX)
-    // ============================================================
-    
     saveInboxToLocalStorage() {
         localStorage.setItem('alphaColorMatchInbox', JSON.stringify(this.inboxItems));
-        console.log('💾 Bandeja de entrada guardada');
     }
     
     loadInboxFromLocalStorage() {
@@ -223,9 +597,7 @@ class AlphaColorMatch {
         if (saved) {
             try {
                 this.inboxItems = JSON.parse(saved);
-                console.log('📂 Bandeja de entrada cargada:', this.inboxItems.length, 'mensajes');
             } catch(e) {
-                console.error(e);
                 this.inboxItems = [];
             }
         }
@@ -245,7 +617,6 @@ class AlphaColorMatch {
         };
         this.inboxItems.unshift(newItem);
         this.saveInboxToLocalStorage();
-        console.log(`📬 Mensaje enviado a bandeja: "${filename}"`);
         return newItem;
     }
     
@@ -258,7 +629,6 @@ class AlphaColorMatch {
         if (item) {
             item.isRead = true;
             this.saveInboxToLocalStorage();
-            console.log(`✅ Mensaje ${id} marcado como leído`);
             return true;
         }
         return false;
@@ -269,7 +639,6 @@ class AlphaColorMatch {
         if (item) {
             item.isRead = false;
             this.saveInboxToLocalStorage();
-            console.log(`📩 Mensaje ${id} marcado como no leído`);
             return true;
         }
         return false;
@@ -280,23 +649,19 @@ class AlphaColorMatch {
         if (index !== -1) {
             this.inboxItems.splice(index, 1);
             this.saveInboxToLocalStorage();
-            console.log(`🗑️ Mensaje ${id} eliminado de la bandeja`);
             return true;
         }
         return false;
     }
     
-    // ============================================================
-    // CARGAR DESDE BANDEJA A SECUNDARIO
-    // ============================================================
-    
     loadSecondaryFromInbox(content, filename) {
         try {
-            this.secondaryData = this.parseTxtContent(content);
+            const result = this.parseTxtContent(content, 'secondary');
+            if (result.records.length === 0) return false;
+            this.secondaryData = result.records;
             this.updateFileInfo('secondary', filename, this.secondaryData.length);
             this.renderDataList('secondary', this.secondaryData);
             this.saveToLocalStorage();
-            console.log(`✅ Secundario cargado desde bandeja: ${filename} (${this.secondaryData.length} colores)`);
             return true;
         } catch (error) {
             console.error('Error al cargar desde bandeja:', error);
@@ -311,6 +676,7 @@ class AlphaColorMatch {
             localStorage.removeItem('developmentColors');
             localStorage.removeItem('alphaColorMatchLibrary');
             localStorage.removeItem('alphaColorMatchInbox');
+            localStorage.removeItem('alphaColorMatchGroupIds');
             this.primaryData = [];
             this.secondaryData = [];
             this.results = [];
@@ -318,9 +684,9 @@ class AlphaColorMatch {
             this.deletedPending.clear();
             this.groupSelections.clear();
             this.manualGroupSelections.clear();
-            this.autoAddedItems = [];
             this.libraryTxts = [];
             this.inboxItems = [];
+            this.groupIds.clear();
             
             this.equivalencyRows = [
                 ["00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
@@ -377,7 +743,9 @@ class AlphaColorMatch {
                 ["4KB DARK TURQUOISE"],
                 ["87F BRIGHT CERAMIC", "87F TM BRIGHT CERAMIC"]
             ];
-            this.buildEquivalenceGroups();
+            this.equivalenceMap = this.buildEquivalenceMap();
+            this.groupOrder = this.buildGroupOrder();
+            this.ensureGroupIds();
             
             this.updateFileInfo('primary', 'Ningún archivo cargado', 0);
             this.updateFileInfo('secondary', 'Ningún archivo cargado', 0);
@@ -390,8 +758,12 @@ class AlphaColorMatch {
             const exportBtn = document.getElementById('exportBtn');
             if (exportBtn) exportBtn.disabled = true;
             
+            if (this.assignmentView) {
+                this.assignmentView.updateTxtList();
+                this.assignmentView.renderHistory();
+            }
+            
             alert('✅ Caché limpiada correctamente');
-            console.log('🗑️ Caché limpiada');
         }
     }
     
@@ -400,12 +772,10 @@ class AlphaColorMatch {
             this.updateFileInfo('primary', 'Datos cargados desde caché', this.primaryData.length);
             this.renderDataList('primary', this.primaryData);
         }
-        
         if (this.secondaryData.length > 0) {
             this.updateFileInfo('secondary', 'Datos cargados desde caché', this.secondaryData.length);
             this.renderDataList('secondary', this.secondaryData);
         }
-        
         if (this.results.length > 0) {
             this.renderResults(this.results);
             this.validateExportReady();
@@ -429,84 +799,26 @@ class AlphaColorMatch {
         }, 2500);
     }
     
-    buildEquivalenceGroups() {
-        const nameToGroup = new Map();
-        const groups = [];
-        
-        for (const row of this.equivalencyRows) {
-            const names = row.filter(name => name && name.trim() !== '');
-            if (names.length === 0) continue;
-            const normalizedNames = names.map(name => this.normalizeBaseName(name));
-            
-            let existingGroup = null;
-            for (const normName of normalizedNames) {
-                if (nameToGroup.has(normName)) {
-                    existingGroup = nameToGroup.get(normName);
-                    break;
-                }
-            }
-            
-            let targetGroup = existingGroup;
-            if (!targetGroup) {
-                targetGroup = new Set();
-                groups.push(targetGroup);
-            }
-            
-            for (const normName of normalizedNames) {
-                targetGroup.add(normName);
-                nameToGroup.set(normName, targetGroup);
-            }
-        }
-        
-        for (const row of this.equivalencyRows) {
-            for (const name of row) {
-                if (!name || name.trim() === '') continue;
-                const norm = this.normalizeBaseName(name);
-                if (!nameToGroup.has(norm)) {
-                    const group = new Set();
-                    group.add(norm);
-                    groups.push(group);
-                    nameToGroup.set(norm, group);
-                }
-            }
-        }
-        
-        return groups;
-    }
-    
-    getEquivalenceGroup(baseName) {
-        const norm = this.normalizeBaseName(baseName);
-        for (const group of this.equivalenceGroups) {
-            if (group.has(norm)) {
-                return group;
-            }
-        }
-        return null;
-    }
-    
-    areEquivalent(baseName1, baseName2) {
-        const norm1 = this.normalizeBaseName(baseName1);
-        const norm2 = this.normalizeBaseName(baseName2);
-        if (norm1 === norm2) return true;
-        const group1 = this.getEquivalenceGroup(baseName1);
-        const group2 = this.getEquivalenceGroup(baseName2);
-        if (group1 && group2 && group1 === group2) return true;
-        return false;
-    }
-    
-    getEquivalentNames(baseName) {
-        const group = this.getEquivalenceGroup(baseName);
-        if (!group) return [this.normalizeBaseName(baseName)];
-        return Array.from(group);
-    }
-    
     init() {
+        if (this.auth.loadSession()) {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            this.updateUIForUser();
+        } else {
+            document.getElementById('loginView').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+        }
+        
         this.bindEvents();
         this.initCreatorView();
         this.initEPSView();
         this.initDevelopmentView();
         this.initHistoryView();
+        this.initAssignmentView();
+        this.initAdminView();
+        this.initReportsView();
         this.initViews();
+        this.initLogin();
         
         const clearCacheBtn = document.getElementById('clearCacheBtn');
         if (clearCacheBtn) {
@@ -514,6 +826,7 @@ class AlphaColorMatch {
         }
         
         console.log('✅ Alpha Color Match - Versión Corregida');
+        console.log('📊 Tabla de equivalencias cargada:', this.equivalencyRows.length, 'grupos');
     }
     
     initCreatorView() {
@@ -527,22 +840,31 @@ class AlphaColorMatch {
             }
         }
         this.creatorView = new CreatorView(this, equivalencyMap);
-        console.log('✅ CreatorView inicializado');
     }
     
     initEPSView() {
         this.epsView = new EPSView(this);
-        console.log('✅ EPSView inicializado');
     }
     
     initDevelopmentView() {
         this.developmentView = new DevelopmentView(this);
-        console.log('✅ DevelopmentView inicializado');
     }
     
     initHistoryView() {
         this.historyView = new HistoryView(this);
-        console.log('✅ HistoryView (Bandeja) inicializado');
+    }
+    
+    initAssignmentView() {
+        this.assignmentView = new AssignmentView(this);
+    }
+    
+    initAdminView() {
+        this.adminView = new AdminView(this, this.auth);
+    }
+    
+    initReportsView() {
+        this.reportsView = new ReportsView(this);
+        console.log('✅ ReportsView inicializado');
     }
     
     initViews() {
@@ -552,7 +874,10 @@ class AlphaColorMatch {
             history: document.getElementById('historyView'),
             creator: document.getElementById('creatorView'),
             eps: document.getElementById('epsView'),
-            development: document.getElementById('developmentView')
+            development: document.getElementById('developmentView'),
+            assignment: document.getElementById('assignmentView'),
+            reports: document.getElementById('reportsView'),
+            admin: document.getElementById('adminView')
         };
         
         const switchView = (viewName) => {
@@ -580,12 +905,23 @@ class AlphaColorMatch {
             if (viewName === 'history' && this.historyView) {
                 this.historyView.render();
             }
+            if (viewName === 'assignment' && this.assignmentView) {
+                this.assignmentView.updateTxtList();
+                this.assignmentView.renderHistory();
+            }
+            if (viewName === 'reports' && this.reportsView) {
+                this.reportsView.updateFilters();
+                this.reportsView.render();
+            }
+            if (viewName === 'admin' && this.adminView) {
+                this.adminView.render();
+            }
         };
         
         menuItems.forEach(item => {
             item.addEventListener('click', () => {
                 const viewName = item.dataset.view;
-                if (viewName) {
+                if (viewName && this.auth.hasPermission(viewName)) {
                     switchView(viewName);
                 }
             });
@@ -621,7 +957,6 @@ class AlphaColorMatch {
     setGroupSelection(groupId, source) {
         this.groupSelections.set(groupId, source);
         this.manualGroupSelections.add(groupId);
-        console.log(`🎨 Grupo ${groupId}: usando valores ${source === 'primary' ? 'PRINCIPAL' : 'SECUNDARIO'} (manual)`);
         this.renderResults(this.results);
         this.validateExportReady();
         this.saveToLocalStorage();
@@ -643,7 +978,6 @@ class AlphaColorMatch {
         for (const groupId of groups) {
             this.groupSelections.set(groupId, 'secondary');
         }
-        console.log(`🔄 Reemplazados ${groups.size} grupos NO modificados a valores SECUNDARIO`);
         this.renderResults(this.results);
         this.validateExportReady();
         this.saveToLocalStorage();
@@ -666,7 +1000,6 @@ class AlphaColorMatch {
         this.renderResults(this.results);
         this.validateExportReady();
         this.saveToLocalStorage();
-        console.log(`➕ Pendiente agregado: ${itemId}`);
     }
     
     togglePendingDelete(itemId) {
@@ -675,7 +1008,6 @@ class AlphaColorMatch {
         this.renderResults(this.results);
         this.validateExportReady();
         this.saveToLocalStorage();
-        console.log(`🗑️ Pendiente eliminado: ${itemId}`);
     }
     
     isPendingDecided(itemId) {
@@ -692,10 +1024,8 @@ class AlphaColorMatch {
         const isReady = pendingUndecided.length === 0;
         if (isReady) {
             exportBtn.disabled = false;
-            exportBtn.title = "Listo para exportar";
         } else {
             exportBtn.disabled = true;
-            exportBtn.title = `Faltan ${pendingUndecided.length} pendientes por decidir (Agregar/Eliminar)`;
         }
         const validationMsg = document.getElementById('validationMessage');
         if (validationMsg) {
@@ -709,26 +1039,17 @@ class AlphaColorMatch {
         return isReady;
     }
     
-    normalizeBaseName(baseName) {
-        if (!baseName) return '';
-        let cleaned = baseName.toUpperCase();
-        cleaned = cleaned.replace(/\bTM\b/g, '');
-        cleaned = cleaned.replace(/\s+/g, ' ').trim();
-        return cleaned;
-    }
-    
     extractNK(fullName) {
         if (!fullName) return null;
         const words = fullName.trim().split(/\s+/);
         if (words.length === 0) return null;
         
         const patterns = [
-            { name: 'NK_pattern', test: (str) => /^NK[-]?[A-Z0-9]+/i.test(str), minWords: 1, maxWords: 3 },
-            { name: 'numbers_only', test: (str) => /^[\d\-]{4,12}$/.test(str), minWords: 1, maxWords: 1 },
-            { name: 'alphanumeric', test: (str) => /^[A-Z]{1,4}[\d]{1,4}[A-Z]{0,2}$/i.test(str) || /^[\d]{1,4}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 },
-            { name: 'letter_number', test: (str) => /^[A-Z][\d]{3,6}[A-Z]{0,2}$/i.test(str), minWords: 1, maxWords: 1 },
-            { name: 'number_letter', test: (str) => /^[\d]{3,6}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 },
-            { name: 'specific_words', test: (str) => ['STANDARD', 'COLORS', 'GREY', 'WHITE', 'BLACK', 'BLUE', 'GOLD', 'SILVER'].includes(str.toUpperCase()), minWords: 1, maxWords: 1 }
+            { test: (str) => /^NK[-]?[A-Z0-9]+/i.test(str), minWords: 1, maxWords: 3 },
+            { test: (str) => /^[\d\-]{4,12}$/.test(str), minWords: 1, maxWords: 1 },
+            { test: (str) => /^[A-Z]{1,4}[\d]{1,4}[A-Z]{0,2}$/i.test(str) || /^[\d]{1,4}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 },
+            { test: (str) => /^[A-Z][\d]{3,6}[A-Z]{0,2}$/i.test(str), minWords: 1, maxWords: 1 },
+            { test: (str) => /^[\d]{3,6}[A-Z]{1,4}$/i.test(str), minWords: 1, maxWords: 1 }
         ];
         
         for (let wordCount = 1; wordCount <= 3; wordCount++) {
@@ -737,24 +1058,21 @@ class AlphaColorMatch {
             for (const pattern of patterns) {
                 if (wordCount >= pattern.minWords && wordCount <= pattern.maxWords) {
                     if (pattern.test(candidate)) {
-                        console.log(`🔍 NK detectado: "${candidate}" (patrón: ${pattern.name})`);
                         return candidate;
                     }
                 }
             }
         }
-        const lastWord = words[words.length - 1];
-        console.log(`⚠️ NK no detectado con patrones, usando última palabra: "${lastWord}"`);
-        return lastWord;
+        return words[words.length - 1];
     }
     
     extractBaseName(fullName) {
         if (!fullName) return '';
         const nk = this.extractNK(fullName);
-        if (!nk) return this.normalizeBaseName(fullName);
+        if (!nk) return this.normalizeSpaces(fullName);
         const nkPattern = new RegExp(`\\s+${nk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
         const base = fullName.replace(nkPattern, '').trim();
-        return this.normalizeBaseName(base);
+        return this.normalizeSpaces(base);
     }
     
     getEffectiveCmyk(groupId, primaryColor, secondaryColor) {
@@ -773,74 +1091,6 @@ class AlphaColorMatch {
         } else {
             return secondaryColor ? [...secondaryColor.lab] : null;
         }
-    }
-    
-    parseTxtContent(content) {
-        const lines = content.split(/\r?\n/);
-        let dataStarted = false;
-        const records = [];
-        
-        for (let line of lines) {
-            if (line.trim() === '') continue;
-            if (line.trim() === 'BEGIN_DATA') { dataStarted = true; continue; }
-            if (dataStarted && line.trim() === 'END_DATA') break;
-            if (!dataStarted) continue;
-            
-            const match = line.match(/^(\d+)\.?\s+(?:"([^"]+)"|([^\s]+))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)/);
-            if (match) {
-                let name = match[2] || match[3];
-                if (name) {
-                    records.push({
-                        id: match[1],
-                        name: name.trim(),
-                        cmyk: [parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6]), parseFloat(match[7])],
-                        lab: [parseFloat(match[8]), parseFloat(match[9]), parseFloat(match[10])]
-                    });
-                }
-            }
-        }
-        console.log(`📄 Parseados ${records.length} registros`);
-        return records;
-    }
-    
-    async loadPrimaryFile(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const content = e.target.result;
-            this.primaryData = this.parseTxtContent(content);
-            this.updateFileInfo('primary', file.name, this.primaryData.length);
-            this.renderDataList('primary', this.primaryData);
-            this.saveToLocalStorage();
-            console.log(`✅ Principal: ${this.primaryData.length} colores`);
-            alert(`✅ Archivo principal cargado: ${this.primaryData.length} colores`);
-        };
-        reader.onerror = (e) => {
-            console.error('Error al leer archivo:', e);
-            alert('❌ Error al leer el archivo. Verifica que sea un TXT válido.');
-        };
-        reader.readAsText(file);
-    }
-    
-    async loadSecondaryFile(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const content = e.target.result;
-            this.secondaryData = this.parseTxtContent(content);
-            this.updateFileInfo('secondary', file.name, this.secondaryData.length);
-            this.renderDataList('secondary', this.secondaryData);
-            this.saveToLocalStorage();
-            console.log(`✅ Secundario: ${this.secondaryData.length} colores`);
-            alert(`✅ Archivo secundario cargado: ${this.secondaryData.length} colores`);
-        };
-        reader.onerror = (e) => {
-            console.error('Error al leer archivo:', e);
-            alert('❌ Error al leer el archivo. Verifica que sea un TXT válido.');
-        };
-        reader.readAsText(file);
     }
     
     updateFileInfo(type, filename, count) {
@@ -880,8 +1130,6 @@ class AlphaColorMatch {
         this.deletedPending.clear();
         this.groupSelections.clear();
         this.manualGroupSelections.clear();
-        this.autoAddedItems = [];
-        console.log('🔍 Comparando archivos...');
         this.findMatches();
         this.saveToLocalStorage();
         
@@ -908,6 +1156,7 @@ class AlphaColorMatch {
             primaryByNK.get(nk).push({
                 id: color.id,
                 baseName: this.extractBaseName(color.name),
+                fullName: color.name,
                 colorData: color
             });
         }
@@ -919,6 +1168,7 @@ class AlphaColorMatch {
             secondaryByNK.get(nk).push({
                 id: color.id,
                 baseName: this.extractBaseName(color.name),
+                fullName: color.name,
                 colorData: color
             });
         }
@@ -935,26 +1185,27 @@ class AlphaColorMatch {
             const groups = new Map();
             
             for (const pc of primaryColors) {
-                const groupKey = this.getEquivalenceGroup(pc.baseName);
-                const groupIdKey = groupKey ? Array.from(groupKey).sort().join('|') : pc.baseName;
-                if (!groups.has(groupIdKey)) {
-                    groups.set(groupIdKey, { primarios: [], secundarios: [], groupKey: groupKey });
+                const equivalentGroup = this.getAllEquivalentNamesExact(pc.baseName);
+                const groupKey = equivalentGroup[0];
+                if (!groups.has(groupKey)) {
+                    groups.set(groupKey, { primarios: [], secundarios: [], equivalentGroup: equivalentGroup, groupKey: groupKey });
                 }
-                groups.get(groupIdKey).primarios.push(pc);
+                groups.get(groupKey).primarios.push(pc);
             }
             
             for (const sc of secondaryColors) {
-                const groupKey = this.getEquivalenceGroup(sc.baseName);
-                const groupIdKey = groupKey ? Array.from(groupKey).sort().join('|') : sc.baseName;
-                if (!groups.has(groupIdKey)) {
-                    groups.set(groupIdKey, { primarios: [], secundarios: [], groupKey: groupKey });
+                const equivalentGroup = this.getAllEquivalentNamesExact(sc.baseName);
+                const groupKey = equivalentGroup[0];
+                if (!groups.has(groupKey)) {
+                    groups.set(groupKey, { primarios: [], secundarios: [], equivalentGroup: equivalentGroup, groupKey: groupKey });
                 }
-                groups.get(groupIdKey).secundarios.push(sc);
+                groups.get(groupKey).secundarios.push(sc);
             }
             
-            for (const [groupIdKey, group] of groups) {
-                const { primarios, secundarios, groupKey } = group;
+            for (const [groupKey, group] of groups) {
+                const { primarios, secundarios, equivalentGroup } = group;
                 const actualGroupId = `group_${nk}_${groupCounter++}`;
+                const groupDisplayId = this.getGroupId(groupKey);
                 
                 if (primarios.length > 0 && secundarios.length > 0) {
                     for (const primary of primarios) {
@@ -964,12 +1215,15 @@ class AlphaColorMatch {
                             results.push({
                                 id: `primary_${primary.id}`,
                                 groupId: actualGroupId,
+                                groupDisplayId: groupDisplayId,
+                                groupKey: groupKey,
                                 nk: nk,
-                                primaryData: { id: primary.id, baseName: primary.baseName, colorData: primary.colorData },
-                                secondaryData: { id: secondary.id, baseName: secondary.baseName, colorData: secondary.colorData },
+                                primaryData: { id: primary.id, baseName: primary.baseName, fullName: primary.fullName, colorData: primary.colorData },
+                                secondaryData: { id: secondary.id, baseName: secondary.baseName, fullName: secondary.fullName, colorData: secondary.colorData },
                                 matchType: matchType,
                                 isPending: false,
-                                isSelected: true
+                                isSelected: true,
+                                equivalentGroup: equivalentGroup
                             });
                             processedPrimary.add(primary.id);
                             processedSecondary.add(secondary.id);
@@ -981,12 +1235,15 @@ class AlphaColorMatch {
                             results.push({
                                 id: `pending_primary_${primary.id}`,
                                 groupId: null,
+                                groupDisplayId: groupDisplayId,
+                                groupKey: groupKey,
                                 nk: nk,
-                                primaryData: { id: primary.id, baseName: primary.baseName, colorData: primary.colorData },
+                                primaryData: { id: primary.id, baseName: primary.baseName, fullName: primary.fullName, colorData: primary.colorData },
                                 secondaryData: null,
                                 matchType: 'pending_primary',
                                 isPending: true,
-                                isSelected: false
+                                isSelected: false,
+                                equivalentGroup: equivalentGroup
                             });
                             processedPrimary.add(primary.id);
                         }
@@ -997,43 +1254,39 @@ class AlphaColorMatch {
                             results.push({
                                 id: `pending_secondary_${secondary.id}`,
                                 groupId: null,
+                                groupDisplayId: groupDisplayId,
+                                groupKey: groupKey,
                                 nk: nk,
                                 primaryData: null,
-                                secondaryData: { id: secondary.id, baseName: secondary.baseName, colorData: secondary.colorData },
+                                secondaryData: { id: secondary.id, baseName: secondary.baseName, fullName: secondary.fullName, colorData: secondary.colorData },
                                 matchType: 'pending_secondary',
                                 isPending: true,
-                                isSelected: false
+                                isSelected: false,
+                                equivalentGroup: equivalentGroup
                             });
                             processedSecondary.add(secondary.id);
-                        }
-                    }
-                }
-                
-                if (groupKey && primarios.length > 0) {
-                    const existingNames = new Set();
-                    for (const p of primarios) existingNames.add(p.baseName);
-                    for (const s of secundarios) existingNames.add(s.baseName);
-                    for (const equivalentName of groupKey) {
-                        if (!existingNames.has(equivalentName)) {
-                            const sourceColor = primarios[0].colorData;
-                            this.autoAddedItems.push({
-                                nk: nk,
-                                baseName: equivalentName,
-                                sourceColor: sourceColor,
-                                groupId: actualGroupId
-                            });
-                            existingNames.add(equivalentName);
                         }
                     }
                 }
             }
         }
         
-        results.sort((a, b) => a.nk.localeCompare(b.nk));
+        results.sort((a, b) => {
+            const groupCompare = (a.groupKey || '').localeCompare(b.groupKey || '');
+            if (groupCompare !== 0) return groupCompare;
+            const nkCompare = a.nk.localeCompare(b.nk);
+            if (nkCompare !== 0) return nkCompare;
+            const nameA = a.primaryData?.fullName || a.secondaryData?.fullName || '';
+            const nameB = b.primaryData?.fullName || b.secondaryData?.fullName || '';
+            return nameA.localeCompare(nameB);
+        });
+        
         this.results = results;
         this.renderResults(results);
         this.validateExportReady();
-        console.log(`📊 RESULTADOS: ${results.length}, Auto-agregados: ${this.autoAddedItems.length}`);
+        
+        console.log('📊 Comparación completada:', results.length, 'resultados');
+        console.log('📋 Grupos de equivalencia usados:', this.equivalenceMap.size);
     }
     
     renderResults(results) {
@@ -1057,7 +1310,6 @@ class AlphaColorMatch {
             <span class="badge secondary">➕ Pendientes Secundario: ${pendingSecondary}</span>
             <span class="badge" style="background:#15803d;">✓ Agregados: ${selectedCount}</span>
             <span class="badge" style="background:#991b1b;">🗑️ Eliminados: ${deletedCount}</span>
-            <span class="badge" style="background:#eab308;">✨ Auto-agregados: ${this.autoAddedItems.length}</span>
         `;
         
         tbody.innerHTML = results.map(item => {
@@ -1067,6 +1319,8 @@ class AlphaColorMatch {
             let actionButton = '';
             let selectionButtons = '';
             let cmykPreview = '';
+            
+            const groupBadge = item.groupDisplayId ? `<span style="display:inline-block; background:rgba(0,229,255,0.2); color:#00e5ff; padding:0.1rem 0.4rem; border-radius:0.25rem; font-size:0.6rem; margin-right:0.5rem;">${item.groupDisplayId}</span>` : '';
             
             if (item.matchType === 'exact' || item.matchType === 'equivalent') {
                 rowClass = item.matchType === 'exact' ? 'style="background: rgba(21, 128, 61, 0.1);"' : 'style="background: rgba(180, 83, 9, 0.1);"';
@@ -1114,14 +1368,14 @@ class AlphaColorMatch {
                 }
             }
             
-            const primaryName = item.primaryData ? item.primaryData.baseName : '—';
-            const secondaryName = item.secondaryData ? item.secondaryData.baseName : '—';
+            const primaryName = item.primaryData ? (item.primaryData.fullName || item.primaryData.baseName) : '—';
+            const secondaryName = item.secondaryData ? (item.secondaryData.fullName || item.secondaryData.baseName) : '—';
             const primaryCmyk = item.primaryData?.colorData?.cmyk;
             const secondaryCmyk = item.secondaryData?.colorData?.cmyk;
             
             return `
                 <tr ${rowClass}>
-                    <td><strong>${item.nk}</strong>${cmykPreview}</td>
+                    <td>${groupBadge}<strong>${item.nk}</strong>${cmykPreview}</td>
                     <td>${primaryName}<br>${primaryCmyk ? `<span class="cmyk-small">C:${primaryCmyk[0].toFixed(1)} M:${primaryCmyk[1].toFixed(1)} Y:${primaryCmyk[2].toFixed(1)} K:${primaryCmyk[3].toFixed(1)}</span>` : ''}</td>
                     <td>${secondaryName}<br>${secondaryCmyk ? `<span class="cmyk-small">C:${secondaryCmyk[0].toFixed(1)} M:${secondaryCmyk[1].toFixed(1)} Y:${secondaryCmyk[2].toFixed(1)} K:${secondaryCmyk[3].toFixed(1)}</span>` : ''}</td>
                     <td><span class="${statusClass}">${statusText}</span></td>
@@ -1131,10 +1385,83 @@ class AlphaColorMatch {
         }).join('');
     }
     
+    expandWithAllEquivalentsByNK(exportItems) {
+        const itemsByGroup = new Map();
+        
+        for (const item of exportItems) {
+            const nk = this.extractNK(item.name);
+            if (!nk) continue;
+            
+            const baseName = this.extractBaseName(item.name);
+            const groupKey = this.getGroupKeyForColor(baseName);
+            
+            if (!itemsByGroup.has(groupKey)) {
+                itemsByGroup.set(groupKey, []);
+            }
+            itemsByGroup.get(groupKey).push({ item, nk, baseName });
+        }
+        
+        const expandedItems = [];
+        const processedKeys = new Set();
+        
+        const groupOrderList = [];
+        for (const group of this.groupOrder) {
+            if (group.length > 0) {
+                groupOrderList.push(group[0]);
+            }
+        }
+        
+        const sortedGroups = Array.from(itemsByGroup.keys()).sort((a, b) => {
+            const indexA = groupOrderList.indexOf(a);
+            const indexB = groupOrderList.indexOf(b);
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return a.localeCompare(b);
+        });
+        
+        for (const groupKey of sortedGroups) {
+            const groupItems = itemsByGroup.get(groupKey);
+            
+            for (const { item, nk, baseName } of groupItems) {
+                const equivalentNames = this.getAllEquivalentNamesExact(baseName);
+                
+                for (const eqName of equivalentNames) {
+                    const eqFullName = `${eqName} ${nk}`;
+                    const key = `${eqFullName}|${item.cmyk.join(',')}`;
+                    
+                    if (!processedKeys.has(key)) {
+                        processedKeys.add(key);
+                        expandedItems.push({
+                            name: eqFullName,
+                            cmyk: [...item.cmyk],
+                            lab: [...item.lab],
+                            nk: nk,
+                            groupKey: groupKey,
+                            originalName: item.name,
+                            isEquivalent: eqName !== baseName
+                        });
+                    }
+                }
+            }
+        }
+        
+        return expandedItems;
+    }
+    
     buildExportItems() {
         const exportItems = [];
         const processedGroups = new Set();
-        const sortedResults = [...this.results].sort((a, b) => a.nk.localeCompare(b.nk));
+        
+        const sortedResults = [...this.results].sort((a, b) => {
+            const groupCompare = (a.groupKey || '').localeCompare(b.groupKey || '');
+            if (groupCompare !== 0) return groupCompare;
+            const nkCompare = a.nk.localeCompare(b.nk);
+            if (nkCompare !== 0) return nkCompare;
+            const nameA = a.primaryData?.fullName || a.secondaryData?.fullName || '';
+            const nameB = b.primaryData?.fullName || b.secondaryData?.fullName || '';
+            return nameA.localeCompare(nameB);
+        });
         
         for (const item of sortedResults) {
             if (item.matchType === 'exact' || item.matchType === 'equivalent') {
@@ -1143,15 +1470,28 @@ class AlphaColorMatch {
                 const cmyk = this.getEffectiveCmyk(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
                 const lab = this.getEffectiveLab(item.groupId, item.primaryData?.colorData, item.secondaryData?.colorData);
                 if (item.primaryData) {
-                    exportItems.push({ name: item.primaryData.colorData.name, cmyk: cmyk, lab: lab, type: item.matchType });
+                    exportItems.push({ 
+                        name: item.primaryData.fullName || item.primaryData.colorData.name, 
+                        cmyk: cmyk, 
+                        lab: lab, 
+                        type: item.matchType,
+                        nk: item.nk,
+                        baseName: item.primaryData.baseName
+                    });
                 }
                 if (item.matchType === 'equivalent' && item.secondaryData) {
-                    exportItems.push({ name: item.secondaryData.colorData.name, cmyk: cmyk, lab: lab, type: item.matchType });
-                }
-                const groupAutos = this.autoAddedItems.filter(a => a.groupId === item.groupId);
-                for (const auto of groupAutos) {
-                    const fullName = `${auto.baseName} ${auto.nk}`;
-                    exportItems.push({ name: fullName, cmyk: cmyk, lab: lab, type: 'auto_added' });
+                    const secondaryName = item.secondaryData.fullName || item.secondaryData.colorData.name;
+                    const alreadyExists = exportItems.some(e => e.name === secondaryName && e.nk === item.nk);
+                    if (!alreadyExists) {
+                        exportItems.push({ 
+                            name: secondaryName, 
+                            cmyk: cmyk, 
+                            lab: lab, 
+                            type: item.matchType,
+                            nk: item.nk,
+                            baseName: item.secondaryData.baseName
+                        });
+                    }
                 }
             }
         }
@@ -1159,14 +1499,39 @@ class AlphaColorMatch {
         for (const item of this.results) {
             if (this.selectedPending.has(item.id)) {
                 if (item.primaryData) {
-                    exportItems.push({ name: item.primaryData.colorData.name, cmyk: [...item.primaryData.colorData.cmyk], lab: [...item.primaryData.colorData.lab], type: 'added' });
+                    exportItems.push({ 
+                        name: item.primaryData.fullName || item.primaryData.colorData.name, 
+                        cmyk: [...item.primaryData.colorData.cmyk], 
+                        lab: [...item.primaryData.colorData.lab], 
+                        type: 'added',
+                        nk: item.nk,
+                        baseName: item.primaryData.baseName
+                    });
                 } else if (item.secondaryData) {
-                    exportItems.push({ name: item.secondaryData.colorData.name, cmyk: [...item.secondaryData.colorData.cmyk], lab: [...item.secondaryData.colorData.lab], type: 'added' });
+                    exportItems.push({ 
+                        name: item.secondaryData.fullName || item.secondaryData.colorData.name, 
+                        cmyk: [...item.secondaryData.colorData.cmyk], 
+                        lab: [...item.secondaryData.colorData.lab], 
+                        type: 'added',
+                        nk: item.nk,
+                        baseName: item.secondaryData.baseName
+                    });
                 }
             }
         }
         
-        return exportItems;
+        const uniqueExportItems = [];
+        const seenNames = new Set();
+        for (const item of exportItems) {
+            const key = `${item.name}|${item.nk}`;
+            if (!seenNames.has(key)) {
+                seenNames.add(key);
+                uniqueExportItems.push(item);
+            }
+        }
+        
+        const expandedItems = this.expandWithAllEquivalentsByNK(uniqueExportItems);
+        return expandedItems;
     }
     
     generateCGATSContent(exportItems) {
@@ -1174,49 +1539,57 @@ class AlphaColorMatch {
         const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
         let content = 'CGATS.17\nORIGINATOR\t"ALPHA COLOR MATCH"\nFILE_DESCRIPTOR\t""\n';
         content += `CREATED\t"${dateStr}"\nNUMBER_OF_FIELDS\t9\nBEGIN_DATA_FORMAT\nSAMPLE_ID SAMPLE_NAME CMYK_C CMYK_M CMYK_Y CMYK_K LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\nNUMBER_OF_SETS\t${exportItems.length}\nBEGIN_DATA\n\n`;
-        exportItems.forEach((item, index) => {
+        
+        const finalUnique = new Map();
+        for (const item of exportItems) {
+            if (!finalUnique.has(item.name)) {
+                finalUnique.set(item.name, item);
+            }
+        }
+        const finalItems = Array.from(finalUnique.values());
+        
+        finalItems.forEach((item, index) => {
             const counter = index + 1;
-            content += `${counter}. "${item.name}" ${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} ${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
+            content += `${counter} "${item.name}" ${item.cmyk[0].toFixed(6)} ${item.cmyk[1].toFixed(6)} ${item.cmyk[2].toFixed(6)} ${item.cmyk[3].toFixed(6)} ${item.lab[0].toFixed(6)} ${item.lab[1].toFixed(6)} ${item.lab[2].toFixed(6)}\n`;
         });
         content += '\nEND_DATA\n';
         return content;
     }
     
     showPreviewAndExport() {
-        const exportItems = this.buildExportItems();
+        let exportItems = this.buildExportItems();
         if (exportItems.length === 0) {
-            alert('No hay datos para exportar. Asegúrate de haber comparado y seleccionado pendientes.');
+            alert('No hay datos para exportar.');
             return;
         }
+        
+        const originalCount = exportItems.filter(i => !i.isEquivalent).length;
+        const equivalentCount = exportItems.filter(i => i.isEquivalent).length;
+        
         const content = this.generateCGATSContent(exportItems);
-        const exactCount = exportItems.filter(i => i.type === 'exact').length;
-        const equivalentCount = exportItems.filter(i => i.type === 'equivalent').length;
-        const addedCount = exportItems.filter(i => i.type === 'added').length;
-        const autoAddedCount = exportItems.filter(i => i.type === 'auto_added').length;
         
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 900px; max-height: 85vh;">
                 <div class="modal-header" style="background: #2d4ed6;">
-                    <h3 style="color: white;">📄 Vista previa de exportación (CGATS.17)</h3>
+                    <h3 style="color: white;">📄 Vista previa de exportación</h3>
                     <button class="modal-close" style="color: white;">&times;</button>
                 </div>
                 <div class="modal-body" style="overflow: auto; max-height: 65vh;">
                     <div style="margin-bottom: 1rem; padding: 0.75rem; background: #1e1e2c; border-radius: 0.5rem;">
-                        <strong>📊 Resumen:</strong> ${exportItems.length} registros a exportar
-                        <br><small>✅ Coincidencias exactas: ${exactCount}</small>
-                        <br><small style="color: #fbbf24;">🔄 Equivalentes que se agregarán: ${equivalentCount}</small>
-                        <br><small>➕ Agregados manualmente: ${addedCount}</small>
-                        <br><small>✨ Auto-agregados (tabla): ${autoAddedCount}</small>
+                        <strong>📊 Resumen:</strong> ${exportItems.length} registros
+                        <br><small>🎨 Originales: ${originalCount}</small>
+                        <br><small style="color: #00e5ff;">✨ Complementarios: ${equivalentCount}</small>
+                        <br><small style="color: #4ade80;">✅ Colores agrupados por familia</small>
                     </div>
-                    <div style="font-family: monospace; font-size: 0.7rem; background: #0a0a0a; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap;">
-                        <pre style="margin: 0; color: #e2e8f0;">${content}</pre>
+                    <div style="font-family: monospace; font-size: 0.7rem; background: #0a0a0a; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap; max-height: 400px; overflow-y: auto;">
+                        <pre style="margin: 0; color: #e2e8f0;">${content.substring(0, 5000)}${content.length > 5000 ? '\n...' : ''}</pre>
                     </div>
                 </div>
-                <div class="modal-buttons" style="padding: 1rem; border-top: 1px solid #2d3748; display: flex; gap: 1rem; justify-content: flex-end;">
+                <div class="modal-buttons">
                     <button class="btn btn-secondary cancel-preview">Cancelar</button>
-                    <button class="btn btn-primary confirm-export">✅ Confirmar y Exportar</button>
+                    <button class="btn btn-primary confirm-export">✅ Exportar</button>
                 </div>
             </div>
         `;
@@ -1235,11 +1608,21 @@ class AlphaColorMatch {
             this.doExport(exportItems);
             closeModal();
         };
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     doExport(exportItems) {
-        const content = this.generateCGATSContent(exportItems);
+        const expandedItems = this.expandWithAllEquivalentsByNK(exportItems);
+        
+        const uniqueItems = [];
+        const seenNames = new Set();
+        for (const item of expandedItems) {
+            if (!seenNames.has(item.name)) {
+                seenNames.add(item.name);
+                uniqueItems.push(item);
+            }
+        }
+        
+        const content = this.generateCGATSContent(uniqueItems);
         const fileNameInput = document.getElementById('exportFileName');
         let baseFileName = 'alpha_color_export';
         if (fileNameInput && fileNameInput.value.trim() !== '') {
@@ -1255,7 +1638,13 @@ class AlphaColorMatch {
         a.download = fullFileName;
         a.click();
         URL.revokeObjectURL(url);
-        alert(`✅ Archivo exportado con ${exportItems.length} registros en formato CGATS.17`);
+        
+        alert(`✅ Exportado: ${uniqueItems.length} colores\n✅ Familias agrupadas`);
+    }
+    
+    escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 }
 

@@ -10,30 +10,70 @@
     <link rel="stylesheet" href="css/components/sidebar.css">
     <link rel="stylesheet" href="css/views/creator.css">
     <link rel="stylesheet" href="css/views/development.css">
+    <link rel="stylesheet" href="css/views/assignment.css">
+    <link rel="stylesheet" href="css/views/admin.css">
+    <link rel="stylesheet" href="css/views/reports.css">
 </head>
 <body>
-    <div class="app-wrapper">
+    <!-- Pantalla de Login (inicial) -->
+    <div id="loginView" class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="login-logo" onerror="this.style.display='none'">
+                <h1>ALPHA COLOR MATCH</h1>
+                <p>Acceso al sistema</p>
+            </div>
+            <div class="login-form">
+                <div class="login-input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off">
+                </div>
+                <div class="login-input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="loginPassword" placeholder="Contraseña">
+                    <i class="fas fa-eye-slash toggle-password" id="toggleLoginPassword"></i>
+                </div>
+                <button id="loginBtn" class="login-btn">🔐 Iniciar Sesión</button>
+                <div id="loginError" class="login-error" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido principal (oculto hasta login) -->
+    <div id="mainApp" class="app-wrapper" style="display: none;">
         <!-- Menú Lateral -->
         <div class="sidebar-menu">
-            <div class="menu-item active" data-view="comparator">
+            <div class="menu-item active" data-view="comparator" data-perm="comparator">
                 <i class="fas fa-code-compare"></i>
                 <span>Comparar</span>
             </div>
-            <div class="menu-item" data-view="history">
+            <div class="menu-item" data-view="history" data-perm="history">
                 <i class="fas fa-inbox"></i>
                 <span>Bandeja</span>
             </div>
-            <div class="menu-item" data-view="creator">
+            <div class="menu-item" data-view="creator" data-perm="creator">
                 <i class="fas fa-file-alt"></i>
                 <span>Crear TXT</span>
             </div>
-            <div class="menu-item" data-view="eps">
+            <div class="menu-item" data-view="eps" data-perm="eps">
                 <i class="fas fa-file-image"></i>
                 <span>EPS</span>
             </div>
-            <div class="menu-item" data-view="development">
+            <div class="menu-item" data-view="development" data-perm="development">
                 <i class="fas fa-palette"></i>
                 <span>Desarrollo</span>
+            </div>
+            <div class="menu-item" data-view="assignment" data-perm="assignment">
+                <i class="fas fa-tasks"></i>
+                <span>Asignación</span>
+            </div>
+            <div class="menu-item" data-view="reports" data-perm="reports">
+                <i class="fas fa-chart-bar"></i>
+                <span>Reportes</span>
+            </div>
+            <div class="menu-item" data-view="admin" data-perm="admin">
+                <i class="fas fa-cog"></i>
+                <span>Admin</span>
             </div>
         </div>
 
@@ -46,6 +86,10 @@
                     </div>
                     <h1 class="title">ALPHA COLOR MATCH</h1>
                     <p>Comparador profesional de colores CMYK - Selección individual de valores por grupo</p>
+                    <div class="user-info">
+                        <span id="currentUserDisplay"></span>
+                        <button id="logoutBtn" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
+                    </div>
                 </div>
                 
                 <!-- Vista Comparador -->
@@ -112,10 +156,10 @@
                         </div>
                         <table class="results-table">
                             <thead>
-                                66<th>NK</th><th>Archivo Principal (CMYK)</th><th>Archivo Secundario (CMYK)</th><th>Estado</th><th>Acción / Selección de valores</th>
+                                <tr><th>NK</th><th>Archivo Principal (CMYK)</th><th>Archivo Secundario (CMYK)</th><th>Estado</th><th>Acción / Selección de valores</th>
                             </thead>
                             <tbody id="resultsTableBody"></tbody>
-                         </table>
+                        </table>
                     </div>
                 </div>
 
@@ -151,7 +195,6 @@
                         </div>
                     </div>
                     
-                    <!-- Selector de Plotter global -->
                     <div class="plotter-selector">
                         <label for="globalPlotter">🖨️ Plotter (1-17):</label>
                         <select id="globalPlotter" class="plotter-select">
@@ -168,15 +211,15 @@
                     <div class="table-wrapper creator-table">
                         <table class="data-table" id="creatorTable">
                             <thead>
-                                60<th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
+                                <tr><th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
                                 <th style="width:100px">Cian</th><th style="width:100px">Magenta</th><th style="width:100px">Yellow</th>
                                 <th style="width:100px">Black</th><th style="width:100px">L*</th><th style="width:100px">a*</th>
                                 <th style="width:100px">b*</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
                             </thead>
                             <tbody id="creatorTableBody">
-                                60<td colspan="12" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td>60
+                                <td><td colspan="12" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td><\/tr>
                             </tbody>
-                         </table>
+                        </table>
                     </div>
                 </div>
 
@@ -216,6 +259,212 @@
 
                 <!-- Vista Desarrollo -->
                 <div id="developmentView" class="view-content">
+                </div>
+
+                <!-- Vista Asignación de Trabajo -->
+                <div id="assignmentView" class="view-content">
+                    <div class="assignment-container">
+                        <div class="assignment-header">
+                            <h3><i class="fas fa-tasks"></i> Asignación de Trabajo</h3>
+                            <p>Asigne paletas de colores a usuarios y plotters específicos</p>
+                        </div>
+
+                        <!-- Sección Cargar TXT a Librería (ARRIBA, sin plotter) -->
+                        <div class="assignment-upload-section">
+                            <div class="assignment-upload-header">
+                                <h4><i class="fas fa-upload"></i> Cargar TXT a Librería</h4>
+                                <p>Agregue archivos TXT a la librería para poder asignarlos (el plotter se asignará al momento de asignar el trabajo)</p>
+                            </div>
+                            <div class="assignment-upload-form">
+                                <div class="upload-form-group full-width">
+                                    <label><i class="fas fa-file-alt"></i> Archivo TXT:</label>
+                                    <input type="file" id="assignmentUploadFile" accept=".txt" class="assignment-file-input">
+                                </div>
+                                <div class="upload-form-group full-width">
+                                    <label><i class="fas fa-comment"></i> Motivo de carga:</label>
+                                    <textarea id="assignmentUploadReason" rows="2" placeholder="Ej: Nueva paleta para producción..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
+                                </div>
+                                <div class="upload-form-actions">
+                                    <button id="assignmentUploadBtn" class="btn-primary">📤 CARGAR A LIBRERÍA</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sección Asignar Trabajo (ABAJO, con plotter) -->
+                        <div class="assignment-form">
+                            <div class="form-group">
+                                <label><i class="fas fa-file-alt"></i> Seleccionar archivo TXT:</label>
+                                <select id="assignmentTxtSelect" class="assignment-select">
+                                    <option value="">-- Seleccionar archivo --</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label><i class="fas fa-print"></i> Seleccionar Plotter:</label>
+                                <select id="assignmentPlotterSelect" class="assignment-select">
+                                    <option value="">-- Seleccionar plotter --</option>
+                                    <option value="1">Plotter 1</option>
+                                    <option value="2">Plotter 2</option>
+                                    <option value="3">Plotter 3</option>
+                                    <option value="4">Plotter 4</option>
+                                    <option value="5">Plotter 5</option>
+                                    <option value="6">Plotter 6</option>
+                                    <option value="7">Plotter 7</option>
+                                    <option value="8">Plotter 8</option>
+                                    <option value="9">Plotter 9</option>
+                                    <option value="10">Plotter 10</option>
+                                    <option value="11">Plotter 11</option>
+                                    <option value="12">Plotter 12</option>
+                                    <option value="13">Plotter 13</option>
+                                    <option value="14" selected>Plotter 14</option>
+                                    <option value="15">Plotter 15</option>
+                                    <option value="16">Plotter 16</option>
+                                    <option value="17">Plotter 17</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label><i class="fas fa-user"></i> Asignar a usuario:</label>
+                                <select id="assignmentUserSelect" class="assignment-select">
+                                    <option value="">-- Seleccionar usuario --</option>
+                                    <option value="usuario_admin">👤 Usuario Admin</option>
+                                    <option value="produccion_1">🏭 Producción 1</option>
+                                    <option value="produccion_2">🏭 Producción 2</option>
+                                    <option value="calidad">✅ Calidad</option>
+                                    <option value="desarrollo">🎨 Desarrollo</option>
+                                    <option value="supervisor">👔 Supervisor</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label><i class="fas fa-comment"></i> Motivo / Comentario:</label>
+                                <textarea id="assignmentComment" rows="3" placeholder="Ej: Asignar esta paleta para producción del lote #123..."></textarea>
+                            </div>
+
+                            <div class="assignment-buttons">
+                                <button id="assignWorkBtn" class="btn-primary">📤 ASIGNAR TRABAJO</button>
+                                <button id="clearAssignmentBtn" class="btn-secondary">🗑️ LIMPIAR FORMULARIO</button>
+                                <button id="clearAllAssignmentsBtn" class="btn-danger">🧹 LIMPIAR TODAS ASIGNACIONES</button>
+                            </div>
+                        </div>
+
+                        <div class="assignment-history">
+                            <h4><i class="fas fa-history"></i> Asignaciones Recientes</h4>
+                            <div id="assignmentHistoryList" class="history-list">
+                                <div class="empty-state">
+                                    <div class="empty-icon">📋</div>
+                                    <p>No hay asignaciones registradas</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Reportes -->
+                <div id="reportsView" class="view-content">
+                    <div class="reports-container">
+                        <div class="reports-header">
+                            <h3><i class="fas fa-chart-bar"></i> Reportes de Asignaciones</h3>
+                            <p>Busque y filtre asignaciones de trabajo</p>
+                        </div>
+
+                        <div class="reports-filters">
+                            <div class="filter-row">
+                                <div class="filter-group full-width">
+                                    <label><i class="fas fa-search"></i> Buscar texto:</label>
+                                    <input type="text" id="reportsSearchText" placeholder="Buscar en archivo, usuario, motivo, plotter..." class="filter-input">
+                                </div>
+                            </div>
+                            <div class="filter-row">
+                                <div class="filter-group">
+                                    <label><i class="fas fa-calendar"></i> Fecha desde:</label>
+                                    <input type="date" id="reportsDateFrom" class="filter-input">
+                                </div>
+                                <div class="filter-group">
+                                    <label><i class="fas fa-calendar"></i> Fecha hasta:</label>
+                                    <input type="date" id="reportsDateTo" class="filter-input">
+                                </div>
+                                <div class="filter-group">
+                                    <label><i class="fas fa-user"></i> Usuario:</label>
+                                    <select id="reportsUserFilter" class="filter-select">
+                                        <option value="">-- Todos los usuarios --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="filter-row">
+                                <div class="filter-group">
+                                    <label><i class="fas fa-print"></i> Plotter:</label>
+                                    <select id="reportsPlotterFilter" class="filter-select">
+                                        <option value="">-- Todos los plotters --</option>
+                                        <option value="1">Plotter 1</option><option value="2">Plotter 2</option>
+                                        <option value="3">Plotter 3</option><option value="4">Plotter 4</option>
+                                        <option value="5">Plotter 5</option><option value="6">Plotter 6</option>
+                                        <option value="7">Plotter 7</option><option value="8">Plotter 8</option>
+                                        <option value="9">Plotter 9</option><option value="10">Plotter 10</option>
+                                        <option value="11">Plotter 11</option><option value="12">Plotter 12</option>
+                                        <option value="13">Plotter 13</option><option value="14">Plotter 14</option>
+                                        <option value="15">Plotter 15</option><option value="16">Plotter 16</option>
+                                        <option value="17">Plotter 17</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <label><i class="fas fa-file-alt"></i> Archivo TXT:</label>
+                                    <select id="reportsTxtFilter" class="filter-select">
+                                        <option value="">-- Todos los archivos --</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group filter-actions">
+                                    <label>&nbsp;</label>
+                                    <button id="reportsSearchBtn" class="btn-primary">🔍 BUSCAR</button>
+                                    <button id="reportsClearBtn" class="btn-secondary">🗑️ LIMPIAR FILTROS</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="reports-results">
+                            <div class="reports-results-header">
+                                <h4><i class="fas fa-list"></i> Resultados</h4>
+                                <div class="reports-actions">
+                                    <button id="reportsExportCsvBtn" class="btn-secondary">📥 Exportar a Excel</button>
+                                    <button id="reportsPrintBtn" class="btn-secondary">🖨️ Imprimir</button>
+                                </div>
+                            </div>
+                            <div id="reportsCount" class="reports-count"></div>
+                            <div class="reports-table-wrapper">
+                                <table class="reports-table">
+                                    <thead>
+                                        <tr><th>Fecha</th><th>Usuario</th><th>Plotter</th><th>Archivo</th><th>Progreso</th><th>Motivo</th>
+                                    </thead>
+                                    <tbody id="reportsTableBody">
+                                        <tr><td colspan="6" class="empty-state">No hay asignaciones registradas</td><\/tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Admin -->
+                <div id="adminView" class="view-content">
+                    <div class="admin-container">
+                        <div class="admin-header">
+                            <h3><i class="fas fa-cog"></i> Administración de Usuarios</h3>
+                            <p>Gestión de usuarios y permisos de acceso al sistema</p>
+                        </div>
+
+                        <div class="admin-actions">
+                            <button id="addUserBtn" class="btn-primary"><i class="fas fa-plus"></i> Crear Nuevo Usuario</button>
+                        </div>
+
+                        <div class="admin-table-wrapper">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr><th>Usuario</th><th>Contraseña</th><th>Permisos</th><th>Acciones</th>
+                                </thead>
+                                <tbody id="adminTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="footer">
