@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha Color Match - Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0a0f, #030308);
+            font-family: 'Rubik', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-box {
+            background: #0c0c12;
+            border: 1px solid #00e5ff;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.3);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-logo {
+            max-width: 80px;
+            margin-bottom: 1rem;
+        }
+
+        .login-header h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00e5ff, #0099cc);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
+
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .login-input-group {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #1f1f2a;
+            border: 1px solid #4b5563;
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            transition: all 0.2s;
+        }
+
+        .login-input-group:focus-within {
+            border-color: #00e5ff;
+            box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+        }
+
+        .login-input-group i {
+            color: #6b7280;
+            margin-right: 0.75rem;
+            font-size: 1rem;
+        }
+
+        .login-input-group input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .login-input-group input::placeholder {
+            color: #4b5563;
+        }
+
+        .toggle-password {
+            cursor: pointer;
+            color: #6b7280;
+            margin-left: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .toggle-password:hover {
+            color: #00e5ff;
+        }
+
+        .login-btn {
+            background: transparent;
+            border: 1.5px solid #00e5ff;
+            color: #00e5ff;
+            padding: 0.75rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        .login-btn:hover {
+            background: rgba(0, 229, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
+        }
+
+        .login-error {
+            background: rgba(153, 27, 27, 0.2);
+            border: 1px solid #991b1b;
+            border-radius: 10px;
+            padding: 0.75rem;
+            color: #f87171;
+            font-size: 0.8rem;
+            text-align: center;
+            display: none;
+        }
+
+        .login-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #6b7280;
+            font-size: 0.7rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="login-logo" onerror="this.style.display='none'">
+                <h1>ALPHA COLOR MATCH</h1>
+                <p>Acceso al sistema</p>
+            </div>
+            <form class="login-form" onsubmit="return false;">
+                <div class="login-input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off">
+                </div>
+                <div class="login-input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" id="loginPassword" placeholder="Contraseña">
+                    <i class="fas fa-eye-slash toggle-password" id="toggleLoginPassword"></i>
+                </div>
+                <button type="button" id="loginBtn" class="login-btn">🔐 Iniciar Sesión</button>
+                <div id="loginError" class="login-error"></div>
+            </form>
+            <div class="login-footer">
+                <p>Sistema de gestión de colores profesionales</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Auth } from './js/core/auth.js';
+
+        const auth = new Auth();
+
+        // Toggle password visibility
+        const togglePassword = document.getElementById('toggleLoginPassword');
+        const passwordInput = document.getElementById('loginPassword');
+        
+        if (togglePassword) {
+            togglePassword.onclick = () => {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                togglePassword.classList.toggle('fa-eye');
+                togglePassword.classList.toggle('fa-eye-slash');
+            };
+        }
+
+        // Login
+        const loginBtn = document.getElementById('loginBtn');
+        const loginUsername = document.getElementById('loginUsername');
+        const loginPassword = document.getElementById('loginPassword');
+        const loginError = document.getElementById('loginError');
+
+        const handleLogin = () => {
+            const username = loginUsername.value.trim();
+            const password = loginPassword.value;
+            
+            const result = auth.login(username, password);
+            
+            if (result.success) {
+                // Redirigir a la aplicación principal
+                window.location.href = 'index.html';
+            } else {
+                loginError.textContent = result.error;
+                loginError.style.display = 'block';
+            }
+        };
+
+        loginBtn.onclick = handleLogin;
+        
+        // Enter key support
+        const handleEnter = (e) => {
+            if (e.key === 'Enter') handleLogin();
+        };
+        loginUsername.addEventListener('keypress', handleEnter);
+        loginPassword.addEventListener('keypress', handleEnter);
+    </script>
+</body>
+</html>

@@ -1,0 +1,413 @@
+/* ============================================ */
+/* PALETTE VALIDATOR VIEW - Estilos para validación de paleta */
+/* ============================================ */
+
+.palette-validator-container {
+    padding: 0.5rem 0;
+}
+
+.palette-validator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: #111117;
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid #2d3748;
+}
+
+.palette-validator-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #eab308;
+    margin: 0;
+}
+
+.palette-validator-header h3 i {
+    margin-right: 0.5rem;
+    color: #00e5ff;
+}
+
+.palette-validator-actions {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.palette-validator-actions button {
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+}
+
+.palette-validator-actions .btn-secondary {
+    border: 1.5px solid #4b5563;
+    color: #9ca3af;
+}
+
+.palette-validator-actions .btn-secondary:hover {
+    background: rgba(156, 163, 175, 0.1);
+    border-color: #9ca3af;
+    transform: translateY(-1px);
+}
+
+.palette-validator-actions .btn-primary {
+    border: 1.5px solid #00e5ff;
+    color: #00e5ff;
+}
+
+.palette-validator-actions .btn-primary:hover:not(:disabled) {
+    background: rgba(0, 229, 255, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.palette-validator-actions .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Tabla de validación */
+.validator-table {
+    overflow-x: auto;
+    max-height: 550px;
+    overflow-y: auto;
+    border-radius: 8px;
+    border: 1px solid #2d3748;
+    background: #0c0c12;
+}
+
+.validator-table .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.validator-table .data-table th {
+    background: #1a1a2a;
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    color: #9ca3af;
+    font-weight: 600;
+    border-bottom: 1px solid #2d3748;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.validator-table .data-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid #1e1e2c;
+    vertical-align: middle;
+}
+
+.validator-table .data-table input {
+    width: 100%;
+    background: #1e1e2c;
+    border: 1px solid #4b5563;
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 0.4rem;
+    font-size: 0.7rem;
+    font-family: monospace;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.validator-table .data-table input:focus {
+    outline: none;
+    border-color: #00e5ff;
+    box-shadow: 0 0 5px rgba(0, 229, 255, 0.3);
+}
+
+.validator-table .data-table input:disabled {
+    background: #2d3748;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.validator-table tr.locked-row {
+    background: rgba(21, 128, 61, 0.1);
+    border-left: 3px solid #15803d;
+}
+
+.validator-table tr.locked-row td:first-child {
+    border-left: 3px solid #15803d;
+}
+
+.row-number {
+    font-weight: bold;
+    color: #fbbf24;
+    text-align: center;
+    font-size: 0.8rem;
+}
+
+.status-cell {
+    text-align: center;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.status-badge.locked {
+    background: #15803d;
+    color: white;
+    box-shadow: 0 0 5px rgba(21, 128, 61, 0.3);
+}
+
+.status-badge.pending {
+    background: #b45309;
+    color: white;
+}
+
+.actions-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-lock, .btn-modify {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-size: 0.9rem;
+}
+
+.btn-lock {
+    background: #15803d;
+    color: white;
+}
+
+.btn-lock:hover {
+    background: #166534;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(21, 128, 61, 0.4);
+}
+
+.btn-modify {
+    background: #b45309;
+    color: white;
+}
+
+.btn-modify:hover {
+    background: #9b2e05;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(180, 83, 9, 0.4);
+}
+
+/* Plotter selector dentro del header */
+.plotter-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1f1f2a;
+    padding: 0.4rem 1rem;
+    border-radius: 2rem;
+    border: 1px solid #4b5563;
+}
+
+.plotter-selector label {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.plotter-select {
+    background: #0c0c12;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    cursor: pointer;
+    min-width: 70px;
+    text-align: center;
+}
+
+.plotter-select:hover {
+    border-color: #6b7280;
+}
+
+.plotter-select:focus {
+    outline: none;
+    border-color: #00e5ff;
+}
+
+/* Modal para desbloquear */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+}
+
+.modal-content {
+    background: #0c0c12;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    max-width: 450px;
+    width: 90%;
+}
+
+.modal-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #2d3748;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 12px 12px 0 0;
+}
+
+.modal-header h3 {
+    font-size: 1rem;
+    color: white;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-buttons {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #2d3748;
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.modal-buttons .btn {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.modal-buttons .btn-secondary {
+    background: transparent;
+    border: 1px solid #9ca3af;
+    color: #9ca3af;
+}
+
+.modal-buttons .btn-primary {
+    background: transparent;
+    border: 1px solid #15803d;
+    color: #15803d;
+}
+
+.modal-buttons .btn-primary:hover {
+    background: rgba(21, 128, 61, 0.1);
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    margin-bottom: 0.25rem;
+}
+
+.form-group textarea {
+    width: 100%;
+    padding: 0.5rem;
+    background: #1e1e2c;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    color: white;
+    font-size: 0.8rem;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.form-group textarea:focus {
+    outline: none;
+    border-color: #00e5ff;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .palette-validator-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .palette-validator-actions {
+        justify-content: stretch;
+    }
+    
+    .palette-validator-actions button {
+        flex: 1;
+    }
+    
+    .validator-table .data-table th,
+    .validator-table .data-table td {
+        padding: 0.4rem 0.25rem;
+        font-size: 0.65rem;
+    }
+    
+    .validator-table .data-table input {
+        font-size: 0.6rem;
+        padding: 0.3rem;
+    }
+    
+    .btn-lock, .btn-modify {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+    
+    .plotter-selector {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .plotter-select {
+        flex: 1;
+    }
+}

@@ -15,33 +15,7 @@
     <link rel="stylesheet" href="css/views/reports.css">
 </head>
 <body>
-    <!-- Pantalla de Login (inicial) -->
-    <div id="loginView" class="login-container">
-        <div class="login-box">
-            <div class="login-header">
-                <img src="logo-alpha-color_match.png" alt="ALPHA COLOR MATCH Logo" class="login-logo" onerror="this.style.display='none'">
-                <h1>ALPHA COLOR MATCH</h1>
-                <p>Acceso al sistema</p>
-            </div>
-            <div class="login-form">
-                <div class="login-input-group">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="loginUsername" placeholder="Usuario" autocomplete="off">
-                </div>
-                <div class="login-input-group">
-                    <i class="fas fa-lock"></i>
-                    <input type="password" id="loginPassword" placeholder="Contraseña">
-                    <i class="fas fa-eye-slash toggle-password" id="toggleLoginPassword"></i>
-                </div>
-                <button id="loginBtn" class="login-btn">🔐 Iniciar Sesión</button>
-                <div id="loginError" class="login-error" style="display: none;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Contenido principal (oculto hasta login) -->
-    <div id="mainApp" class="app-wrapper" style="display: none;">
-        <!-- Menú Lateral -->
+    <div id="mainApp" class="app-wrapper">
         <div class="sidebar-menu">
             <div class="menu-item active" data-view="comparator" data-perm="comparator">
                 <i class="fas fa-code-compare"></i>
@@ -51,16 +25,12 @@
                 <i class="fas fa-inbox"></i>
                 <span>Bandeja</span>
             </div>
-            <div class="menu-item" data-view="creator" data-perm="creator">
-                <i class="fas fa-file-alt"></i>
-                <span>Crear TXT</span>
-            </div>
-            <div class="menu-item" data-view="eps" data-perm="eps">
-                <i class="fas fa-file-image"></i>
-                <span>EPS</span>
+            <div class="menu-item" data-view="paletteValidator" data-perm="paletteValidator">
+                <i class="fas fa-palette"></i>
+                <span>Validar Paleta</span>
             </div>
             <div class="menu-item" data-view="development" data-perm="development">
-                <i class="fas fa-palette"></i>
+                <i class="fas fa-paintbrush"></i>
                 <span>Desarrollo</span>
             </div>
             <div class="menu-item" data-view="assignment" data-perm="assignment">
@@ -77,7 +47,6 @@
             </div>
         </div>
 
-        <!-- Contenido Principal -->
         <div class="main-container">
             <div class="container">
                 <div class="header">
@@ -88,10 +57,11 @@
                     <p>Comparador profesional de colores CMYK - Selección individual de valores por grupo</p>
                     <div class="user-info">
                         <span id="currentUserDisplay"></span>
+                        <button id="adminBtn" class="admin-btn-header"><i class="fas fa-cog"></i> Admin</button>
                         <button id="logoutBtn" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
                     </div>
                 </div>
-                
+
                 <!-- Vista Comparador -->
                 <div id="comparatorView" class="view-content active">
                     <div class="upload-section">
@@ -118,22 +88,22 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div style="text-align: center; display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap;">
                         <button id="compareBtn" class="compare-btn">🔍 COMPARAR</button>
                         <button id="replaceAllSecondaryBtn" class="compare-btn" style="background: #b45309;">🔄 Actualización a valor secundario</button>
                         <button id="exportBtn" class="compare-btn" style="background: #15803d;" disabled>📥 EXPORTAR ARCHIVO</button>
                         <button id="clearCacheBtn" class="compare-btn" style="border-color: #9ca3af; color: #9ca3af;">🗑️ LIMPIAR CACHÉ</button>
                     </div>
-                    
+
                     <div class="export-name-section">
                         <label for="exportFileName">Nombre del archivo a exportar:</label>
                         <input type="text" id="exportFileName" class="export-name-input" placeholder="alpha_color_export" value="alpha_color_export">
                         <span class="file-extension">.txt</span>
                     </div>
-                    
+
                     <div id="validationMessage" class="validation-message" style="display: none;"></div>
-                    
+
                     <div class="data-grid">
                         <div class="data-card">
                             <h3>📁 Datos Principal</h3>
@@ -148,7 +118,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="results-panel" id="resultsPanel" style="display: none;">
                         <div class="results-header">
                             <h3>📊 Resultados de comparación</h3>
@@ -167,7 +137,7 @@
                 <div id="historyView" class="view-content">
                     <div class="history-header">
                         <h3>📬 Bandeja de Entrada</h3>
-                                            </div>
+                    </div>
                     <div class="history-list" id="historyList">
                         <div class="empty-state">
                             <div class="empty-icon">📭</div>
@@ -176,84 +146,42 @@
                     </div>
                 </div>
 
-                <!-- Vista Crear Nuevo TXT -->
-                <div id="creatorView" class="view-content">
-                    <div class="creator-header">
-                        <h3>✨ Crear Nuevo Archivo TXT</h3>
-                        <div class="creator-header-buttons">
-                            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <span style="color: #00e5ff; font-size: 0.85rem; font-weight: 500; background: rgba(0, 229, 255, 0.1); padding: 0.3rem 0.8rem; border-radius: 2rem; border: 1px solid rgba(0, 229, 255, 0.3);">
-                                    <i class="fas fa-file-alt"></i> TXT Paleta
-                                </span>
-                                <select id="libraryFileSelect" class="plotter-select" style="min-width: 220px;">
-                                    <option value="">-- Seleccionar archivo --</option>
+                <!-- Vista Validación Paleta -->
+                <div id="paletteValidatorView" class="view-content">
+                    <div class="palette-validator-container">
+                        <div class="palette-validator-header">
+                            <h3><i class="fas fa-palette"></i> Validación de Paleta</h3>
+                            <div class="plotter-selector">
+                                <label for="globalPlotter">🖨️ Plotter (1-17):</label>
+                                <select id="globalPlotter" class="plotter-select">
+                                    <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                    <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                                    <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                                    <option value="13">13</option><option value="14" selected>14</option>
+                                    <option value="15">15</option><option value="16">16</option><option value="17">17</option>
                                 </select>
                             </div>
-                            <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar archivo</button>
-                            <button id="downloadTxtBtn" class="btn-primary" disabled>💾 Exportar</button>
-                            <button id="sendToInboxBtn" class="btn-secondary" style="background:#2d4ed6;" disabled>📤 Enviar a Bandeja</button>
                         </div>
-                    </div>
-                    
-                    <div class="plotter-selector">
-                        <label for="globalPlotter">🖨️ Plotter (1-17):</label>
-                        <select id="globalPlotter" class="plotter-select">
-                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-                            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-                            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                            <option value="13">13</option><option value="14" selected>14</option>
-                            <option value="15">15</option><option value="16">16</option><option value="17">17</option>
-                        </select>
-                        <span class="plotter-info">(Valor único para todos los colores del archivo)</span>
-                    </div>
-                    
-                    <div class="table-wrapper creator-table">
-                        <table class="data-table" id="creatorTable">
-                            <thead>
-                                <tr><th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
-                                <th style="width:100px">Cian</th><th style="width:100px">Magenta</th><th style="width:100px">Yellow</th>
-                                <th style="width:100px">Black</th><th style="width:100px">L*</th><th style="width:100px">a*</th>
-                                <th style="width:100px">b*</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
-                            </thead>
-                            <tbody id="creatorTableBody">
-                                <td><td colspan="12" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td><\/tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Vista EPS -->
-                <div id="epsView" class="view-content">
-                    <div class="eps-header">
-                        <h3>📄 Exportar a EPS</h3>
-                        <div class="eps-header-buttons">
-                            <button id="refreshEpsPreviewBtn" class="btn-secondary">🔄 Actualizar preview</button>
-                            <button id="exportEpsBtn" class="btn-primary">📥 Exportar EPS</button>
+                        <div class="palette-validator-actions">
+                            <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar archivo de biblioteca</button>
+                            <button id="downloadTxtBtn" class="btn-primary" disabled>📥 Exportar TXT</button>
+                            <button id="exportEpsBtn" class="btn-primary" disabled>📄 Exportar EPS</button>
+                            <button id="sendToInboxBtn" class="btn-secondary" disabled>📤 Enviar a Bandeja</button>
                         </div>
-                    </div>
-                    
-                    <div id="epsStats" class="eps-stats"></div>
-                    
-                    <div class="eps-preview-title">
-                        <span>📐 Vista previa (escala reducida: 10cm → 100px)</span>
-                        <span style="font-size:0.7rem; color:#9ca3af;">Orden: Oscuros → Claros | Separación: 5mm</span>
-                    </div>
-                    
-                    <div id="epsPreviewContainer" class="eps-preview-container">
-                        <div class="empty-state"><div class="empty-icon">🎨</div><p>Cargando preview...</p></div>
-                    </div>
-                    
-                    <div class="eps-info">
-                        <p>📌 El archivo EPS se generará con las siguientes características:</p>
-                        <ul>
-                            <li>Cada muestra: 10cm × 10cm</li>
-                            <li>Separación entre muestras: 5mm</li>
-                            <li>Tipografía: Arial / Helvetica (universal)</li>
-                            <li>Orden: Oscuros → Claros (por luminosidad L*)</li>
-                            <li>Solo se incluyen colores <strong>pendientes</strong> (sin ✅)</li>
-                            <li>Plotter: valor seleccionado en la sección "Crear TXT"</li>
-                        </ul>
+                        <div class="table-wrapper validator-table">
+                            <table class="data-table" id="validatorTable">
+                                <thead>
+                                    <tr><th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
+                                    <th style="width:100px">Cian</th><th style="width:100px">Magenta</th><th style="width:100px">Yellow</th>
+                                    <th style="width:100px">Black</th><th style="width:100px">TQ</th><th style="width:100px">O</th>
+                                    <th style="width:100px">FY</th><th style="width:100px">FP</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
+                                </thead>
+                                <tbody id="validatorTableBody">
+                                    <tr><td colspan="13" class="empty-state">Cargue un archivo TXT o use los botones para comenzar<\/td><\/tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -269,11 +197,10 @@
                             <p>Asigne paletas de colores a usuarios y plotters específicos</p>
                         </div>
 
-                        <!-- Sección Cargar TXT a Librería (ARRIBA, sin plotter) -->
                         <div class="assignment-upload-section">
                             <div class="assignment-upload-header">
                                 <h4><i class="fas fa-upload"></i> Cargar TXT a Librería</h4>
-                                <p>Agregue archivos TXT a la librería para poder asignarlos (el plotter se asignará al momento de asignar el trabajo)</p>
+                                <p>Agregue archivos TXT a la librería para poder asignarlos</p>
                             </div>
                             <div class="assignment-upload-form">
                                 <div class="upload-form-group full-width">
@@ -290,7 +217,6 @@
                             </div>
                         </div>
 
-                        <!-- Sección Asignar Trabajo (ABAJO, con plotter) -->
                         <div class="assignment-form">
                             <div class="form-group">
                                 <label><i class="fas fa-file-alt"></i> Seleccionar archivo TXT:</label>
@@ -303,22 +229,14 @@
                                 <label><i class="fas fa-print"></i> Seleccionar Plotter:</label>
                                 <select id="assignmentPlotterSelect" class="assignment-select">
                                     <option value="">-- Seleccionar plotter --</option>
-                                    <option value="1">Plotter 1</option>
-                                    <option value="2">Plotter 2</option>
-                                    <option value="3">Plotter 3</option>
-                                    <option value="4">Plotter 4</option>
-                                    <option value="5">Plotter 5</option>
-                                    <option value="6">Plotter 6</option>
-                                    <option value="7">Plotter 7</option>
-                                    <option value="8">Plotter 8</option>
-                                    <option value="9">Plotter 9</option>
-                                    <option value="10">Plotter 10</option>
-                                    <option value="11">Plotter 11</option>
-                                    <option value="12">Plotter 12</option>
-                                    <option value="13">Plotter 13</option>
-                                    <option value="14" selected>Plotter 14</option>
-                                    <option value="15">Plotter 15</option>
-                                    <option value="16">Plotter 16</option>
+                                    <option value="1">Plotter 1</option><option value="2">Plotter 2</option>
+                                    <option value="3">Plotter 3</option><option value="4">Plotter 4</option>
+                                    <option value="5">Plotter 5</option><option value="6">Plotter 6</option>
+                                    <option value="7">Plotter 7</option><option value="8">Plotter 8</option>
+                                    <option value="9">Plotter 9</option><option value="10">Plotter 10</option>
+                                    <option value="11">Plotter 11</option><option value="12">Plotter 12</option>
+                                    <option value="13">Plotter 13</option><option value="14" selected>Plotter 14</option>
+                                    <option value="15">Plotter 15</option><option value="16">Plotter 16</option>
                                     <option value="17">Plotter 17</option>
                                 </select>
                             </div>
@@ -436,7 +354,7 @@
                                         <tr><th>Fecha</th><th>Usuario</th><th>Plotter</th><th>Archivo</th><th>Progreso</th><th>Motivo</th>
                                     </thead>
                                     <tbody id="reportsTableBody">
-                                        <tr><td colspan="6" class="empty-state">No hay asignaciones registradas</td><\/tr>
+                                        <tr><td colspan="6" class="empty-state">No hay asignaciones registradas<\/td><\/tr>
                                     </tbody>
                                 </table>
                             </div>

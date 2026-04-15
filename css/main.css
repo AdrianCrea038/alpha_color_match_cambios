@@ -11,6 +11,7 @@
 @import url('views/history.css');
 @import url('views/creator.css');
 @import url('views/eps.css');
+@import url('views/paletteValidator.css');
 
 .footer {
     text-align: center;
