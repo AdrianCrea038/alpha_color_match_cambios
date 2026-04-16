@@ -1,6 +1,13 @@
 // js/views/paletteValidatorView.js
 import { escapeHtml } from '../core/utils.js';
 import { EPSView } from './epsView.js';
+import { 
+    supabase, 
+    getAllNks, 
+    getActiveTxt, 
+    createNewTxt, 
+    replaceTxt 
+} from '../core/supabaseClient.js';
 
 export class PaletteValidatorView {
     constructor(app) {
@@ -10,31 +17,35 @@ export class PaletteValidatorView {
         this.historyLog = [];
         this.currentUser = 'usuario';
         this.globalPlotter = 14;
+        this.nkList = [];
         
         this.tableBody = null;
         this.downloadTxtBtn = null;
         this.exportEpsBtn = null;
         this.sendToInboxBtn = null;
         this.loadLibraryBtn = null;
+        this.uploadToDbBtn = null;
         this.plotterSelect = null;
         this.librarySelect = null;
         
-        // EPS view helper
         this.epsHelper = new EPSView(app);
         
         this.init();
     }
     
-    init() {
+    async init() {
         this.tableBody = document.getElementById('validatorTableBody');
         this.downloadTxtBtn = document.getElementById('downloadTxtBtn');
         this.exportEpsBtn = document.getElementById('exportEpsBtn');
         this.sendToInboxBtn = document.getElementById('sendToInboxBtn');
         this.loadLibraryBtn = document.getElementById('loadLibraryBtn');
+        this.uploadToDbBtn = document.getElementById('uploadToDbBtn');
         this.plotterSelect = document.getElementById('globalPlotter');
         this.librarySelect = document.getElementById('libraryFileSelect');
         
         if (!this.tableBody) return;
+        
+        await this.loadNkList();
         
         if (this.plotterSelect) {
             this.plotterSelect.value = this.globalPlotter;
@@ -46,6 +57,10 @@ export class PaletteValidatorView {
         
         if (this.loadLibraryBtn) {
             this.loadLibraryBtn.onclick = () => this.loadFromLibrary();
+        }
+        
+        if (this.uploadToDbBtn) {
+            this.uploadToDbBtn.onclick = () => this.showUploadModal();
         }
         
         if (this.downloadTxtBtn) {
@@ -62,6 +77,129 @@ export class PaletteValidatorView {
         
         this.updateLibrarySelect();
         this.resetTable();
+    }
+    
+    async loadNkList() {
+        this.nkList = await getAllNks();
+    }
+    
+    showUploadModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header" style="background: #2d4ed6;">
+                    <h3 style="color: white;">💾 Cargar TXT a Base de Datos</h3>
+                    <button class="modal-close" style="color: white;">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>🔑 Seleccionar NK:</label>
+                        <select id="modalNkSelect" class="assignment-select" style="width:100%;">
+                            <option value="">-- Seleccionar NK --</option>
+                            ${this.nkList.map(nk => `<option value="${nk}">${nk}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>🖨️ Plotter:</label>
+                        <select id="modalPlotterSelect" class="assignment-select" style="width:100%;">
+                            <option value="">-- Seleccionar plotter --</option>
+                            ${Array.from({length: 17}, (_, i) => `<option value="${i+1}" ${i+1 === this.globalPlotter ? 'selected' : ''}>Plotter ${i+1}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>📝 Motivo:</label>
+                        <textarea id="modalReason" rows="3" placeholder="Ej: Nueva versión de la paleta..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>📁 Archivo TXT:</label>
+                        <input type="file" id="modalFileInput" accept=".txt" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
+                    </div>
+                    <div id="modalInfo" class="info-message" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;"></div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn-secondary cancel-modal">Cancelar</button>
+                    <button class="btn-primary confirm-modal" style="background: #4ade80; border: none;">💾 CARGAR</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        setTimeout(() => modal.classList.add('active'), 10);
+        
+        const closeModal = () => {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 300);
+        };
+        
+        const nkSelect = modal.querySelector('#modalNkSelect');
+        const plotterSelect = modal.querySelector('#modalPlotterSelect');
+        const fileInput = modal.querySelector('#modalFileInput');
+        const infoDiv = modal.querySelector('#modalInfo');
+        
+        const checkExisting = async () => {
+            const nk = nkSelect?.value;
+            const plotter = plotterSelect?.value;
+            
+            if (nk && plotter) {
+                const existing = await getActiveTxt(nk, parseInt(plotter));
+                if (existing) {
+                    infoDiv.innerHTML = `<span style="color: #eab308;">⚠️ Ya existe TXT para ${nk} en Plotter ${plotter}. Se creará una nueva versión.</span>`;
+                } else {
+                    infoDiv.innerHTML = `<span style="color: #4ade80;">✅ Puede cargar un nuevo TXT para ${nk} en Plotter ${plotter}.</span>`;
+                }
+            } else {
+                infoDiv.innerHTML = '';
+            }
+        };
+        
+        nkSelect.addEventListener('change', checkExisting);
+        plotterSelect.addEventListener('change', checkExisting);
+        
+        modal.querySelector('.modal-close').onclick = closeModal;
+        modal.querySelector('.cancel-modal').onclick = closeModal;
+        
+        modal.querySelector('.confirm-modal').onclick = async () => {
+            const nk = nkSelect?.value;
+            const plotter = plotterSelect?.value;
+            const reason = modal.querySelector('#modalReason')?.value.trim() || '';
+            const file = fileInput?.files[0];
+            const currentUser = this.app?.auth?.getCurrentUser()?.username || 'usuario';
+            
+            if (!nk || !plotter) {
+                alert('⚠️ Seleccione NK y Plotter');
+                return;
+            }
+            
+            if (!file) {
+                alert('⚠️ Seleccione un archivo TXT');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const contenido = e.target.result;
+                const nombreArchivo = file.name;
+                
+                const result = await createNewTxt(nk, parseInt(plotter), contenido, nombreArchivo, currentUser, reason);
+                
+                if (result.success) {
+                    if (result.isNewVersion) {
+                        alert(`✅ Nueva versión (v${result.data.version}) creada para ${nk} en Plotter ${plotter}`);
+                    } else {
+                        alert(`✅ TXT creado para ${nk} en Plotter ${plotter}`);
+                    }
+                    closeModal();
+                    await this.loadNkList();
+                    this.parseAndLoadContent(contenido, nombreArchivo);
+                } else {
+                    alert(`❌ Error: ${result.error}`);
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        };
+        
+        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     updateLibrarySelect() {
@@ -121,7 +259,6 @@ export class PaletteValidatorView {
                     }
                     const name = fullName.replace(/\s+(NK\d+|T\d+)$/i, '').trim();
                     
-                    // Extraer valores LAB si existen
                     let lVal = 100, aVal = 0, bVal = 0;
                     if (match[8] && match[9] && match[10]) {
                         lVal = parseFloat(match[8]);
@@ -270,7 +407,7 @@ export class PaletteValidatorView {
                     <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.fp.toFixed(6)}" ${disabledAttr} data-field="channel_fp" data-id="${color.id}" class="channel-input"><\/td>
                     <td class="status-cell">${statusBadge}<\/td>
                     <td class="actions-cell">${actionButton}<\/td>
-                </tr>
+                </td>
             `;
         }).join('');
         
@@ -449,7 +586,6 @@ export class PaletteValidatorView {
             alert('⚠️ No hay colores pendientes para exportar a EPS.');
             return;
         }
-        // Usar la funcionalidad EPS del helper
         if (this.epsHelper) {
             this.epsHelper.app = this.app;
             this.epsHelper.exportEPSFromColors(pendingColors, this.globalPlotter);

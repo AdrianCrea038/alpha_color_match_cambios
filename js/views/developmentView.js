@@ -1,6 +1,7 @@
 // js/views/developmentView.js
 import { escapeHtml } from '../core/utils.js';
-import { EQUIVALENCY_ROWS } from '../core/constants.js';
+import { supabase } from '../core/supabaseClient.js';
+import { EQUIVALENCY_ROWS as CONST_EQUIVALENCY_ROWS } from '../core/constants.js';
 
 export class DevelopmentView {
     constructor(app) {
@@ -13,16 +14,109 @@ export class DevelopmentView {
         
         this.loadFromLocalStorage();
         this.loadHistoryFromLocalStorage();
-        this.syncFromEquivalencyRows();
-        
         this.init();
     }
     
-    init() {
+    async init() {
+        await this.loadEquivalencyGroups();
         this.container = document.getElementById('developmentView');
         if (!this.container) return;
         this.render();
         console.log('✅ DevelopmentView inicializado');
+    }
+    
+    async loadEquivalencyGroups() {
+        try {
+            // Intentar cargar desde Supabase
+            const { data, error } = await supabase
+                .from('equivalency_groups')
+                .select('*')
+                .order('group_id');
+            
+            if (!error && data && data.length > 0) {
+                window.EQUIVALENCY_ROWS = data.map(row => row.colors);
+                console.log('✅ Grupos cargados desde Supabase:', window.EQUIVALENCY_ROWS.length);
+            } else {
+                // Si no hay datos en Supabase, usar constants.js
+                window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
+                console.log('✅ Grupos cargados desde constants.js:', window.EQUIVALENCY_ROWS.length);
+            }
+        } catch (error) {
+            console.log('Error cargando desde Supabase, usando constants.js');
+            window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
+        }
+        
+        window.ALL_VALID_COLOR_NAMES = this.buildAllValidColorNames(window.EQUIVALENCY_ROWS);
+        window.EQUIVALENCE_MAP = this.buildEquivalenceMap(window.EQUIVALENCY_ROWS);
+    }
+    
+    buildAllValidColorNames(rows) {
+        const names = [];
+        for (const row of rows) {
+            for (let i = 1; i < row.length; i++) {
+                names.push(row[i].toUpperCase());
+            }
+        }
+        return [...new Set(names)].sort();
+    }
+    
+    buildEquivalenceMap(rows) {
+        const map = new Map();
+        for (const row of rows) {
+            const groupId = row[0];
+            const names = row.slice(1);
+            for (const name of names) {
+                const key = name.toUpperCase();
+                if (!map.has(key)) {
+                    map.set(key, { groupId, names: [...names] });
+                }
+            }
+        }
+        return map;
+    }
+    
+    loadFromLocalStorage() {
+        const saved = localStorage.getItem('developmentColors');
+        if (saved) {
+            try {
+                this.colors = JSON.parse(saved);
+                if (this.colors.length > 0) {
+                    this.nextId = Math.max(...this.colors.map(c => c.id), 0) + 1;
+                }
+            } catch(e) {
+                this.colors = [];
+                this.nextId = 1;
+            }
+        }
+    }
+    
+    saveToLocalStorage() {
+        localStorage.setItem('developmentColors', JSON.stringify(this.colors));
+    }
+    
+    loadHistoryFromLocalStorage() {
+        const saved = localStorage.getItem('developmentHistory');
+        if (saved) {
+            try { this.history = JSON.parse(saved); } catch(e) { this.history = []; }
+        }
+    }
+    
+    saveHistoryToLocalStorage() {
+        localStorage.setItem('developmentHistory', JSON.stringify(this.history));
+    }
+    
+    addHistoryEntry(action, details, reason = '') {
+        const currentUser = this.app?.auth?.getCurrentUser()?.username || 'usuario';
+        this.history.unshift({
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            user: currentUser,
+            action,
+            details,
+            reason
+        });
+        if (this.history.length > 500) this.history = this.history.slice(0, 500);
+        this.saveHistoryToLocalStorage();
     }
     
     render() {
@@ -341,127 +435,83 @@ export class DevelopmentView {
         }
     }
     
-    loadFromLocalStorage() {
-        const saved = localStorage.getItem('developmentColors');
-        if (saved) {
-            try {
-                this.colors = JSON.parse(saved);
-                if (this.colors.length > 0) this.nextId = Math.max(...this.colors.map(c => c.id), 0) + 1;
-            } catch(e) { this.colors = []; this.nextId = 1; }
-        }
+    getPendingColors() {
+        return this.colors.filter(c => !c.approved);
     }
-    
-    saveToLocalStorage() { localStorage.setItem('developmentColors', JSON.stringify(this.colors)); }
-    
-    loadHistoryFromLocalStorage() {
-        const saved = localStorage.getItem('developmentHistory');
-        if (saved) { try { this.history = JSON.parse(saved); } catch(e) { this.history = []; } }
-    }
-    
-    saveHistoryToLocalStorage() { localStorage.setItem('developmentHistory', JSON.stringify(this.history)); }
-    
-    addHistoryEntry(action, details, reason = '') {
-        const currentUser = this.app?.auth?.getCurrentUser()?.username || 'usuario';
-        this.history.unshift({ id: Date.now(), timestamp: new Date().toISOString(), user: currentUser, action, details, reason });
-        if (this.history.length > 500) this.history = this.history.slice(0, 500);
-        this.saveHistoryToLocalStorage();
-    }
-    
-    syncFromEquivalencyRows() {
-        const existingApprovedNames = new Set();
-        for (const group of EQUIVALENCY_ROWS) {
-            if (!group || group.length === 0) continue;
-            const groupName = group[0];
-            for (let i = 1; i < group.length; i++) {
-                const colorName = group[i];
-                existingApprovedNames.add(colorName);
-                const existingColor = this.colors.find(c => c.name === colorName && c.group === groupName);
-                if (existingColor) existingColor.approved = true;
-                else this.colors.push({ id: this.nextId++, name: colorName, nk: this.extractNKFromName(colorName), cmyk: { c: 0, m: 0, y: 0, k: 0 }, lab: { l: 100, a: 0, b: 0 }, group: groupName, approved: true, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString() });
-            }
-        }
-        for (const color of this.colors) if (color.approved && !existingApprovedNames.has(color.name)) color.approved = false;
-        this.saveToLocalStorage();
-    }
-    
-    syncToEquivalencyRows() {
-        const approvedGroups = new Map();
-        for (const color of this.colors) {
-            if (color.approved) {
-                if (!approvedGroups.has(color.group)) {
-                    approvedGroups.set(color.group, []);
-                }
-                if (!approvedGroups.get(color.group).includes(color.name)) {
-                    approvedGroups.get(color.group).push(color.name);
-                }
-            }
-        }
-        
-        // Limpiar EQUIVALENCY_ROWS y reconstruir
-        EQUIVALENCY_ROWS.length = 0;
-        for (const [groupName, colors] of approvedGroups) {
-            if (colors.length > 0) {
-                EQUIVALENCY_ROWS.push([groupName, ...colors]);
-            }
-        }
-        
-        // Guardar en localStorage
-        localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
-        
-        // Actualizar app si existe
-        if (this.app) {
-            this.app.equivalencyRows = EQUIVALENCY_ROWS;
-            if (typeof this.app.buildEquivalenceMap === 'function') {
-                this.app.equivalenceMap = this.app.buildEquivalenceMap();
-            }
-            if (typeof this.app.buildAllValidColorNames === 'function') {
-                this.app.buildAllValidColorNames();
-            }
-        }
-        
-        this.renderGroups();
-        
-        if (this.app && this.app.creatorView && typeof this.app.creatorView.renderTable === 'function') {
-            this.app.creatorView.renderTable();
-        }
-        
-        console.log('✅ Tabla de equivalencias actualizada:', EQUIVALENCY_ROWS.length, 'grupos');
-    }
-    
-    extractNKFromName(fullName) {
-        if (this.app && this.app.extractNK) return this.app.extractNK(fullName) || 'NK001';
-        const match = fullName.match(/(NK\d+|T\d+|\d{4,8})$/i);
-        return match ? match[1] : 'NK001';
-    }
-    
-    getPendingColors() { return this.colors.filter(c => !c.approved); }
     
     renderPendingColors() {
         if (!this.pendingTableBody) return;
         const pendingColors = this.getPendingColors();
-        if (pendingColors.length === 0) { this.pendingTableBody.innerHTML = '<tr><td colspan="14" class="empty-state">No hay colores pendientes. Agregue uno nuevo.    </td></table>'; return; }
+        if (pendingColors.length === 0) {
+            this.pendingTableBody.innerHTML = '<tr><td colspan="14" class="empty-state">No hay colores pendientes. Agregue uno nuevo.    </tr></tr>';
+            return;
+        }
         this.pendingTableBody.innerHTML = pendingColors.map(color => `
             <tr>
-                <td>${color.id}</td>
-                <td><strong>${escapeHtml(color.name)}</strong></td>
-                <td>${escapeHtml(color.nk)}</td>
-                <td>${color.cmyk.c}%</td>
-                <td>${color.cmyk.m}%</td>
-                <td>${color.cmyk.y}%</td>
-                <td>${color.cmyk.k}%</td>
-                <td>${color.channels?.tq || 0}%</td>
-                <td>${color.channels?.o || 0}%</td>
-                <td>${color.channels?.fy || 0}%</td>
-                <td>${color.channels?.fp || 0}%</td>
-                <td>${escapeHtml(color.group)}</td>
-                <td><span class="status-badge pending">⏳ Pendiente</span></td>
+                <td>${color.id}<\/td>
+                <td><strong>${escapeHtml(color.name)}<\/strong><\/td>
+                <td>${escapeHtml(color.nk)}<\/td>
+                <td>${color.cmyk.c}%<\/td>
+                <td>${color.cmyk.m}%<\/td>
+                <td>${color.cmyk.y}%<\/td>
+                <td>${color.cmyk.k}%<\/td>
+                <td>${color.channels?.tq || 0}%<\/td>
+                <td>${color.channels?.o || 0}%<\/td>
+                <td>${color.channels?.fy || 0}%<\/td>
+                <td>${color.channels?.fp || 0}%<\/td>
+                <td>${escapeHtml(color.group)}<\/td>
+                <td><span class="status-badge pending">⏳ Pendiente<\/span><\/td>
                 <td>
-                    <button class="dev-btn dev-edit-pending" data-id="${color.id}" style="border-color:#00e5ff; color:#00e5ff;"><i class="fas fa-edit"></i></button>
-                    <button class="dev-btn dev-approve-pending" data-id="${color.id}" style="border-color:#4ade80; color:#4ade80;"><i class="fas fa-check-circle"></i></button>
-                    <button class="dev-btn dev-delete-pending" data-id="${color.id}" style="border-color:#f87171; color:#f87171;"><i class="fas fa-trash"></i></button>
-                 </td>
-            </tr>
+                    <button class="dev-btn dev-edit-pending" data-id="${color.id}" style="border-color:#00e5ff; color:#00e5ff;"><i class="fas fa-edit"></i><\/button>
+                    <button class="dev-btn dev-approve-pending" data-id="${color.id}" style="border-color:#4ade80; color:#4ade80;"><i class="fas fa-check-circle"></i><\/button>
+                    <button class="dev-btn dev-delete-pending" data-id="${color.id}" style="border-color:#f87171; color:#f87171;"><i class="fas fa-trash"></i><\/button>
+                  <\/td>
+            <\/tr>
         `).join('');
+    }
+    
+    getAllGroups() {
+        const groups = new Map();
+        const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+        
+        for (const row of equivalencyRows) {
+            if (row && row.length > 0) {
+                const groupId = row[0];
+                const colors = row.slice(1);
+                groups.set(groupId, colors);
+            }
+        }
+        return groups;
+    }
+    
+    renderGroups() {
+        if (!this.groupsContainer) return;
+        
+        const groups = this.getAllGroups();
+        
+        if (groups.size === 0) {
+            this.groupsContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">📁</div><p>No hay grupos de equivalencia creados</p></div>';
+            return;
+        }
+        
+        this.groupsContainer.innerHTML = Array.from(groups.entries()).map(([groupId, colors]) => {
+            const isExpanded = this.expandedGroups.has(groupId);
+            return `
+                <div class="dev-group-card">
+                    <div class="dev-group-header" data-group="${escapeHtml(groupId)}">
+                        <div><span class="dev-group-name">${escapeHtml(groupId)}</span><span class="dev-group-count">${colors.length} colores</span></div>
+                        <div>
+                            <button class="dev-btn group-rename-btn" data-group="${escapeHtml(groupId)}" style="border-color:#00e5ff; color:#00e5ff;"><i class="fas fa-edit"></i> Renombrar</button>
+                            <button class="dev-btn group-delete-btn" data-group="${escapeHtml(groupId)}" style="border-color:#f87171; color:#f87171;"><i class="fas fa-trash"></i> Eliminar</button>
+                            <button class="dev-btn group-toggle-btn" data-group="${escapeHtml(groupId)}"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></button>
+                        </div>
+                    </div>
+                    <div class="dev-group-colors" style="${isExpanded ? 'display:flex' : 'display:none'}">
+                        ${colors.map(color => `<div class="dev-color-tag">${escapeHtml(color)}<button class="remove-color-btn" data-group="${escapeHtml(groupId)}" data-color="${escapeHtml(color)}" title="Eliminar color"><i class="fas fa-times-circle"></i></button></div>`).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
     
     showAddColorModal() {
@@ -471,7 +521,8 @@ export class DevelopmentView {
         
         const getFullGroups = () => {
             const groups = [];
-            for (const row of EQUIVALENCY_ROWS) {
+            const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+            for (const row of equivalencyRows) {
                 if (row && row.length > 0) {
                     groups.push({
                         id: row[0],
@@ -493,7 +544,10 @@ export class DevelopmentView {
             );
             const groupsContainer = modal.querySelector('#filteredGroupsContainer');
             if (!groupsContainer) return;
-            if (filteredGroups.length === 0) { groupsContainer.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No se encontraron grupos</div>'; return; }
+            if (filteredGroups.length === 0) {
+                groupsContainer.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No se encontraron grupos</div>';
+                return;
+            }
             const highlight = (text, search) => {
                 if (!search) return escapeHtml(text);
                 const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
@@ -592,10 +646,16 @@ export class DevelopmentView {
     
     addPendingColor(colorData) {
         this.colors.push({
-            id: this.nextId++, name: colorData.name, nk: colorData.nk,
-            cmyk: colorData.cmyk, channels: colorData.channels || { tq: 0, o: 0, fy: 0, fp: 0 },
-            group: colorData.group, observation: colorData.observation || '',
-            approved: false, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString()
+            id: this.nextId++,
+            name: colorData.name,
+            nk: colorData.nk,
+            cmyk: colorData.cmyk,
+            channels: colorData.channels || { tq: 0, o: 0, fy: 0, fp: 0 },
+            group: colorData.group,
+            observation: colorData.observation || '',
+            approved: false,
+            created_at: new Date().toISOString(),
+            modified_at: new Date().toISOString()
         });
         this.saveToLocalStorage();
         this.renderPendingColors();
@@ -609,7 +669,8 @@ export class DevelopmentView {
         
         const getFullGroups = () => {
             const groups = [];
-            for (const row of EQUIVALENCY_ROWS) {
+            const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+            for (const row of equivalencyRows) {
                 if (row && row.length > 0) {
                     groups.push({
                         id: row[0],
@@ -631,7 +692,10 @@ export class DevelopmentView {
             );
             const groupsContainer = modal.querySelector('#filteredGroupsContainer');
             if (!groupsContainer) return;
-            if (filteredGroups.length === 0) { groupsContainer.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No se encontraron grupos</div>'; return; }
+            if (filteredGroups.length === 0) {
+                groupsContainer.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No se encontraron grupos</div>';
+                return;
+            }
             const highlight = (text, search) => {
                 if (!search) return escapeHtml(text);
                 const regex = new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
@@ -724,10 +788,14 @@ export class DevelopmentView {
             if (!nk) { alert('⚠️ Debe ingresar el NK.'); return; }
             if (!selectedGroup) { alert('⚠️ Debe seleccionar un grupo.'); return; }
             if (!observation) { alert('⚠️ Debe ingresar un motivo para la modificación.'); return; }
-            color.name = name; color.nk = nk; color.group = selectedGroup;
-            color.cmyk = { c, m, y, k }; color.channels = { tq, o, fy, fp };
-            color.modifiedAt = new Date().toISOString();
-            this.saveToLocalStorage(); this.renderPendingColors();
+            color.name = name;
+            color.nk = nk;
+            color.group = selectedGroup;
+            color.cmyk = { c, m, y, k };
+            color.channels = { tq, o, fy, fp };
+            color.modified_at = new Date().toISOString();
+            this.saveToLocalStorage();
+            this.renderPendingColors();
             this.addHistoryEntry('EDIT_PENDING', `Color "${name}" modificado (Grupo: ${selectedGroup})`, observation);
             closeModal();
         };
@@ -866,46 +934,51 @@ export class DevelopmentView {
         };
     }
     
-    getAllGroups() {
-        const groups = new Map();
-        for (const row of EQUIVALENCY_ROWS) {
-            if (row && row.length > 0) {
-                const groupId = row[0];
-                const colors = row.slice(1);
-                groups.set(groupId, colors);
+    syncToEquivalencyRows() {
+        const approvedGroups = new Map();
+        for (const color of this.colors) {
+            if (color.approved) {
+                if (!approvedGroups.has(color.group)) {
+                    approvedGroups.set(color.group, []);
+                }
+                if (!approvedGroups.get(color.group).includes(color.name)) {
+                    approvedGroups.get(color.group).push(color.name);
+                }
             }
         }
-        return groups;
-    }
-    
-    renderGroups() {
-        if (!this.groupsContainer) return;
         
-        const groups = this.getAllGroups();
-        
-        if (groups.size === 0) {
-            this.groupsContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">📁</div><p>No hay grupos de equivalencia creados</p></div>';
-            return;
+        const newEquivalencyRows = [];
+        for (const [groupName, colors] of approvedGroups) {
+            if (colors.length > 0) {
+                newEquivalencyRows.push([groupName, ...colors]);
+            }
         }
         
-        this.groupsContainer.innerHTML = Array.from(groups.entries()).map(([groupId, colors]) => {
-            const isExpanded = this.expandedGroups.has(groupId);
-            return `
-                <div class="dev-group-card">
-                    <div class="dev-group-header" data-group="${escapeHtml(groupId)}">
-                        <div><span class="dev-group-name">${escapeHtml(groupId)}</span><span class="dev-group-count">${colors.length} colores</span></div>
-                        <div>
-                            <button class="dev-btn group-rename-btn" data-group="${escapeHtml(groupId)}" style="border-color:#00e5ff; color:#00e5ff;"><i class="fas fa-edit"></i> Renombrar</button>
-                            <button class="dev-btn group-delete-btn" data-group="${escapeHtml(groupId)}" style="border-color:#f87171; color:#f87171;"><i class="fas fa-trash"></i> Eliminar</button>
-                            <button class="dev-btn group-toggle-btn" data-group="${escapeHtml(groupId)}"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></button>
-                        </div>
-                    </div>
-                    <div class="dev-group-colors" style="${isExpanded ? 'display:flex' : 'display:none'}">
-                        ${colors.map(color => `<div class="dev-color-tag">${escapeHtml(color)}<button class="remove-color-btn" data-group="${escapeHtml(groupId)}" data-color="${escapeHtml(color)}" title="Eliminar color"><i class="fas fa-times-circle"></i></button></div>`).join('')}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        if (window.EQUIVALENCY_ROWS) {
+            window.EQUIVALENCY_ROWS.length = 0;
+            for (const row of newEquivalencyRows) {
+                window.EQUIVALENCY_ROWS.push(row);
+            }
+        }
+        
+        localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(newEquivalencyRows));
+        
+        if (this.app) {
+            if (typeof this.app.buildEquivalenceMap === 'function') {
+                this.app.equivalenceMap = this.app.buildEquivalenceMap();
+            }
+            if (typeof this.app.buildAllValidColorNames === 'function') {
+                this.app.buildAllValidColorNames();
+            }
+        }
+        
+        this.renderGroups();
+        
+        if (this.app && this.app.creatorView && typeof this.app.creatorView.renderTable === 'function') {
+            this.app.creatorView.renderTable();
+        }
+        
+        console.log('✅ Tabla de equivalencias actualizada:', newEquivalencyRows.length, 'grupos');
     }
     
     showAddGroupModal() {
@@ -947,11 +1020,12 @@ export class DevelopmentView {
             if (!reason) { alert('⚠️ El motivo es obligatorio.'); return; }
             const equivalents = equivalentText.split(/\r?\n/).filter(c => c.trim() !== '');
             
-            EQUIVALENCY_ROWS.push([groupId, mainColor, ...equivalents]);
-            localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
+            if (!window.EQUIVALENCY_ROWS) window.EQUIVALENCY_ROWS = [];
+            window.EQUIVALENCY_ROWS.push([groupId, mainColor, ...equivalents]);
+            localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(window.EQUIVALENCY_ROWS));
             
             if (this.app) {
-                this.app.equivalencyRows = EQUIVALENCY_ROWS;
+                this.app.equivalencyRows = window.EQUIVALENCY_ROWS;
                 if (typeof this.app.buildEquivalenceMap === 'function') {
                     this.app.equivalenceMap = this.app.buildEquivalenceMap();
                 }
@@ -1001,10 +1075,11 @@ export class DevelopmentView {
             if (!newId) { alert('⚠️ Debe ingresar un nuevo ID.'); return; }
             if (!reason) { alert('⚠️ El motivo es obligatorio.'); return; }
             
-            const rowIndex = EQUIVALENCY_ROWS.findIndex(row => row[0] === oldId);
+            const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+            const rowIndex = equivalencyRows.findIndex(row => row[0] === oldId);
             if (rowIndex !== -1) {
-                EQUIVALENCY_ROWS[rowIndex][0] = newId;
-                localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
+                equivalencyRows[rowIndex][0] = newId;
+                localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(equivalencyRows));
             }
             
             if (this.app && this.app.equivalencyRows) {
@@ -1022,7 +1097,8 @@ export class DevelopmentView {
             
             for (const color of this.colors) if (color.group === oldId) color.group = newId;
             this.saveToLocalStorage();
-            this.renderGroups(); this.renderPendingColors();
+            this.renderGroups();
+            this.renderPendingColors();
             this.addHistoryEntry('RENAME_GROUP', `Grupo "${oldId}" renombrado a "${newId}"`, reason);
             alert(`✅ Grupo renombrado a "${newId}".`);
             closeModal();
@@ -1062,10 +1138,11 @@ export class DevelopmentView {
             const reason = modal.querySelector('#reason').value.trim();
             if (!reason) { alert('⚠️ El motivo es obligatorio.'); return; }
             
-            const rowIndex = EQUIVALENCY_ROWS.findIndex(row => row[0] === groupId);
+            const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+            const rowIndex = equivalencyRows.findIndex(row => row[0] === groupId);
             if (rowIndex !== -1) {
-                EQUIVALENCY_ROWS.splice(rowIndex, 1);
-                localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
+                equivalencyRows.splice(rowIndex, 1);
+                localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(equivalencyRows));
             }
             
             if (this.app && this.app.equivalencyRows) {
@@ -1121,15 +1198,16 @@ export class DevelopmentView {
             const reason = modal.querySelector('#reason').value.trim();
             if (!reason) { alert('⚠️ El motivo es obligatorio.'); return; }
             
-            const rowIndex = EQUIVALENCY_ROWS.findIndex(row => row[0] === groupId);
+            const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+            const rowIndex = equivalencyRows.findIndex(row => row[0] === groupId);
             if (rowIndex !== -1) {
-                const colorIndex = EQUIVALENCY_ROWS[rowIndex].indexOf(colorName);
+                const colorIndex = equivalencyRows[rowIndex].indexOf(colorName);
                 if (colorIndex !== -1) {
-                    EQUIVALENCY_ROWS[rowIndex].splice(colorIndex, 1);
-                    if (EQUIVALENCY_ROWS[rowIndex].length === 1) {
-                        EQUIVALENCY_ROWS.splice(rowIndex, 1);
+                    equivalencyRows[rowIndex].splice(colorIndex, 1);
+                    if (equivalencyRows[rowIndex].length === 1) {
+                        equivalencyRows.splice(rowIndex, 1);
                     }
-                    localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
+                    localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(equivalencyRows));
                 }
             }
             
@@ -1194,18 +1272,19 @@ export class DevelopmentView {
                     if (match) newRows.push([match[1], ...match[2].split('|')]);
                 }
                 if (newRows.length > 0) {
+                    if (!window.EQUIVALENCY_ROWS) window.EQUIVALENCY_ROWS = [];
                     for (const row of newRows) {
-                        const existingIndex = EQUIVALENCY_ROWS.findIndex(r => r[0] === row[0]);
+                        const existingIndex = window.EQUIVALENCY_ROWS.findIndex(r => r[0] === row[0]);
                         if (existingIndex !== -1) {
-                            EQUIVALENCY_ROWS[existingIndex] = row;
+                            window.EQUIVALENCY_ROWS[existingIndex] = row;
                         } else {
-                            EQUIVALENCY_ROWS.push(row);
+                            window.EQUIVALENCY_ROWS.push(row);
                         }
                     }
-                    localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(EQUIVALENCY_ROWS));
+                    localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(window.EQUIVALENCY_ROWS));
                     
                     if (this.app) {
-                        this.app.equivalencyRows = EQUIVALENCY_ROWS;
+                        this.app.equivalencyRows = window.EQUIVALENCY_ROWS;
                         if (typeof this.app.buildEquivalenceMap === 'function') {
                             this.app.equivalenceMap = this.app.buildEquivalenceMap();
                         }

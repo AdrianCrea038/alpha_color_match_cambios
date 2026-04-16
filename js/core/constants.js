@@ -1,6 +1,6 @@
     // js/core/constants.js
     export const EQUIVALENCY_ROWS = [
-        ["BLK", "00A BLACK", "03S TM Black", "03T TM BLACK", "002 BLACK"],
+        ["BLK", "00A BLACK", "03S TM Black", "03T TM BLACK", "00ABLACK", "002 BLACK"],
         ["ANT", "06F ANTHRACITE", "05X TM Anthracite"],
         ["GRY1", "01V WOLF GREY", "03T Blue Grey", "03T TM Blue Grey"],
         ["GRY2", "01P DK STEEL GREY", "01P DARK STEEL GREY", "01P T DARK STEEL GREY", "01P TM DARK STEEL GREY"],

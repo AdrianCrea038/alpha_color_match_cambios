@@ -164,6 +164,7 @@
                         </div>
                         <div class="palette-validator-actions">
                             <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar archivo de biblioteca</button>
+                            <button id="uploadToDbBtn" class="btn-primary" style="border-color: #4ade80; color: #4ade80;">💾 CARGAR TXT A BD</button>
                             <button id="downloadTxtBtn" class="btn-primary" disabled>📥 Exportar TXT</button>
                             <button id="exportEpsBtn" class="btn-primary" disabled>📄 Exportar EPS</button>
                             <button id="sendToInboxBtn" class="btn-secondary" disabled>📤 Enviar a Bandeja</button>
@@ -177,7 +178,7 @@
                                     <th style="width:100px">FY</th><th style="width:100px">FP</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
                                 </thead>
                                 <tbody id="validatorTableBody">
-                                    <tr><td colspan="13" class="empty-state">Cargue un archivo TXT o use los botones para comenzar<\/td><\/tr>
+                                    <td><td colspan="13" class="empty-state">Cargue un archivo TXT o use los botones para comenzar<\/td><\/tr>
                                 </tbody>
                             </table>
                         </div>
@@ -196,34 +197,46 @@
                             <p>Asigne paletas de colores a usuarios y plotters específicos</p>
                         </div>
 
+                        <!-- SECCIÓN GESTIÓN DE TXT EN BD -->
                         <div class="assignment-upload-section">
                             <div class="assignment-upload-header">
-                                <h4><i class="fas fa-upload"></i> Cargar TXT a Librería</h4>
-                                <p>Agregue archivos TXT a la librería para poder asignarlos</p>
+                                <h4><i class="fas fa-database"></i> Gestión de TXT en Base de Datos</h4>
+                                <p>Seleccione Plotter y cargue el archivo TXT (el NK se extraerá automáticamente del archivo)</p>
                             </div>
-                            <div class="assignment-upload-form">
-                                <div class="upload-form-group full-width">
+                            <div class="assignment-upload-form three-columns">
+                                <div class="upload-form-group">
+                                    <label><i class="fas fa-print"></i> Plotter:</label>
+                                    <select id="plotterSelect" class="assignment-select">
+                                        <option value="">-- Seleccionar plotter --</option>
+                                        <option value="1">Plotter 1</option><option value="2">Plotter 2</option>
+                                        <option value="3">Plotter 3</option><option value="4">Plotter 4</option>
+                                        <option value="5">Plotter 5</option><option value="6">Plotter 6</option>
+                                        <option value="7">Plotter 7</option><option value="8">Plotter 8</option>
+                                        <option value="9">Plotter 9</option><option value="10">Plotter 10</option>
+                                        <option value="11">Plotter 11</option><option value="12">Plotter 12</option>
+                                        <option value="13">Plotter 13</option><option value="14" selected>Plotter 14</option>
+                                        <option value="15">Plotter 15</option><option value="16">Plotter 16</option>
+                                        <option value="17">Plotter 17</option>
+                                    </select>
+                                </div>
+                                <div class="upload-form-group">
+                                    <label><i class="fas fa-comment"></i> Motivo:</label>
+                                    <textarea id="txtReason" rows="1" placeholder="Ej: Nueva versión..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
+                                </div>
+                                <div class="upload-form-group">
                                     <label><i class="fas fa-file-alt"></i> Archivo TXT:</label>
-                                    <input type="file" id="assignmentUploadFile" accept=".txt" class="assignment-file-input">
-                                </div>
-                                <div class="upload-form-group full-width">
-                                    <label><i class="fas fa-comment"></i> Motivo de carga:</label>
-                                    <textarea id="assignmentUploadReason" rows="2" placeholder="Ej: Nueva paleta para producción..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
-                                </div>
-                                <div class="upload-form-actions">
-                                    <button id="assignmentUploadBtn" class="btn-primary">📤 CARGAR A LIBRERÍA</button>
+                                    <input type="file" id="txtFileInput" accept=".txt" class="assignment-file-input">
                                 </div>
                             </div>
+                            <div class="txt-buttons-group">
+                                <button id="uploadNewBtn" class="btn-upload-new"><i class="fas fa-cloud-upload-alt"></i> CARGAR NUEVO TXT</button>
+                                <button id="replaceBtn" class="btn-replace" disabled><i class="fas fa-sync-alt"></i> REEMPLAZAR TXT</button>
+                            </div>
+                            <div id="txtInfo" class="txt-info-message" style="margin-top: 0.5rem;"></div>
                         </div>
 
+                        <!-- SECCIÓN ASIGNAR TRABAJO -->
                         <div class="assignment-form">
-                            <div class="form-group">
-                                <label><i class="fas fa-file-alt"></i> Seleccionar archivo TXT:</label>
-                                <select id="assignmentTxtSelect" class="assignment-select">
-                                    <option value="">-- Seleccionar archivo --</option>
-                                </select>
-                            </div>
-
                             <div class="form-group">
                                 <label><i class="fas fa-print"></i> Seleccionar Plotter:</label>
                                 <select id="assignmentPlotterSelect" class="assignment-select">
@@ -237,6 +250,13 @@
                                     <option value="13">Plotter 13</option><option value="14" selected>Plotter 14</option>
                                     <option value="15">Plotter 15</option><option value="16">Plotter 16</option>
                                     <option value="17">Plotter 17</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label><i class="fas fa-file-alt"></i> Seleccionar archivo TXT:</label>
+                                <select id="assignmentTxtSelect" class="assignment-select">
+                                    <option value="">-- Seleccionar archivo --</option>
                                 </select>
                             </div>
 
