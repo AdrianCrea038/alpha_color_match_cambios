@@ -12,7 +12,7 @@
         ["GLD2", "79W TEAM GOLD", "79X TM Vegas Gold"],
         ["GLD3", "79Y TM Bright Gold", "79Q SUNDOWN"],
         ["GLD4", "79V CLUB GOLD"],
-        ["GLD5", "76I UNIVERSITY GOLD"],
+        ["GLD5", "76I UNIVERSITY GOLD", "76I UNI GOLD"],
         ["GLD6", "79U GOLD DART"],
         ["GLD7", "77C TONAL GOLD"],
         ["GLD8", "PMS 132 OLD GOLD", "PMS 1255C OLD GOLD"],
