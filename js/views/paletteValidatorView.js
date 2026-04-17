@@ -1,13 +1,8 @@
 // js/views/paletteValidatorView.js
 import { escapeHtml } from '../core/utils.js';
 import { EPSView } from './epsView.js';
-import { 
-    supabase, 
-    getAllNks, 
-    getActiveTxt, 
-    createNewTxt, 
-    replaceTxt 
-} from '../core/supabaseClient.js';
+import { supabase } from '../core/supabaseClient.js';
+import { EQUIVALENCY_ROWS, getAllEquivalentNames } from '../core/constants.js';
 
 export class PaletteValidatorView {
     constructor(app) {
@@ -17,7 +12,8 @@ export class PaletteValidatorView {
         this.historyLog = [];
         this.currentUser = 'usuario';
         this.globalPlotter = 14;
-        this.nkList = [];
+        this.userAssignments = [];
+        this.currentAssignment = null;
         
         this.tableBody = null;
         this.downloadTxtBtn = null;
@@ -27,6 +23,7 @@ export class PaletteValidatorView {
         this.uploadToDbBtn = null;
         this.plotterSelect = null;
         this.librarySelect = null;
+        this.assignmentsListDiv = null;
         
         this.epsHelper = new EPSView(app);
         
@@ -45,7 +42,11 @@ export class PaletteValidatorView {
         
         if (!this.tableBody) return;
         
-        await this.loadNkList();
+        const currentUser = this.app?.auth?.getCurrentUser();
+        this.currentUser = currentUser?.username || 'usuario';
+        
+        await this.loadUserAssignments();
+        this.renderAssignmentsList();
         
         if (this.plotterSelect) {
             this.plotterSelect.value = this.globalPlotter;
@@ -79,127 +80,112 @@ export class PaletteValidatorView {
         this.resetTable();
     }
     
-    async loadNkList() {
-        this.nkList = await getAllNks();
+    async loadUserAssignments() {
+        try {
+            const { data, error } = await supabase
+                .from('assignments')
+                .select('*')
+                .eq('usuario_asignado', this.currentUser)
+                .eq('estado', 'pendiente')
+                .order('fecha_asignacion', { ascending: false });
+            
+            if (error) throw error;
+            
+            this.userAssignments = data || [];
+            console.log(`📋 Asignaciones cargadas para ${this.currentUser}:`, this.userAssignments.length);
+            
+        } catch (error) {
+            console.error('Error cargando asignaciones:', error);
+            this.userAssignments = [];
+        }
     }
     
-    showUploadModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header" style="background: #2d4ed6;">
-                    <h3 style="color: white;">💾 Cargar TXT a Base de Datos</h3>
-                    <button class="modal-close" style="color: white;">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>🔑 Seleccionar NK:</label>
-                        <select id="modalNkSelect" class="assignment-select" style="width:100%;">
-                            <option value="">-- Seleccionar NK --</option>
-                            ${this.nkList.map(nk => `<option value="${nk}">${nk}</option>`).join('')}
-                        </select>
+    renderAssignmentsList() {
+        const container = document.querySelector('.palette-validator-container');
+        if (!container) return;
+        
+        const existingList = document.getElementById('assignmentsList');
+        if (existingList) existingList.remove();
+        
+        if (this.userAssignments.length === 0) {
+            return;
+        }
+        
+        const listDiv = document.createElement('div');
+        listDiv.id = 'assignmentsList';
+        listDiv.style.cssText = 'background: #0c0c12; border: 1px solid #2d3748; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem;';
+        listDiv.innerHTML = `
+            <h4 style="color: #eab308; margin-bottom: 0.75rem; font-size: 0.9rem;">
+                <i class="fas fa-tasks"></i> Mis Asignaciones Pendientes (${this.userAssignments.length})
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                ${this.userAssignments.map(assignment => `
+                    <div class="assignment-item-select" data-id="${assignment.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1f1f2a; border: 1px solid #2d3748; border-radius: 8px; cursor: pointer;">
+                        <div>
+                            <strong style="color: #00e5ff;">${assignment.txt_nombre || assignment.txt_id}</strong>
+                            <div style="font-size: 0.7rem; color: #9ca3af;">📅 ${new Date(assignment.fecha_asignacion).toLocaleString()}</div>
+                            ${assignment.comentario ? `<div style="font-size: 0.7rem; color: #6b7280;">💬 ${assignment.comentario}</div>` : ''}
+                        </div>
+                        <button class="btn-load-assignment" data-id="${assignment.id}" style="background: transparent; border: 1.5px solid #4ade80; color: #4ade80; padding: 0.3rem 0.8rem; border-radius: 6px; cursor: pointer;">
+                            <i class="fas fa-folder-open"></i> Cargar
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>🖨️ Plotter:</label>
-                        <select id="modalPlotterSelect" class="assignment-select" style="width:100%;">
-                            <option value="">-- Seleccionar plotter --</option>
-                            ${Array.from({length: 17}, (_, i) => `<option value="${i+1}" ${i+1 === this.globalPlotter ? 'selected' : ''}>Plotter ${i+1}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>📝 Motivo:</label>
-                        <textarea id="modalReason" rows="3" placeholder="Ej: Nueva versión de la paleta..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>📁 Archivo TXT:</label>
-                        <input type="file" id="modalFileInput" accept=".txt" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
-                    </div>
-                    <div id="modalInfo" class="info-message" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;"></div>
-                </div>
-                <div class="modal-buttons">
-                    <button class="btn-secondary cancel-modal">Cancelar</button>
-                    <button class="btn-primary confirm-modal" style="background: #4ade80; border: none;">💾 CARGAR</button>
-                </div>
+                `).join('')}
             </div>
         `;
         
-        document.body.appendChild(modal);
-        setTimeout(() => modal.classList.add('active'), 10);
+        container.insertBefore(listDiv, container.firstChild);
         
-        const closeModal = () => {
-            modal.classList.remove('active');
-            setTimeout(() => modal.remove(), 300);
-        };
-        
-        const nkSelect = modal.querySelector('#modalNkSelect');
-        const plotterSelect = modal.querySelector('#modalPlotterSelect');
-        const fileInput = modal.querySelector('#modalFileInput');
-        const infoDiv = modal.querySelector('#modalInfo');
-        
-        const checkExisting = async () => {
-            const nk = nkSelect?.value;
-            const plotter = plotterSelect?.value;
-            
-            if (nk && plotter) {
-                const existing = await getActiveTxt(nk, parseInt(plotter));
-                if (existing) {
-                    infoDiv.innerHTML = `<span style="color: #eab308;">⚠️ Ya existe TXT para ${nk} en Plotter ${plotter}. Se creará una nueva versión.</span>`;
-                } else {
-                    infoDiv.innerHTML = `<span style="color: #4ade80;">✅ Puede cargar un nuevo TXT para ${nk} en Plotter ${plotter}.</span>`;
-                }
-            } else {
-                infoDiv.innerHTML = '';
-            }
-        };
-        
-        nkSelect.addEventListener('change', checkExisting);
-        plotterSelect.addEventListener('change', checkExisting);
-        
-        modal.querySelector('.modal-close').onclick = closeModal;
-        modal.querySelector('.cancel-modal').onclick = closeModal;
-        
-        modal.querySelector('.confirm-modal').onclick = async () => {
-            const nk = nkSelect?.value;
-            const plotter = plotterSelect?.value;
-            const reason = modal.querySelector('#modalReason')?.value.trim() || '';
-            const file = fileInput?.files[0];
-            const currentUser = this.app?.auth?.getCurrentUser()?.username || 'usuario';
-            
-            if (!nk || !plotter) {
-                alert('⚠️ Seleccione NK y Plotter');
-                return;
-            }
-            
-            if (!file) {
-                alert('⚠️ Seleccione un archivo TXT');
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const contenido = e.target.result;
-                const nombreArchivo = file.name;
-                
-                const result = await createNewTxt(nk, parseInt(plotter), contenido, nombreArchivo, currentUser, reason);
-                
-                if (result.success) {
-                    if (result.isNewVersion) {
-                        alert(`✅ Nueva versión (v${result.data.version}) creada para ${nk} en Plotter ${plotter}`);
-                    } else {
-                        alert(`✅ TXT creado para ${nk} en Plotter ${plotter}`);
-                    }
-                    closeModal();
-                    await this.loadNkList();
-                    this.parseAndLoadContent(contenido, nombreArchivo);
-                } else {
-                    alert(`❌ Error: ${result.error}`);
+        document.querySelectorAll('.btn-load-assignment').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.id);
+                const assignment = this.userAssignments.find(a => a.id === id);
+                if (assignment) {
+                    this.loadAssignmentContent(assignment);
                 }
             };
-            reader.readAsText(file, 'UTF-8');
-        };
+        });
         
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+        document.querySelectorAll('.assignment-item-select').forEach(item => {
+            item.onclick = (e) => {
+                if (e.target.classList.contains('btn-load-assignment')) return;
+                const id = parseInt(item.dataset.id);
+                const assignment = this.userAssignments.find(a => a.id === id);
+                if (assignment) {
+                    this.loadAssignmentContent(assignment);
+                }
+            };
+        });
+    }
+    
+    async loadAssignmentContent(assignment) {
+        if (!assignment || !assignment.contenido) {
+            alert('❌ No se pudo obtener el contenido del archivo.');
+            return;
+        }
+        
+        this.currentAssignment = assignment;
+        this.parseAndLoadContent(assignment.contenido, assignment.txt_nombre || assignment.txt_id);
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'assignment-info';
+        infoDiv.id = 'currentAssignmentInfo';
+        infoDiv.style.cssText = 'background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.75rem;';
+        infoDiv.innerHTML = `
+            <strong><i class="fas fa-tasks"></i> Asignación actual:</strong><br>
+            📄 Archivo: ${assignment.txt_nombre || assignment.txt_id}<br>
+            🖨️ Plotter: ${assignment.plotter}<br>
+            💬 Comentario: ${assignment.comentario || 'Sin comentario'}<br>
+            📅 Fecha: ${new Date(assignment.fecha_asignacion).toLocaleString()}
+        `;
+        
+        const container = document.querySelector('.palette-validator-container');
+        const existingInfo = document.getElementById('currentAssignmentInfo');
+        if (existingInfo) existingInfo.remove();
+        if (container) {
+            container.insertBefore(infoDiv, container.firstChild);
+        }
     }
     
     updateLibrarySelect() {
@@ -232,13 +218,42 @@ export class PaletteValidatorView {
             alert('❌ No se encontró el archivo seleccionado.');
             return;
         }
+        this.currentAssignment = null;
         this.parseAndLoadContent(selected.content, fileName);
+        
+        const existingInfo = document.getElementById('currentAssignmentInfo');
+        if (existingInfo) existingInfo.remove();
+    }
+    
+    isValidColorName(colorName) {
+        const upperName = colorName.toUpperCase().trim();
+        for (const row of EQUIVALENCY_ROWS) {
+            for (let i = 1; i < row.length; i++) {
+                if (row[i].toUpperCase() === upperName) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    getCorrectedColorName(colorName) {
+        const upperName = colorName.toUpperCase().trim();
+        for (const row of EQUIVALENCY_ROWS) {
+            for (let i = 1; i < row.length; i++) {
+                if (row[i].toUpperCase() === upperName) {
+                    return row[i];
+                }
+            }
+        }
+        return colorName;
     }
     
     parseAndLoadContent(content, fileName) {
         const lines = content.split(/\r?\n/);
         let dataStarted = false;
         const loadedColors = [];
+        let invalidCount = 0;
         
         for (let line of lines) {
             if (line.trim() === '') continue;
@@ -257,7 +272,17 @@ export class PaletteValidatorView {
                         const nkMatch = fullName.match(/(NK\d+|T\d+)/i);
                         nk = nkMatch ? nkMatch[1] : 'NK001';
                     }
-                    const name = fullName.replace(/\s+(NK\d+|T\d+)$/i, '').trim();
+                    
+                    let name = fullName.replace(/\s+(NK\d+|T\d+)$/i, '').trim();
+                    
+                    // Validar nombre del color
+                    const isValid = this.isValidColorName(name);
+                    if (!isValid) {
+                        invalidCount++;
+                        console.warn(`⚠️ Color no válido: "${name}"`);
+                    }
+                    
+                    const correctedName = this.getCorrectedColorName(name);
                     
                     let lVal = 100, aVal = 0, bVal = 0;
                     if (match[8] && match[9] && match[10]) {
@@ -267,8 +292,10 @@ export class PaletteValidatorView {
                     }
                     
                     loadedColors.push({
-                        name: name,
+                        name: correctedName,
+                        originalName: name,
                         nk: nk,
+                        isValid: isValid,
                         cmyk: {
                             c: parseFloat(match[4]),
                             m: parseFloat(match[5]),
@@ -286,15 +313,105 @@ export class PaletteValidatorView {
         if (loadedColors.length > 0) {
             this.colors = [];
             this.nextId = 1;
-            for (const color of loadedColors) {
-                this.addColor(color);
+            for (let i = 0; i < loadedColors.length; i++) {
+                this.addColor(loadedColors[i], i);
             }
             this.renderTable();
             this.checkButtonsState();
-            alert(`✅ Cargados ${loadedColors.length} colores desde "${fileName}".`);
+            
+            let message = `✅ Cargados ${loadedColors.length} colores desde "${fileName}".`;
+            if (invalidCount > 0) {
+                message += `\n⚠️ Se encontraron ${invalidCount} nombres de color no válidos en la tabla de equivalencias.`;
+            }
+            alert(message);
         } else {
             alert('⚠️ No se encontraron colores en el archivo.');
         }
+    }
+    
+    showUploadModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header" style="background: #2d4ed6;">
+                    <h3 style="color: white;">💾 Cargar TXT a Base de Datos</h3>
+                    <button class="modal-close" style="color: white;">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>🖨️ Plotter:</label>
+                        <select id="modalPlotterSelect" class="assignment-select" style="width:100%;">
+                            <option value="">-- Seleccionar plotter --</option>
+                            ${Array.from({length: 17}, (_, i) => `<option value="${i+1}" ${i+1 === this.globalPlotter ? 'selected' : ''}>Plotter ${i+1}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>📝 Motivo:</label>
+                        <textarea id="modalReason" rows="3" placeholder="Ej: Nueva versión de la paleta..." style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>📁 Archivo TXT:</label>
+                        <input type="file" id="modalFileInput" accept=".txt" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
+                    </div>
+                    <div id="modalInfo" class="info-message" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;"></div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn-secondary cancel-modal">Cancelar</button>
+                    <button class="btn-primary confirm-modal" style="background: #4ade80; border: none;">💾 CARGAR</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        setTimeout(() => modal.classList.add('active'), 10);
+        
+        const closeModal = () => {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 300);
+        };
+        
+        modal.querySelector('.modal-close').onclick = closeModal;
+        modal.querySelector('.cancel-modal').onclick = closeModal;
+        
+        modal.querySelector('.confirm-modal').onclick = async () => {
+            const plotter = modal.querySelector('#modalPlotterSelect')?.value;
+            const reason = modal.querySelector('#modalReason')?.value.trim() || '';
+            const file = modal.querySelector('#modalFileInput')?.files[0];
+            const currentUser = this.app?.auth?.getCurrentUser()?.username || 'usuario';
+            
+            if (!plotter) {
+                alert('⚠️ Seleccione un Plotter');
+                return;
+            }
+            
+            if (!file) {
+                alert('⚠️ Seleccione un archivo TXT');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const contenido = e.target.result;
+                const nombreArchivo = file.name;
+                const nkMatch = nombreArchivo.match(/(NK\d+)/i);
+                const nk = nkMatch ? nkMatch[1] : 'NK000001';
+                
+                const { createNewTxt } = await import('../core/supabaseClient.js');
+                const result = await createNewTxt(nk, parseInt(plotter), contenido, nombreArchivo, currentUser, reason);
+                
+                if (result.success) {
+                    alert(`✅ TXT guardado en BD\n📁 Archivo: ${nombreArchivo}\n🖨️ Plotter: ${plotter}\n🔑 NK: ${nk}`);
+                    closeModal();
+                    this.parseAndLoadContent(contenido, nombreArchivo);
+                } else {
+                    alert(`❌ Error: ${result.error}`);
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        };
+        
+        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     getGlobalPlotter() {
@@ -305,26 +422,28 @@ export class PaletteValidatorView {
         return this.colors.filter(color => !color.isLocked);
     }
     
-    addColor(colorData = null) {
+    addColor(colorData, index = null) {
         const newId = this.nextId++;
         const newColor = {
             id: newId,
-            name: colorData ? colorData.name : '',
-            nk: colorData ? colorData.nk : 'NK001',
-            cmyk: colorData ? { ...colorData.cmyk } : { c: 0, m: 0, y: 0, k: 0 },
-            lab: colorData ? { ...colorData.lab } : { l: 100, a: 0, b: 0 },
-            channels: colorData?.channels || { tq: 0, o: 0, fy: 0, fp: 0 },
-            isLocked: false,
+            name: colorData.name,
+            originalName: colorData.originalName,
+            nk: colorData.nk,
+            isValid: colorData.isValid,
+            cmyk: { ...colorData.cmyk },
+            lab: { ...colorData.lab },
+            channels: colorData.channels || { tq: 0, o: 0, fy: 0, fp: 0 },
+            isLocked: colorData.isLocked || false,
             modificationHistory: []
         };
         this.colors.push(newColor);
-        this.renderTable();
         return newColor;
     }
     
     lockColor(colorId) {
         const color = this.colors.find(c => c.id === colorId);
         if (!color || color.isLocked) return;
+        
         color.isLocked = true;
         this.addToHistory(colorId, 'LOCK', 'Color marcado como bueno');
         this.renderTable();
@@ -348,6 +467,7 @@ export class PaletteValidatorView {
     updateColor(colorId, updates) {
         const color = this.colors.find(c => c.id === colorId);
         if (!color || color.isLocked) return;
+        
         if (updates.name !== undefined) color.name = updates.name;
         if (updates.cmyk) {
             if (updates.cmyk.c !== undefined) color.cmyk.c = updates.cmyk.c;
@@ -361,6 +481,7 @@ export class PaletteValidatorView {
             if (updates.channels.fy !== undefined) color.channels.fy = updates.channels.fy;
             if (updates.channels.fp !== undefined) color.channels.fp = updates.channels.fp;
         }
+        
         this.addToHistory(colorId, 'EDIT', `Modificado: ${color.name}`);
         this.renderTable();
     }
@@ -379,7 +500,7 @@ export class PaletteValidatorView {
     renderTable() {
         if (!this.tableBody) return;
         if (this.colors.length === 0) {
-            this.tableBody.innerHTML = '<tr><td colspan="13" class="empty-state">Seleccione un archivo TXT de la lista para comenzar<\/td><\/tr>';
+            this.tableBody.innerHTML = '<tr><td colspan="13" class="empty-state">Seleccione un archivo TXT o una asignación para comenzar<\/td><\/tr>';
             this.checkButtonsState();
             return;
         }
@@ -391,11 +512,13 @@ export class PaletteValidatorView {
             const actionButton = isLocked 
                 ? `<button class="small-btn btn-modify" data-id="${color.id}" title="Modificar"><i class="fas fa-edit"></i></button>`
                 : `<button class="small-btn btn-lock" data-id="${color.id}" title="Marcar como bueno"><i class="fas fa-check-circle"></i></button>`;
+            const nameStyle = !color.isValid ? 'color: #f87171; text-decoration: line-through;' : '';
+            const nameTitle = !color.isValid ? `Original: ${color.originalName}` : '';
             
             return `
                 <tr class="${isLocked ? 'locked-row' : ''}" data-id="${color.id}">
                     <td class="row-number">${index + 1}${isLocked ? ' 🔒' : ''}<\/td>
-                    <td><input type="text" class="color-name-input" value="${this.escapeHtml(color.name)}" disabled><\/td>
+                    <td><input type="text" class="color-name-input" value="${this.escapeHtml(color.name)}" style="${nameStyle}" title="${nameTitle}" disabled><\/td>
                     <td><input type="text" class="nk-input" value="${this.escapeHtml(color.nk)}" disabled><\/td>
                     <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.c.toFixed(6)}" ${disabledAttr} data-field="cmyk_c" data-id="${color.id}" class="cmyk-input"><\/td>
                     <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.m.toFixed(6)}" ${disabledAttr} data-field="cmyk_m" data-id="${color.id}" class="cmyk-input"><\/td>
@@ -407,7 +530,7 @@ export class PaletteValidatorView {
                     <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.fp.toFixed(6)}" ${disabledAttr} data-field="channel_fp" data-id="${color.id}" class="channel-input"><\/td>
                     <td class="status-cell">${statusBadge}<\/td>
                     <td class="actions-cell">${actionButton}<\/td>
-                </td>
+                </tr>
             `;
         }).join('');
         

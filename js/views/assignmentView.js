@@ -10,8 +10,6 @@ import {
 export class AssignmentView {
     constructor(app) {
         this.app = app;
-        this.assignments = [];
-        this.loadAssignments();
         this.init();
     }
     
@@ -19,7 +17,6 @@ export class AssignmentView {
         this.attachEvents();
         this.loadTxtList();
         this.loadUsersList();
-        this.renderHistory();
     }
     
     async loadUsersList() {
@@ -323,86 +320,29 @@ export class AssignmentView {
             return;
         }
         
-        const assignment = {
-            id: Date.now(),
-            txtId: txtId,
-            txtName: txtName,
-            plotter: parseInt(plotter),
-            assignedUser: assignedUser,
-            comment: comment,
-            progress: 0,
-            status: 'pendiente',
-            date: new Date().toISOString(),
-            content: contenido
-        };
+        const { data, error } = await supabase
+            .from('assignments')
+            .insert({
+                txt_id: txtId,
+                txt_nombre: txtName,
+                plotter: parseInt(plotter),
+                usuario_asignado: assignedUser,
+                comentario: comment,
+                progreso: 0,
+                estado: 'pendiente',
+                contenido: contenido,
+                fecha_asignacion: new Date().toISOString()
+            })
+            .select();
         
-        this.assignments.unshift(assignment);
-        this.saveAssignments();
-        this.renderHistory();
-        this.clearForm();
-        
-        alert(`✅ Trabajo asignado a "${assignedUser}" para el archivo "${txtName}"`);
-    }
-    
-    loadAssignments() {
-        const saved = localStorage.getItem('alphaColorMatchAssignments');
-        if (saved) {
-            try {
-                this.assignments = JSON.parse(saved);
-            } catch(e) {
-                this.assignments = [];
-            }
-        }
-    }
-    
-    saveAssignments() {
-        localStorage.setItem('alphaColorMatchAssignments', JSON.stringify(this.assignments));
-    }
-    
-    renderHistory() {
-        const container = document.getElementById('assignmentHistoryList');
-        if (!container) return;
-        
-        if (this.assignments.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📋</div>
-                    <p>No hay asignaciones registradas</p>
-                </div>
-            `;
+        if (error) {
+            console.error('Error al guardar asignación:', error);
+            alert(`❌ Error al asignar: ${error.message}`);
             return;
         }
         
-        container.innerHTML = this.assignments.map(assignment => {
-            const progress = assignment.progress || 0;
-            const statusClass = progress === 100 ? 'completed-badge' : '';
-            const statusText = progress === 100 ? '✅ Completado' : '⏳ En progreso';
-            
-            return `
-                <div class="assignment-item" data-id="${assignment.id}">
-                    <div class="assignment-item-header">
-                        <div>
-                            <span class="assignment-badge plotter">🖨️ Plotter ${assignment.plotter}</span>
-                            <span class="assignment-badge user">👤 ${assignment.assignedUser}</span>
-                        </div>
-                        <div class="assignment-date">${new Date(assignment.date).toLocaleString()}</div>
-                    </div>
-                    <div class="assignment-details">
-                        <p><strong>📄 Archivo:</strong> <span class="assignment-filename">${assignment.txtName}</span></p>
-                        ${assignment.comment ? `<p><strong>💬 Comentario:</strong> ${assignment.comment}</p>` : ''}
-                    </div>
-                    <div class="assignment-progress">
-                        <div class="progress-container">
-                            <div class="progress-bar" style="width: ${progress}%"></div>
-                        </div>
-                        <div class="progress-text">
-                            <span>Progreso: ${progress}%</span>
-                            <span class="${statusClass}">${statusText}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        alert(`✅ Trabajo asignado a "${assignedUser}" para el archivo "${txtName}"`);
+        this.clearForm();
     }
     
     clearForm() {
@@ -417,9 +357,7 @@ export class AssignmentView {
     
     clearAllAssignments() {
         if (confirm('⚠️ ¿Estás seguro de que quieres eliminar TODAS las asignaciones? Esta acción no se puede deshacer.')) {
-            this.assignments = [];
-            this.saveAssignments();
-            this.renderHistory();
+            supabase.from('assignments').delete().neq('id', 0);
             alert('✅ Todas las asignaciones han sido eliminadas.');
         }
     }
