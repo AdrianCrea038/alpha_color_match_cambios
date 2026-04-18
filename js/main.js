@@ -16,6 +16,7 @@ import { AssignmentView } from './views/assignmentView.js';
 import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
 import { DashboardView } from './views/dashboardView.js';
+import { supabase } from './core/supabaseClient.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -57,6 +58,20 @@ class AlphaColorMatch {
         this.bindEvents();
         this.loadInbox();
         this.updateInboxBell();
+        
+        // RECUPERAR VISTA GUARDADA
+        const lastView = localStorage.getItem('currentView') || 'dashboard';
+        if (this.switchView) this.switchView(lastView);
+        
+        // ACTIVAR SINCRONIZACIÓN EN TIEMPO REAL
+        this.setupRealtimeSync();
+        
+        // Recuperar la última vista visitada
+        const savedView = localStorage.getItem('currentView') || 'dashboard';
+        this.showView(savedView);
+        
+        // Configurar sincronización en tiempo real
+        this.setupRealtimeSync();
         
         window.selectGroup = (groupId, source) => this.selectGroup(groupId, source);
         window.togglePendingAdd = (itemId) => this.togglePendingAdd(itemId);
@@ -435,6 +450,9 @@ class AlphaColorMatch {
         };
         
         const switchView = (viewName) => {
+            console.log(`🚀 Cambiando a vista: ${viewName}`);
+            localStorage.setItem('currentView', viewName);
+            
             Object.values(views).forEach(view => {
                 if (view) view.classList.remove('active');
             });
@@ -479,8 +497,6 @@ class AlphaColorMatch {
                 }
             });
         });
-        
-        switchView('comparator');
     }
 
     ensureInboxBell() {
@@ -604,6 +620,29 @@ class AlphaColorMatch {
         } catch (error) {
             alert(`❌ Error cargando secundario desde bandeja: ${error.message || error}`);
             return false;
+        }
+    }
+
+    setupRealtimeSync() {
+        try {
+            console.log('📡 Iniciando escucha en tiempo real...');
+            supabase
+                .channel('assignments_changes')
+                .on('postgres_changes', { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'assignments' 
+                }, (payload) => {
+                    console.log('🔔 Cambio en asignaciones detectado:', payload.eventType);
+                    if (this.dashboardView) {
+                        this.dashboardView.render().catch(err => console.error('Error en sync real-time:', err));
+                    }
+                })
+                .subscribe((status) => {
+                    console.log('📡 Estado de suscripción Realtime:', status);
+                });
+        } catch (e) {
+            console.error('Error en setupRealtimeSync:', e);
         }
     }
 }
