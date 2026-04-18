@@ -625,24 +625,39 @@ class AlphaColorMatch {
 
     setupRealtimeSync() {
         try {
-            console.log('📡 Iniciando escucha en tiempo real...');
+            console.log('📡 Iniciando escucha en tiempo real (Asignaciones y Progreso)...');
+            
+            // Suscribirse a cambios en Asignaciones
             supabase
-                .channel('assignments_changes')
-                .on('postgres_changes', { 
-                    event: '*', 
-                    schema: 'public', 
-                    table: 'assignments' 
-                }, (payload) => {
-                    console.log('🔔 Cambio en asignaciones detectado:', payload.eventType);
-                    if (this.dashboardView) {
-                        this.dashboardView.render().catch(err => console.error('Error en sync real-time:', err));
-                    }
+                .channel('assignments_realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
+                    this.refreshDashboard('assignments');
                 })
-                .subscribe((status) => {
-                    console.log('📡 Estado de suscripción Realtime:', status);
-                });
+                .subscribe();
+
+            // Suscribirse a cambios en Progreso de Validación
+            supabase
+                .channel('progress_realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'validation_progress' }, () => {
+                    this.refreshDashboard('validation_progress');
+                })
+                .subscribe();
+
+            // FALLBACK: Refresco automático cada 30 segundos (Heartbeat)
+            setInterval(() => {
+                console.log('💓 Latido: Refrescando dashboard automáticamente...');
+                this.refreshDashboard('heartbeat');
+            }, 30000);
+            
         } catch (e) {
             console.error('Error en setupRealtimeSync:', e);
+        }
+    }
+
+    refreshDashboard(source) {
+        if (this.dashboardView) {
+            console.log(`🔄 Refrescando dashboard (Origen: ${source})`);
+            this.dashboardView.render().catch(err => console.error('Error refrescando dashboard:', err));
         }
     }
 }
