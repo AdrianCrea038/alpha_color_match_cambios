@@ -45,6 +45,7 @@ export class PaletteValidatorView {
         
         await this.loadUserAssignments();
         this.renderAssignmentsList();
+        this.checkAndRecoverWork();
         
         if (this.plotterSelect) {
             this.plotterSelect.value = this.globalPlotter;
@@ -82,6 +83,11 @@ export class PaletteValidatorView {
     async loadAssignedTxt() {
         await this.loadUserAssignments();
         this.renderAssignmentsList();
+
+        if (this.currentAssignment) {
+            const confirmReload = confirm(`⚠️ Ya tienes una asignación activa (${this.currentAssignment.txt_nombre || this.currentAssignment.txt_id}).\n\n¿Deseas cargar una nueva y descartar el trabajo actual sin guardar?`);
+            if (!confirmReload) return;
+        }
 
         if (!this.userAssignments || this.userAssignments.length === 0) {
             alert('⚠️ No tienes TXTs asignados pendientes.');
@@ -238,7 +244,12 @@ export class PaletteValidatorView {
         const existingList = document.getElementById('assignmentsList');
         if (existingList) existingList.remove();
         
-        if (this.userAssignments.length === 0) {
+        const activeId = localStorage.getItem('activeAssignmentId');
+        const assignmentsToShow = activeId 
+            ? this.userAssignments.filter(a => a.id !== parseInt(activeId))
+            : this.userAssignments;
+
+        if (assignmentsToShow.length === 0 && !activeId) {
             return;
         }
         
@@ -247,17 +258,17 @@ export class PaletteValidatorView {
         listDiv.style.cssText = 'background: #0c0c12; border: 1px solid #2d3748; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem;';
         listDiv.innerHTML = `
             <h4 style="color: #eab308; margin-bottom: 0.75rem; font-size: 0.9rem;">
-                <i class="fas fa-tasks"></i> Mis Asignaciones Pendientes (${this.userAssignments.length})
+                <i class="fas fa-tasks"></i> Otras Asignaciones Pendientes (${assignmentsToShow.length})
             </h4>
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                ${this.userAssignments.map(assignment => {
+                ${assignmentsToShow.length === 0 ? '<div style="color:#6b7280; font-size:0.8rem; text-align:center; padding:0.5rem;">No hay más asignaciones pendientes</div>' : ''}
+                ${assignmentsToShow.map(assignment => {
                     const progress = assignment.progreso || 0;
                     return `
                         <div class="assignment-item-select" data-id="${assignment.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1f1f2a; border: 1px solid #2d3748; border-radius: 8px; cursor: pointer;">
                             <div style="flex: 1;">
                                 <strong style="color: #00e5ff;">${assignment.txt_nombre || assignment.txt_id}</strong>
                                 <div style="font-size: 0.7rem; color: #9ca3af;">📅 ${new Date(assignment.fecha_asignacion).toLocaleString()}</div>
-                                ${assignment.comentario ? `<div style="font-size: 0.7rem; color: #6b7280;">💬 ${assignment.comentario}</div>` : ''}
                                 <div style="margin-top: 0.5rem;">
                                     <div style="background: #2d3748; border-radius: 10px; height: 6px; width: 100%; overflow: hidden;">
                                         <div style="background: linear-gradient(90deg, #00e5ff, #0099cc); width: ${progress}%; height: 100%; border-radius: 10px;"></div>
@@ -306,11 +317,14 @@ export class PaletteValidatorView {
         }
         
         this.currentAssignment = assignment;
+        localStorage.setItem('activeAssignmentId', assignment.id);
         
         const lockedColors = await this.loadLockedColors(assignment.id);
-        console.log('Colores bloqueados cargados:', lockedColors.length);
         
-        this.parseAndLoadContentWithLocked(assignment.contenido, assignment.txt_nombre || assignment.txt_id, lockedColors);
+        // Cargar primero del localStorage si existe trabajo más reciente
+        const localData = this.loadLocalProgress(assignment.id);
+        
+        this.parseAndLoadContentWithLocked(assignment.contenido, assignment.txt_nombre || assignment.txt_id, lockedColors, localData);
         
         setTimeout(async () => {
             const totalColors = this.colors.length;
@@ -373,7 +387,7 @@ export class PaletteValidatorView {
         return colorName;
     }
     
-    parseAndLoadContentWithLocked(content, fileName, lockedColors) {
+    parseAndLoadContentWithLocked(content, fileName, lockedColors, localData = null) {
         const lines = content.split(/\r?\n/);
         let dataStarted = false;
         const loadedColors = [];
@@ -416,14 +430,24 @@ export class PaletteValidatorView {
                         bVal = parseFloat(match[10]);
                     }
                     
+                    // Prioridad 1: LocalStorage, Prioridad 2: Supabase, Prioridad 3: Archivo original
                     const locked = lockedColors.find(l => l.color_name === correctedName && l.nk === nk);
-                    const isLocked = locked ? true : false;
-                    const cmyk = locked && locked.modified_cmyk ? locked.modified_cmyk : {
+                    const localColor = localData ? localData.find(c => c.name === correctedName && c.nk === nk) : null;
+                    
+                    const isLocked = (localColor && localColor.isLocked) || (locked ? true : false);
+                    
+                    let cmyk = {
                         c: parseFloat(match[4]),
                         m: parseFloat(match[5]),
                         y: parseFloat(match[6]),
                         k: parseFloat(match[7])
                     };
+
+                    if (localColor) {
+                        cmyk = { ...localColor.cmyk };
+                    } else if (locked && locked.modified_cmyk) {
+                        cmyk = { ...locked.modified_cmyk };
+                    }
                     
                     loadedColors.push({
                         name: correctedName,
@@ -432,7 +456,7 @@ export class PaletteValidatorView {
                         isValid: isValid,
                         cmyk: cmyk,
                         lab: { l: lVal, a: aVal, b: bVal },
-                        channels: { tq: 0, o: 0, fy: 0, fp: 0 },
+                        channels: localColor ? { ...localColor.channels } : { tq: 0, o: 0, fy: 0, fp: 0 },
                         isLocked: isLocked
                     });
                     
@@ -728,7 +752,13 @@ export class PaletteValidatorView {
         // Guardar en BD
         await this.updateAssignmentProgress(this.currentAssignment.id, progress);
         
-        console.log(`✅ Progreso actualizado: ${lockedColors}/${totalColors} (${progress}%)`);
+        // Guardar en Local
+        this.saveLocalProgress();
+        
+        // ACTUALIZAR DASHBOARD EN TIEMPO REAL
+        if (this.app?.dashboardView) {
+            this.app.dashboardView.render().catch(err => console.error('Error actualizando dashboard:', err));
+        }
         
         if (progress === 100) {
             this.checkButtonsState();
@@ -771,7 +801,13 @@ export class PaletteValidatorView {
         // Guardar en BD
         await this.updateAssignmentProgress(this.currentAssignment.id, progress);
         
-        console.log(`✅ Progreso actualizado después de desbloquear: ${lockedColors}/${totalColors} (${progress}%)`);
+        // Guardar en Local
+        this.saveLocalProgress();
+        
+        // ACTUALIZAR DASHBOARD EN TIEMPO REAL
+        if (this.app?.dashboardView) {
+            this.app.dashboardView.render().catch(err => console.error('Error actualizando dashboard:', err));
+        }
         
         return true;
     }
@@ -819,6 +855,9 @@ export class PaletteValidatorView {
             
             await this.updateAssignmentProgress(this.currentAssignment.id, progress);
         }
+        
+        // Siempre guardar localmente tras una edición
+        this.saveLocalProgress();
     }
     
     addToHistory(colorId, action, reason) {
@@ -1115,6 +1154,7 @@ export class PaletteValidatorView {
                     this.currentAssignment.progreso = 100;
                 }
                 this.currentAssignment = null;
+                localStorage.removeItem('activeAssignmentId');
                 this.resetTable();
                 const existingInfo = document.getElementById('currentAssignmentInfo');
                 if (existingInfo) existingInfo.remove();
@@ -1127,6 +1167,71 @@ export class PaletteValidatorView {
         };
     }
     
+    saveLocalProgress() {
+        if (!this.currentAssignment || this.colors.length === 0) return;
+        const key = `palette_work_${this.currentAssignment.id}`;
+        localStorage.setItem(key, JSON.stringify(this.colors));
+    }
+
+    loadLocalProgress(assignmentId) {
+        const key = `palette_work_${assignmentId}`;
+        const data = localStorage.getItem(key);
+        try {
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    checkAndRecoverWork() {
+        const savedId = localStorage.getItem('activeAssignmentId');
+        if (!savedId) return;
+
+        const assignment = this.userAssignments.find(a => a.id === parseInt(savedId));
+        if (!assignment) {
+            localStorage.removeItem('activeAssignmentId');
+            return;
+        }
+
+        const container = document.querySelector('.palette-validator-container');
+        if (!container) return;
+
+        const recoverDiv = document.createElement('div');
+        recoverDiv.id = 'recoverWorkAlert';
+        recoverDiv.style.cssText = 'background: linear-gradient(90deg, #b45309, #78350f); color: white; padding: 1.2rem; border-radius: 12px; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid #f59e0b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);';
+        recoverDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div style="background: rgba(255,255,255,0.2); width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                    <i class="fas fa-history"></i>
+                </div>
+                <div>
+                    <strong style="display: block; font-size: 1.1rem; margin-bottom: 0.2rem;">¡Tienes un trabajo en curso!</strong>
+                    <span style="font-size: 0.85rem; opacity: 0.9;">Archivo: <strong>${assignment.txt_nombre || assignment.txt_id}</strong> · Progreso: ${assignment.progreso || 0}%</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.8rem;">
+                <button id="btnContinueWork" class="btn-primary" style="background: white !important; color: #b45309 !important; border: none; padding: 0.6rem 1.2rem; font-weight: bold; cursor: pointer; border-radius: 8px; font-size: 0.9rem;">
+                    CONTINUAR TRABAJO
+                </button>
+                <button id="btnDiscardWork" style="background: transparent; border: 1.5px solid rgba(255,255,255,0.5); color: white; padding: 0.4rem 0.8rem; border-radius: 8px; cursor: pointer; font-size: 0.8rem;">
+                    Cerrar
+                </button>
+            </div>
+        `;
+
+        container.insertBefore(recoverDiv, container.firstChild);
+
+        document.getElementById('btnContinueWork').onclick = () => {
+            recoverDiv.remove();
+            this.loadAssignmentContent(assignment);
+        };
+
+        document.getElementById('btnDiscardWork').onclick = () => {
+            recoverDiv.remove();
+            // No borramos de localStorage por si acaso solo quiere ocultar el aviso
+        };
+    }
+
     escapeHtml(str) {
         if (!str) return '';
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
