@@ -264,3 +264,68 @@ export function extractNKFromContent(content) {
     }
     return 'NK000001';
 }
+
+// ============================================
+// FUNCIONES PARA NOMBRES VALIDOS DE COLORES
+// ============================================
+
+const COLOR_NAMES_TABLE = 'valid_color_names';
+
+export async function getCustomValidColorNames() {
+    try {
+        const { data, error } = await supabase
+            .from(COLOR_NAMES_TABLE)
+            .select('name')
+            .order('name', { ascending: true });
+
+        if (error) {
+            console.warn('No se pudieron cargar nombres personalizados desde Supabase:', error.message);
+            return [];
+        }
+
+        return (data || [])
+            .map(item => (item?.name || '').trim().toUpperCase())
+            .filter(Boolean);
+    } catch (error) {
+        console.warn('Error en getCustomValidColorNames:', error.message);
+        return [];
+    }
+}
+
+export async function addCustomValidColorName(name, user = 'sistema') {
+    const normalized = (name || '').trim().toUpperCase();
+    if (!normalized) {
+        return { success: false, error: 'Nombre vacío' };
+    }
+
+    try {
+        const { data: existing, error: existingError } = await supabase
+            .from(COLOR_NAMES_TABLE)
+            .select('name')
+            .eq('name', normalized)
+            .maybeSingle();
+
+        if (existingError) {
+            console.error('Error verificando nombre existente:', existingError);
+            return { success: false, error: existingError.message };
+        }
+
+        if (existing) {
+            return { success: true, name: normalized, alreadyExists: true };
+        }
+
+        const { error } = await supabase
+            .from(COLOR_NAMES_TABLE)
+            .insert([{ name: normalized, created_by: user }]);
+
+        if (error) {
+            console.error('Error en addCustomValidColorName:', error);
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, name: normalized };
+    } catch (error) {
+        console.error('Error inesperado en addCustomValidColorName:', error);
+        return { success: false, error: error.message };
+    }
+}

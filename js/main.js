@@ -1,6 +1,6 @@
 // js/main.js
 import { Auth } from './core/auth.js';
-import { loadFile } from './modules/fileLoader.js';
+import { loadFile, parseTxtContent } from './modules/fileLoader.js';
 import { validateAndCorrectRecords } from './modules/nameValidator.js';
 import { compareFiles } from './modules/comparator.js';
 import { renderResults } from './modules/resultsRenderer.js';
@@ -15,6 +15,7 @@ import { HistoryView } from './views/historyView.js';
 import { AssignmentView } from './views/assignmentView.js';
 import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
+import { DashboardView } from './views/dashboardView.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -22,11 +23,14 @@ class AlphaColorMatch {
         
         this.primaryData = [];
         this.secondaryData = [];
+        this.primaryFileName = '';
+        this.secondaryFileName = '';
         this.results = [];
         this.selectedPending = new Set();
         this.deletedPending = new Set();
         this.groupSelections = new Map();
         this.manualGroupSelections = new Set();
+        this.inboxItems = [];
         
         // Vistas
         this.paletteValidatorView = null;
@@ -35,6 +39,7 @@ class AlphaColorMatch {
         this.assignmentView = null;
         this.adminView = null;
         this.reportsView = null;
+        this.dashboardView = null;
         
         this.init();
     }
@@ -50,6 +55,8 @@ class AlphaColorMatch {
         this.initViews();
         this.initMenuNavigation();
         this.bindEvents();
+        this.loadInbox();
+        this.updateInboxBell();
         
         window.selectGroup = (groupId, source) => this.selectGroup(groupId, source);
         window.togglePendingAdd = (itemId) => this.togglePendingAdd(itemId);
@@ -98,6 +105,8 @@ class AlphaColorMatch {
         if (displaySpan) {
             displaySpan.textContent = `👤 ${user.username}${user.isMaster ? ' (MASTER)' : ''}`;
         }
+
+        this.ensureInboxBell();
         
         const menuItems = document.querySelectorAll('.menu-item');
         menuItems.forEach(item => {
@@ -165,6 +174,7 @@ class AlphaColorMatch {
             }
             
             this.primaryData = result.records;
+            this.primaryFileName = fileName;
             this.updateFileInfo('primary', fileName, this.primaryData.length);
             this.renderDataList('primary', this.primaryData);
             this.saveCurrentState();
@@ -206,6 +216,7 @@ class AlphaColorMatch {
             }
             
             this.secondaryData = result.records;
+            this.secondaryFileName = fileName;
             this.updateFileInfo('secondary', fileName, this.secondaryData.length);
             this.renderDataList('secondary', this.secondaryData);
             this.saveCurrentState();
@@ -242,6 +253,7 @@ class AlphaColorMatch {
         
         this.results = compareFiles(this.primaryData, this.secondaryData);
         console.log('📊 Resultados:', this.results.length);
+        this.logComparisonSession();
         
         renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
         this.validateExportReady();
@@ -341,6 +353,8 @@ class AlphaColorMatch {
             clearAllCache();
             this.primaryData = [];
             this.secondaryData = [];
+            this.primaryFileName = '';
+            this.secondaryFileName = '';
             this.results = [];
             this.selectedPending.clear();
             this.deletedPending.clear();
@@ -404,6 +418,7 @@ class AlphaColorMatch {
         this.assignmentView = new AssignmentView(this);
         this.adminView = new AdminView(this, this.auth);
         this.reportsView = new ReportsView(this);
+        this.dashboardView = new DashboardView(this);
     }
     
     initMenuNavigation() {
@@ -415,6 +430,7 @@ class AlphaColorMatch {
             development: document.getElementById('developmentView'),
             assignment: document.getElementById('assignmentView'),
             reports: document.getElementById('reportsView'),
+            dashboard: document.getElementById('dashboardView'),
             admin: document.getElementById('adminView')
         };
         
@@ -446,10 +462,14 @@ class AlphaColorMatch {
                 this.reportsView.updateFilters();
                 this.reportsView.render();
             }
+            if (viewName === 'dashboard' && this.dashboardView) {
+                this.dashboardView.render();
+            }
             if (viewName === 'admin' && this.adminView) {
                 this.adminView.render();
             }
         };
+        this.switchView = switchView;
         
         menuItems.forEach(item => {
             item.addEventListener('click', () => {
@@ -461,6 +481,130 @@ class AlphaColorMatch {
         });
         
         switchView('comparator');
+    }
+
+    ensureInboxBell() {
+        const userInfo = document.querySelector('.header .user-info');
+        if (!userInfo) return;
+        if (document.getElementById('inboxBellBtn')) return;
+
+        const bellBtn = document.createElement('button');
+        bellBtn.id = 'inboxBellBtn';
+        bellBtn.className = 'logout-btn';
+        bellBtn.style.marginRight = '0.5rem';
+        bellBtn.innerHTML = '<i class="fas fa-bell"></i> Bandeja <span id="inboxBellCount" style="margin-left:0.25rem;">0</span>';
+        bellBtn.onclick = () => {
+            if (this.switchView) this.switchView('history');
+        };
+        userInfo.insertBefore(bellBtn, userInfo.firstChild);
+    }
+
+    loadInbox() {
+        try {
+            const raw = localStorage.getItem('alphaColorInbox');
+            this.inboxItems = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            this.inboxItems = [];
+        }
+    }
+
+    logComparisonSession() {
+        const unmatched = this.results.filter(item =>
+            item.matchType === 'pending_primary' || item.matchType === 'pending_secondary'
+        ).length;
+        const invalidCmyk = [...this.primaryData, ...this.secondaryData].filter(rec =>
+            !Array.isArray(rec.cmyk) || rec.cmyk.length < 4 || rec.cmyk.some(v => !Number.isFinite(v) || v < 0 || v > 100)
+        ).length;
+        const entry = {
+            id: `cmp_${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            user: this.auth.getCurrentUser()?.username || 'usuario',
+            primaryFile: this.primaryFileName || 'principal',
+            secondaryFile: this.secondaryFileName || 'secundario',
+            unmatched,
+            invalidCmyk
+        };
+        let logs = [];
+        try {
+            logs = JSON.parse(localStorage.getItem('comparisonReportLogs') || '[]');
+        } catch (e) {
+            logs = [];
+        }
+        logs.unshift(entry);
+        if (logs.length > 2000) logs = logs.slice(0, 2000);
+        localStorage.setItem('comparisonReportLogs', JSON.stringify(logs));
+    }
+
+    saveInbox() {
+        localStorage.setItem('alphaColorInbox', JSON.stringify(this.inboxItems));
+    }
+
+    getInboxItems() {
+        return [...this.inboxItems].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    updateInboxBell() {
+        const count = this.inboxItems.filter(item => !item.read).length;
+        const bellCount = document.getElementById('inboxBellCount');
+        if (bellCount) bellCount.textContent = String(count);
+        const menuHistory = document.querySelector('.menu-item[data-view="history"] span');
+        if (menuHistory) menuHistory.textContent = count > 0 ? `Bandeja (${count})` : 'Bandeja';
+    }
+
+    addToInbox(fileName, content, reason, plotter, colorCount, extra = {}) {
+        const currentUser = this.auth.getCurrentUser()?.username || 'usuario';
+        const item = {
+            id: `inbox_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            subject: fileName,
+            content,
+            reason,
+            plotter,
+            colorCount,
+            createdBy: currentUser,
+            createdAt: new Date().toISOString(),
+            read: false,
+            assignmentId: extra.assignmentId || null
+        };
+        this.inboxItems.unshift(item);
+        this.saveInbox();
+        this.updateInboxBell();
+        if (this.historyView?.render) this.historyView.render();
+        if (this.switchView) this.switchView('history');
+    }
+
+    markInboxAsRead(id, read = true) {
+        const item = this.inboxItems.find(x => x.id === id);
+        if (!item) return;
+        item.read = read;
+        this.saveInbox();
+        this.updateInboxBell();
+        if (this.historyView?.render) this.historyView.render();
+    }
+
+    loadInboxItemAsSecondary(id) {
+        const item = this.inboxItems.find(x => x.id === id);
+        if (!item) {
+            alert('❌ No se encontró el mensaje de bandeja.');
+            return false;
+        }
+        try {
+            const records = parseTxtContent(item.content);
+            if (!records.length) {
+                alert('⚠️ El mensaje no contiene colores válidos.');
+                return false;
+            }
+            this.secondaryData = records;
+            this.updateFileInfo('secondary', item.subject || 'Bandeja', records.length);
+            this.renderDataList('secondary', this.secondaryData);
+            this.saveCurrentState();
+            this.markInboxAsRead(id, true);
+            if (this.switchView) this.switchView('comparator');
+            alert(`✅ Cargado como secundario: ${records.length} colores.`);
+            return true;
+        } catch (error) {
+            alert(`❌ Error cargando secundario desde bandeja: ${error.message || error}`);
+            return false;
+        }
     }
 }
 

@@ -10,6 +10,7 @@ import {
 export class AssignmentView {
     constructor(app) {
         this.app = app;
+        this.assignments = [];
         this.init();
     }
     
@@ -17,6 +18,30 @@ export class AssignmentView {
         this.attachEvents();
         this.loadTxtList();
         this.loadUsersList();
+        this.loadAssignmentsFromSupabase();
+        
+        // Actualizar automáticamente cada 10 segundos
+        setInterval(() => {
+            this.loadAssignmentsFromSupabase();
+        }, 10000);
+    }
+    
+    async loadAssignmentsFromSupabase() {
+        try {
+            const { data, error } = await supabase
+                .from('assignments')
+                .select('*')
+                .order('fecha_asignacion', { ascending: false });
+            
+            if (error) throw error;
+            
+            this.assignments = data || [];
+            this.renderHistory();
+            
+        } catch (error) {
+            console.error('Error cargando asignaciones:', error);
+            this.assignments = [];
+        }
     }
     
     async loadUsersList() {
@@ -343,6 +368,7 @@ export class AssignmentView {
         
         alert(`✅ Trabajo asignado a "${assignedUser}" para el archivo "${txtName}"`);
         this.clearForm();
+        this.loadAssignmentsFromSupabase();
     }
     
     clearForm() {
@@ -355,10 +381,63 @@ export class AssignmentView {
         if (commentTextarea) commentTextarea.value = '';
     }
     
-    clearAllAssignments() {
+    async clearAllAssignments() {
         if (confirm('⚠️ ¿Estás seguro de que quieres eliminar TODAS las asignaciones? Esta acción no se puede deshacer.')) {
-            supabase.from('assignments').delete().neq('id', 0);
-            alert('✅ Todas las asignaciones han sido eliminadas.');
+            try {
+                const { error } = await supabase.from('assignments').delete().neq('id', 0);
+                if (error) throw error;
+                await this.loadAssignmentsFromSupabase();
+                alert('✅ Todas las asignaciones han sido eliminadas.');
+            } catch (error) {
+                console.error('Error eliminando asignaciones:', error);
+                alert(`❌ No se pudieron limpiar las asignaciones: ${error.message || error}`);
+            }
         }
+    }
+    
+    renderHistory() {
+        const container = document.getElementById('assignmentHistoryList');
+        if (!container) return;
+        
+        if (this.assignments.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <p>No hay asignaciones registradas</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = this.assignments.map(assignment => {
+            const progress = assignment.progreso || 0;
+            const statusClass = progress === 100 ? 'completed-badge' : '';
+            const statusText = progress === 100 ? '✅ Completado' : '⏳ En progreso';
+            
+            return `
+                <div class="assignment-item" data-id="${assignment.id}">
+                    <div class="assignment-item-header">
+                        <div>
+                            <span class="assignment-badge plotter">🖨️ Plotter ${assignment.plotter}</span>
+                            <span class="assignment-badge user">👤 ${assignment.usuario_asignado}</span>
+                        </div>
+                        <div class="assignment-date">${new Date(assignment.fecha_asignacion).toLocaleString()}</div>
+                    </div>
+                    <div class="assignment-details">
+                        <p><strong>📄 Archivo:</strong> <span class="assignment-filename">${assignment.txt_nombre || assignment.txt_id}</span></p>
+                        ${assignment.comentario ? `<p><strong>💬 Comentario:</strong> ${assignment.comentario}</p>` : ''}
+                    </div>
+                    <div class="assignment-progress">
+                        <div class="progress-container">
+                            <div class="progress-bar" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span>Progreso: ${progress}%</span>
+                            <span class="${statusClass}">${statusText}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
 }

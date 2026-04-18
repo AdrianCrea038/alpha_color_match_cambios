@@ -1,0 +1,255 @@
+.dashboard-neon-container {
+    padding: 1.5rem;
+    background-color: #0b0c10;
+    color: #fff;
+    min-height: 100%;
+    border-radius: 0.75rem;
+    font-family: 'Rubik', sans-serif;
+}
+
+.dashboard-neon-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 1rem;
+}
+
+.dashboard-neon-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    background: linear-gradient(90deg, #ff007f, #7f00ff, #00e5ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.dashboard-neon-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dashboard-neon-controls span {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.dashboard-neon-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #e2e8f0;
+    transition: color 0.3s;
+}
+
+.dashboard-neon-controls label:hover {
+    color: #fff;
+}
+
+.dashboard-neon-controls input[type="checkbox"] {
+    accent-color: #ff007f;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.dashboard-neon-section {
+    margin-bottom: 2rem;
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.neon-title {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: relative;
+    padding-left: 1rem;
+}
+
+.neon-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 4px;
+}
+
+.neon-title.pink::before { background: #ff007f; box-shadow: 0 0 10px #ff007f; }
+.neon-title.blue::before { background: #00e5ff; box-shadow: 0 0 10px #00e5ff; }
+.neon-title.orange::before { background: #ff8c00; box-shadow: 0 0 10px #ff8c00; }
+
+.neon-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.neon-card {
+    background: linear-gradient(145deg, rgba(30,30,42,0.8), rgba(20,20,30,0.9));
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.neon-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+}
+
+.circular-progress {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1rem;
+    background: conic-gradient(var(--progress-color) calc(var(--progress) * 1%), rgba(255,255,255,0.05) 0);
+    box-shadow: 0 0 15px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,0,0,0.5);
+}
+
+.circular-progress::before {
+    content: '';
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    background-color: #1a1a24;
+    border-radius: 50%;
+}
+
+.circular-progress-value {
+    position: relative;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 10px var(--progress-color);
+}
+
+.circular-progress-text {
+    position: absolute;
+    bottom: 25px;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    color: #9ca3af;
+    letter-spacing: 1px;
+}
+
+.neon-card-info {
+    text-align: center;
+    width: 100%;
+}
+
+.neon-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin: 0 0 0.5rem 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.neon-card-subtitle {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin: 0;
+}
+
+.neon-card-subtitle i {
+    margin-right: 0.25rem;
+}
+
+.neon-charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.neon-chart-card {
+    background: linear-gradient(145deg, rgba(30,30,42,0.8), rgba(20,20,30,0.9));
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Stat Cards (For Period Summary) */
+.neon-stat-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.neon-stat-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.neon-stat-label {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    color: #9ca3af;
+    letter-spacing: 1.5px;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.neon-stat-value {
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.neon-stat-subvalue {
+    font-size: 1.1rem;
+    color: var(--stat-color);
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+.neon-stat-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 2.5rem;
+    color: var(--stat-color);
+    background: rgba(255,255,255,0.05);
+    box-shadow: 0 0 20px var(--stat-color-glow);
+}
+
+@media (max-width: 1024px) {
+    .neon-charts-grid { grid-template-columns: 1fr; }
+    .dashboard-neon-header { flex-direction: column; gap: 1rem; align-items: flex-start; }
+    .dashboard-neon-controls { width: 100%; flex-wrap: wrap; }
+}

@@ -1,11 +1,14 @@
 // js/modules/nameValidator.js
 import { ALL_VALID_COLOR_NAMES } from '../core/constants.js';
 import { normalizeSpaces, escapeHtml } from '../core/utils.js';
+import { addCustomValidColorName, getCustomValidColorNames } from '../core/supabaseClient.js';
 
 console.log('📋 Todos los nombres válidos cargados:', ALL_VALID_COLOR_NAMES.length);
 
 // Variable global para acceder a los datos desde nameValidator
 let appInstance = null;
+let validColorNamesLoaded = false;
+const validColorNamesSet = new Set(ALL_VALID_COLOR_NAMES.map(name => normalizeSpaces(name).toUpperCase()));
 
 export function setAppInstance(app) {
     appInstance = app;
@@ -13,7 +16,25 @@ export function setAppInstance(app) {
 
 export function isValidColorName(baseName) {
     const normalized = normalizeSpaces(baseName).toUpperCase();
-    return ALL_VALID_COLOR_NAMES.includes(normalized);
+    return validColorNamesSet.has(normalized);
+}
+
+function addNameToLocalCatalog(name) {
+    const normalized = normalizeSpaces(name || '').toUpperCase();
+    if (!normalized || validColorNamesSet.has(normalized)) return;
+    validColorNamesSet.add(normalized);
+    ALL_VALID_COLOR_NAMES.push(normalized);
+    ALL_VALID_COLOR_NAMES.sort((a, b) => a.localeCompare(b));
+}
+
+async function ensureValidColorCatalogLoaded() {
+    if (validColorNamesLoaded) return;
+    validColorNamesLoaded = true;
+
+    const customNames = await getCustomValidColorNames();
+    for (const name of customNames) {
+        addNameToLocalCatalog(name);
+    }
 }
 
 function findAndCorrectInOtherArray(originalName, newBaseName, newFullName, currentFileType) {
@@ -76,13 +97,29 @@ function showCorrectionModal(colorData, index, totalInvalid, onApply) {
             }
             
             const filterLower = filterText.toLowerCase();
-            const matches = ALL_VALID_COLOR_NAMES.filter(name => 
+            const matches = ALL_VALID_COLOR_NAMES.filter(name =>
                 name.toLowerCase().includes(filterLower)
             ).slice(0, 15);
             
             if (matches.length === 0) {
-                suggestionsList.innerHTML = `<div style="padding: 0.5rem; color: #f87171; text-align: center;">No se encontraron coincidencias</div>`;
+                const escapedInput = escapeHtml(filterText.trim().toUpperCase());
+                suggestionsList.innerHTML = `
+                    <div style="padding: 0.5rem; color: #f87171; text-align: center;">No se encontraron coincidencias</div>
+                    <div class="suggestion-item add-new-name" data-value="${escapedInput}" style="padding: 0.6rem 0.8rem; cursor: pointer; border-top: 1px solid #2d3748; color: #4ade80;">
+                        ➕ Agregar "${escapedInput}" como nuevo nombre válido
+                    </div>
+                `;
                 suggestionsList.style.display = 'block';
+                const addButton = suggestionsList.querySelector('.add-new-name');
+                if (addButton) {
+                    addButton.onclick = () => {
+                        selectedValue = addButton.dataset.value;
+                        const searchInput = modal.querySelector('#searchInput');
+                        searchInput.value = selectedValue;
+                        suggestionsList.style.display = 'none';
+                        validateForm();
+                    };
+                }
                 return;
             }
             
@@ -204,22 +241,53 @@ function showCorrectionModal(colorData, index, totalInvalid, onApply) {
             }
         });
         
-        applyBtn.onclick = () => {
-            let finalName = selectedValue || searchInput.value.trim();
+        applyBtn.onclick = async () => {
+            const originalApplyText = applyBtn.innerHTML;
+            applyBtn.disabled = true;
+            applyBtn.innerHTML = '⏳ Guardando...';
+
+            let finalName = normalizeSpaces(selectedValue || searchInput.value.trim()).toUpperCase();
             if (!finalName) {
                 alert('⚠️ Debe seleccionar un nombre válido.');
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = originalApplyText;
                 return;
             }
             
-            const exactMatch = ALL_VALID_COLOR_NAMES.find(n => n.toLowerCase() === finalName.toLowerCase());
+            let exactMatch = ALL_VALID_COLOR_NAMES.find(n => n.toUpperCase() === finalName.toUpperCase());
             if (!exactMatch) {
-                alert('⚠️ El nombre ingresado no es válido. Seleccione una de las sugerencias.');
-                return;
+                const shouldCreate = confirm(`⚠️ "${finalName}" no está en la lista.\n\n¿Desea agregarlo como nuevo nombre válido?`);
+                if (!shouldCreate) {
+                    applyBtn.disabled = false;
+                    applyBtn.innerHTML = originalApplyText;
+                    return;
+                }
+
+                const currentUser = appInstance?.auth?.getCurrentUser?.()?.username || 'usuario';
+                const saveResult = await addCustomValidColorName(finalName, currentUser);
+                if (!saveResult.success) {
+                    const continueLocal = confirm(`⚠️ No se pudo guardar en Supabase: ${saveResult.error}\n\n¿Desea usar "${finalName}" solo localmente por ahora?`);
+                    if (!continueLocal) {
+                        applyBtn.disabled = false;
+                        applyBtn.innerHTML = originalApplyText;
+                        return;
+                    }
+                }
+
+                addNameToLocalCatalog(finalName);
+                exactMatch = finalName;
+                if (saveResult.success) {
+                    alert(`✅ "${finalName}" se agregó a la lista de nombres válidos.`);
+                } else {
+                    alert(`⚠️ "${finalName}" se aplicará en esta sesión, pero no se guardó en Supabase.`);
+                }
             }
             
             const reason = reasonInput.value.trim();
             if (!reason) {
                 alert('⚠️ Debe ingresar un motivo.');
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = originalApplyText;
                 return;
             }
             
@@ -231,6 +299,8 @@ function showCorrectionModal(colorData, index, totalInvalid, onApply) {
 }
 
 export async function validateAndCorrectRecords(records, fileType, onCorrectionApplied) {
+    await ensureValidColorCatalogLoaded();
+
     const correctedRecords = [...records];
     const correctionsNeeded = [];
     

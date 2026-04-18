@@ -29,7 +29,6 @@ export function parseTxtContent(content) {
                     aVal = parseFloat(match[9]); if (isNaN(aVal)) aVal = 0;
                     bVal = parseFloat(match[10]); if (isNaN(bVal)) bVal = 0;
                 }
-                
                 records.push({
                     tempId: tempId,
                     id: match[1],
@@ -47,8 +46,27 @@ export function parseTxtContent(content) {
     // Normalizar CMYK
     const { records: normalizedRecords, warnings } = normalizeRecordsCmyk(records);
     if (warnings.length > 0) console.warn('Advertencias de normalización CMYK:', warnings.length);
-    
-    return normalizedRecords;
+
+    // Eliminar duplicados exactos para evitar líneas repetidas en comparación/exportación.
+    const uniqueRecords = [];
+    const seen = new Set();
+    for (const record of normalizedRecords) {
+        const cmykKey = (record.cmyk || []).map(v => Number(v).toFixed(6)).join('|');
+        const labKey = (record.lab || []).map(v => Number(v).toFixed(6)).join('|');
+        const signature = [
+            normalizeSpaces(record.name || '').toUpperCase(),
+            normalizeSpaces(record.baseName || '').toUpperCase(),
+            (record.nk || '').toUpperCase(),
+            cmykKey,
+            labKey
+        ].join('||');
+
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+        uniqueRecords.push(record);
+    }
+
+    return uniqueRecords;
 }
 
 export function loadFile(file) {
