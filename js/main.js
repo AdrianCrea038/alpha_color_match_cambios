@@ -68,13 +68,7 @@ class AlphaColorMatch {
         // ACTIVAR BACKUP PROGRAMADO (5:40 PM)
         this.initScheduledBackup();
         
-        // Recuperar la última vista visitada
-        const savedView = localStorage.getItem('currentView') || 'dashboard';
-        this.showView(savedView);
-        
-        // Configurar sincronización en tiempo real
-        this.setupRealtimeSync();
-        
+
         window.selectGroup = (groupId, source) => this.selectGroup(groupId, source);
         window.togglePendingAdd = (itemId) => this.togglePendingAdd(itemId);
         window.togglePendingDelete = (itemId) => this.togglePendingDelete(itemId);
