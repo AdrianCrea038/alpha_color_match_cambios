@@ -643,11 +643,10 @@ class AlphaColorMatch {
                 })
                 .subscribe();
 
-            // FALLBACK: Refresco automático cada 30 segundos (Heartbeat)
+            // FALLBACK: Refresco automático cada 5 segundos (Súper rápido)
             setInterval(() => {
-                console.log('💓 Latido: Refrescando dashboard automáticamente...');
                 this.refreshDashboard('heartbeat');
-            }, 30000);
+            }, 5000);
             
         } catch (e) {
             console.error('Error en setupRealtimeSync:', e);
