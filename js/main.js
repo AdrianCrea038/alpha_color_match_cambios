@@ -56,8 +56,7 @@ class AlphaColorMatch {
         this.initViews();
         this.initMenuNavigation();
         this.bindEvents();
-        this.loadInbox();
-        this.updateInboxBell();
+        await this.loadInbox();
         
         // RECUPERAR VISTA GUARDADA
         const lastView = localStorage.getItem('currentView') || 'dashboard';
@@ -65,6 +64,9 @@ class AlphaColorMatch {
         
         // ACTIVAR SINCRONIZACIÓN EN TIEMPO REAL
         this.setupRealtimeSync();
+
+        // ACTIVAR BACKUP PROGRAMADO (5:40 PM)
+        this.initScheduledBackup();
         
         // Recuperar la última vista visitada
         const savedView = localStorage.getItem('currentView') || 'dashboard';
@@ -515,13 +517,23 @@ class AlphaColorMatch {
         userInfo.insertBefore(bellBtn, userInfo.firstChild);
     }
 
-    loadInbox() {
+    async loadInbox() {
         try {
+            console.log('📡 Cargando bandeja desde base de datos...');
+            const { data, error } = await supabase
+                .from('inbox')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            this.inboxItems = data || [];
+            console.log(`📥 ${this.inboxItems.length} mensajes cargados de la base de datos.`);
+        } catch (e) {
+            console.warn('⚠️ Error al cargar desde DB, usando respaldo local:', e);
             const raw = localStorage.getItem('alphaColorInbox');
             this.inboxItems = raw ? JSON.parse(raw) : [];
-        } catch (e) {
-            this.inboxItems = [];
         }
+        this.updateInboxBell();
     }
 
     logComparisonSession() {
@@ -551,7 +563,9 @@ class AlphaColorMatch {
         localStorage.setItem('comparisonReportLogs', JSON.stringify(logs));
     }
 
-    saveInbox() {
+    async saveInbox() {
+        // En el nuevo sistema, el guardado es individual por mensaje en addToInbox
+        // pero mantenemos esto para guardar la caché local como respaldo
         localStorage.setItem('alphaColorInbox', JSON.stringify(this.inboxItems));
     }
 
@@ -560,40 +574,67 @@ class AlphaColorMatch {
     }
 
     updateInboxBell() {
-        const count = this.inboxItems.filter(item => !item.read).length;
+        const count = this.inboxItems.filter(item => !item.is_read && !item.read).length;
         const bellCount = document.getElementById('inboxBellCount');
         if (bellCount) bellCount.textContent = String(count);
         const menuHistory = document.querySelector('.menu-item[data-view="history"] span');
         if (menuHistory) menuHistory.textContent = count > 0 ? `Bandeja (${count})` : 'Bandeja';
     }
 
-    addToInbox(fileName, content, reason, plotter, colorCount, extra = {}) {
+    async addToInbox(fileName, content, reason, plotter, colorCount, extra = {}) {
         const currentUser = this.auth.getCurrentUser()?.username || 'usuario';
         const item = {
-            id: `inbox_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             subject: fileName,
             content,
             reason,
             plotter,
-            colorCount,
-            createdBy: currentUser,
-            createdAt: new Date().toISOString(),
-            read: false,
-            assignmentId: extra.assignmentId || null
+            color_count: colorCount,
+            created_by: currentUser,
+            created_at: new Date().toISOString(),
+            is_read: false,
+            assignment_id: extra.assignmentId || null
         };
-        this.inboxItems.unshift(item);
-        this.saveInbox();
-        this.updateInboxBell();
+
+        try {
+            // Intentar guardar en base de datos
+            const { error } = await supabase.from('inbox').insert(item);
+            if (error) throw error;
+            console.log('✅ Mensaje guardado en base de datos.');
+        } catch (e) {
+            console.error('❌ Error guardando en base de datos, guardando localmente:', e);
+            // Fallback local
+            item.id = `inbox_${Date.now()}`;
+            this.inboxItems.unshift(item);
+            this.saveInbox();
+        }
+
+        // Recargar para ver el cambio
+        await this.loadInbox();
+        
         if (this.historyView?.render) this.historyView.render();
         if (this.switchView) this.switchView('history');
     }
 
-    markInboxAsRead(id, read = true) {
-        const item = this.inboxItems.find(x => x.id === id);
-        if (!item) return;
-        item.read = read;
-        this.saveInbox();
-        this.updateInboxBell();
+    async markInboxAsRead(id, read = true) {
+        try {
+            // Si el ID es un UUID (base de datos)
+            if (typeof id === 'string' && id.includes('-')) {
+                const { error } = await supabase
+                    .from('inbox')
+                    .update({ is_read: read })
+                    .eq('id', id);
+                if (error) throw error;
+            } else {
+                // Si es un ID local
+                const item = this.inboxItems.find(x => x.id === id);
+                if (item) item.read = read;
+                this.saveInbox();
+            }
+        } catch (e) {
+            console.error('Error al marcar como leído:', e);
+        }
+        
+        await this.loadInbox();
         if (this.historyView?.render) this.historyView.render();
     }
 
@@ -643,13 +684,70 @@ class AlphaColorMatch {
                 })
                 .subscribe();
 
-            // FALLBACK: Refresco automático cada 5 segundos (Súper rápido)
+            // RECARGA INTELIGENTE: Eliminamos el heartbeat de 5s y lo dejamos solo como respaldo cada 2 minutos
             setInterval(() => {
                 this.refreshDashboard('heartbeat');
-            }, 5000);
+            }, 120000);
             
         } catch (e) {
             console.error('Error en setupRealtimeSync:', e);
+        }
+    }
+
+    initScheduledBackup() {
+        console.log('⏰ Programador de backup activado (5:40 PM)');
+        setInterval(() => {
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            
+            // Si son las 5:40 PM (17:40) y el usuario tiene permiso de backup
+            if (hours === 17 && minutes === 40) {
+                const alreadyDoneToday = localStorage.getItem('lastBackupDate') === now.toDateString();
+                if (!alreadyDoneToday && this.auth.hasPermission('backup')) {
+                    this.triggerBackup();
+                }
+            }
+        }, 60000); // Revisar cada minuto
+    }
+
+    async triggerBackup() {
+        try {
+            console.log('📦 Iniciando backup automático de seguridad...');
+            const tables = [
+                'usuarios', 
+                'assignments', 
+                'validation_progress', 
+                'library_txt', 
+                'valid_color_names',
+                'inbox',
+                'equivalency_groups'
+            ];
+            const backupData = {
+                timestamp: new Date().toISOString(),
+                version: '1.1',
+                data: {}
+            };
+
+            for (const table of tables) {
+                const { data } = await supabase.from(table).select('*');
+                backupData.data[table] = data || [];
+            }
+
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `AlphaColor_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            localStorage.setItem('lastBackupDate', new Date().toDateString());
+            showNotification('✅ Backup automático completado con éxito', 'success');
+        } catch (e) {
+            console.error('Error en backup:', e);
         }
     }
 

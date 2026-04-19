@@ -29,19 +29,23 @@ export class HistoryView {
         listContainer.innerHTML = `
             <div class="mail-layout">
                 <div class="mail-list">
-                    ${items.map(item => `
-                        <button class="mail-item ${item.id === selected.id ? 'active' : ''} ${item.read ? '' : 'unread'}" data-id="${item.id}">
-                            <div class="mail-item-top">
-                                <span class="mail-subject">${this.escapeHtml(item.subject || 'Sin asunto')}</span>
-                                <span class="mail-date">${new Date(item.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <div class="mail-meta">
-                                <span>🖨️ Plotter ${item.plotter || '-'}</span>
-                                <span>🎨 ${item.colorCount || 0} colores</span>
-                                ${item.read ? '' : '<span class="mail-unread-dot">● No leído</span>'}
-                            </div>
-                        </button>
-                    `).join('')}
+                    ${items.map(item => {
+                        const isRead = item.is_read || item.read;
+                        const date = item.created_at || item.createdAt;
+                        return `
+                            <button class="mail-item ${item.id === selected.id ? 'active' : ''} ${isRead ? '' : 'unread'}" data-id="${item.id}">
+                                <div class="mail-item-top">
+                                    <span class="mail-subject">${this.escapeHtml(item.subject || 'Sin asunto')}</span>
+                                    <span class="mail-date">${new Date(date).toLocaleDateString()}</span>
+                                </div>
+                                <div class="mail-meta">
+                                    <span>🖨️ Plotter ${item.plotter || '-'}</span>
+                                    <span>🎨 ${item.color_count || item.colorCount || 0} colores</span>
+                                    ${isRead ? '' : '<span class="mail-unread-dot">● No leído</span>'}
+                                </div>
+                            </button>
+                        `;
+                    }).join('')}
                 </div>
                 <div class="mail-preview">
                     <div class="mail-preview-header">
@@ -52,8 +56,8 @@ export class HistoryView {
                         </div>
                     </div>
                     <div class="mail-preview-meta">
-                        <span>📅 ${new Date(selected.createdAt).toLocaleString()}</span>
-                        <span>👤 ${this.escapeHtml(selected.createdBy || 'usuario')}</span>
+                        <span>📅 ${new Date(selected.created_at || selected.createdAt).toLocaleString()}</span>
+                        <span>👤 ${this.escapeHtml(selected.created_by || selected.createdBy || 'usuario')}</span>
                         <span>🖨️ Plotter ${selected.plotter || '-'}</span>
                     </div>
                     <div class="mail-reason"><strong>Motivo:</strong> ${this.escapeHtml(selected.reason || 'Sin motivo')}</div>
@@ -62,7 +66,7 @@ export class HistoryView {
             </div>
         `;
 
-        if (!selected.read) {
+        if (!(selected.is_read || selected.read)) {
             this.app.markInboxAsRead(selected.id, true);
         }
 

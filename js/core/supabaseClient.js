@@ -329,3 +329,32 @@ export async function addCustomValidColorName(name, user = 'sistema') {
         return { success: false, error: error.message };
     }
 }
+
+export async function getAllMasterNks() {
+    try {
+        const { data, error } = await supabase
+            .from('master_nks')
+            .select('nk_code')
+            .order('nk_code', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(item => item.nk_code);
+    } catch (error) {
+        console.warn('Error cargando master_nks:', error.message);
+        return [];
+    }
+}
+
+export async function addMasterNk(nkCode, user = 'sistema') {
+    const code = (nkCode || '').trim().toUpperCase();
+    if (!code) return { success: false, error: 'Código vacío' };
+    try {
+        const { error } = await supabase
+            .from('master_nks')
+            .upsert([{ nk_code: code, created_by: user }], { onConflict: 'nk_code' });
+        if (error) throw error;
+        return { success: true, code };
+    } catch (error) {
+        console.error('Error en addMasterNk:', error);
+        return { success: false, error: error.message };
+    }
+}

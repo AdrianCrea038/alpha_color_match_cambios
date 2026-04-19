@@ -1,0 +1,74 @@
+================================================================================
+          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V2.1)
+================================================================================
+
+Este documento describe la arquitectura, lógica y flujo de datos del sistema
+Alpha Color Match 2 para referencia técnica y futuras modificaciones.
+
+1. PROPÓSITO DEL SISTEMA
+------------------------
+Alpha Color Match 2 es una suite profesional para la gestión de desarrollo de
+colores, validación de archivos .txt maestros (NK) y monitoreo de producción
+en planta a través de un Dashboard Ejecutivo de alto rendimiento.
+
+2. ARQUITECTURA TÉCNICA
+-----------------------
+- Frontend: HTML5, CSS3 (Efectos Neón/RGB) y JavaScript Vanilla.
+- Backend/Base de Datos: Supabase (PostgreSQL) con sincronización Real-Time.
+- Gráficos: Chart.js 4.4.3 con optimización de actualización incremental.
+- Persistencia: Sistema híbrido entre Supabase y LocalStorage (Caché).
+
+3. MÓDULOS PRINCIPALES
+
+   A. DASHBOARD EJECUTIVO (AVANCE DE PALETAS)
+      - Vista centralizada de KPIs: Coincidencias, errores CMYK, metas diarias.
+      - Gráficos: 
+        1. Resumen de Período (Dona): Participación por usuario.
+        2. Comparativa (Barras): Rendimiento individual por día/semana/mes.
+      - Modo Proyección: Interfaz minimalista diseñada para monitores de planta,
+        ocultando menús y filtros para enfoque total en el avance operativo.
+      - Optimización Anti-Flicker: Implementa detección de cambios por "Hash".
+        Si los datos no han cambiado en Supabase, la interfaz NO se recarga.
+
+   B. BANDEJA DE ENTRADA (INBOX)
+      - Almacenamiento: Tabla 'inbox' en Supabase.
+      - Funcionalidad: Los usuarios envían resultados de validación a otros
+        departamentos. Los mensajes incluyen el contenido completo del .txt.
+      - Persistencia: Protegida contra limpieza de caché. Respaldo local activo.
+
+   C. COMPARADOR Y VALIDADOR DE NOMBRES
+      - Motor de Comparación: Identifica coincidencias Exactas, Equivalentes
+        y Pendientes entre archivos Principales y Secundarios.
+      - Grupos de Equivalencia: Gestionados en la tabla 'equivalency_groups'.
+        Permite que nombres como "NEON GREEN" y "GREEN NEON" sean equivalentes.
+      - Smart Modal: Permite corregir nombres mal escritos al momento de cargar.
+
+   D. DESARROLLO (DEVELOPMENT)
+      - Permite agregar nuevos colores a la base de datos maestra.
+      - Integración con NKs: Sugiere códigos NK existentes de la 'library_txt'.
+
+4. SISTEMA DE SEGURIDAD Y BACKUP
+--------------------------------
+- Backup Automático: Ejecuta una descarga completa de la base de datos cada
+  día a las 5:40 PM (17:40 hrs).
+- Tablas Incluidas: usuarios, assignments, validation_progress, library_txt,
+  valid_color_names, inbox, equivalency_groups.
+- Versión de Datos: 1.1 (JSON format).
+
+5. CONFIGURACIÓN VISUAL (AESTHETICS)
+------------------------------------
+- Tema: Dark Mode con acentos en Electric Neon Green (#00ff88).
+- Botones: Implementan feedback táctil (scale 0.95) y glows RGB.
+
+6. REGLAS PARA FUTUROS CAMBIOS
+------------------------------
+1. Siempre usar .update() en Chart.js en lugar de destruir los gráficos.
+2. No usar innerHTML para actualizaciones frecuentes; preferir textContent
+   o comparadores de nodos para evitar parpadeos visuales.
+3. Al modificar la lógica de la bandeja, asegurar compatibilidad con los
+   campos 'is_read' y 'created_at' de la base de datos.
+
+================================================================================
+Desarrollado por: Antigravity (Google Deepmind - Advanced Agentic Coding)
+Fecha de entrega: 19 de Abril, 2026
+================================================================================

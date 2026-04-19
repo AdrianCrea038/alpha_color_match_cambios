@@ -37,6 +37,7 @@ export class AssignmentView {
             
             this.assignments = data || [];
             this.renderHistory();
+            this.renderAlerts();
             
         } catch (error) {
             console.error('Error cargando asignaciones:', error);
@@ -345,6 +346,8 @@ export class AssignmentView {
             return;
         }
         
+        const validityDays = document.getElementById('assignmentValidityDays')?.value || 30;
+
         const { data, error } = await supabase
             .from('assignments')
             .insert({
@@ -356,6 +359,7 @@ export class AssignmentView {
                 progreso: 0,
                 estado: 'pendiente',
                 contenido: contenido,
+                validez_dias: parseInt(validityDays),
                 fecha_asignacion: new Date().toISOString()
             })
             .select();
@@ -436,6 +440,56 @@ export class AssignmentView {
                             <span class="${statusClass}">${statusText}</span>
                         </div>
                     </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderAlerts() {
+        const container = document.getElementById('assignmentAlertsList');
+        if (!container) return;
+
+        // Filtrar solo las que están al 100% y tienen validez definida
+        const completed = this.assignments.filter(a => (a.progreso === 100 || a.estado === 'completado') && a.validez_dias > 0);
+        
+        const expired = completed.filter(a => {
+            const fechaFin = new Date(a.fecha_asignacion); 
+            const diasPasados = Math.floor((new Date() - fechaFin) / (1000 * 60 * 60 * 24));
+            return diasPasados >= a.validez_dias;
+        });
+
+        if (expired.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">✅</div>
+                    <p>No hay alertas de re-validación pendientes</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = expired.map(a => {
+            const fechaFin = new Date(a.fecha_asignacion);
+            const vencimiento = new Date(fechaFin);
+            vencimiento.setDate(vencimiento.getDate() + a.validez_dias);
+            const diasVencido = Math.floor((new Date() - vencimiento) / (1000 * 60 * 60 * 24));
+
+            return `
+                <div class="assignment-item" style="border-left: 4px solid #f87171; background: rgba(248, 113, 113, 0.05); margin-bottom: 1rem;">
+                    <div class="assignment-item-header">
+                        <div>
+                            <span class="assignment-badge" style="background: #ef4444; color: white;">⚠️ VENCIDO</span>
+                            <span class="assignment-badge plotter">🖨️ Plotter ${a.plotter}</span>
+                        </div>
+                        <div style="color: #f87171; font-weight: bold; font-size: 0.8rem;">Vencido hace ${diasVencido} días</div>
+                    </div>
+                    <div class="assignment-details">
+                        <p><strong>📄 Archivo:</strong> <span class="assignment-filename">${a.txt_nombre || a.txt_id}</span></p>
+                        <p style="font-size: 0.8rem; color: #9ca3af;">Última validación: ${fechaFin.toLocaleDateString()} | Expiró: ${vencimiento.toLocaleDateString()}</p>
+                    </div>
+                    <button class="btn-primary" style="margin-top: 1rem; width: 100%; background: #374151; border: 1px solid #4b5563;" onclick="alert('Funcionalidad: Crear nueva asignación de re-validación')">
+                        <i class="fas fa-sync-alt"></i> RE-ASIGNAR PARA VALIDACIÓN
+                    </button>
                 </div>
             `;
         }).join('');

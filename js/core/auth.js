@@ -8,6 +8,8 @@ export const PERMISSIONS = {
     DEVELOPMENT: 'development',
     ASSIGNMENT: 'assignment',
     REPORTS: 'reports',
+    DASHBOARD: 'dashboard',
+    BACKUP: 'backup',
     ADMIN: 'admin'
 };
 

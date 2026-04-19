@@ -146,8 +146,20 @@ function showCorrectionModal(colorData, index, totalInvalid) {
                     </div>
                 </div>
                 <div class="modal-buttons" style="display: flex; gap: 1rem; justify-content: flex-end; padding: 1.5rem; background: rgba(0,0,0,0.2); border-top: 1px solid #2d3748;">
-                    <button class="btn-secondary cancel-correction" style="padding: 0.8rem 1.5rem; cursor:pointer;">Cancelar</button>
-                    <button class="btn-primary apply-correction" style="padding: 0.8rem 2rem; background:#ff007f !important; cursor:pointer;" disabled>✅ Aplicar Corrección</button>
+                    <button class="btn-secondary cancel-correction" style="padding: 0.8rem 1.5rem; cursor:pointer; border-radius: 0.5rem; border: 1px solid #4b5563; background: transparent; color: white;">Cancelar</button>
+                    <button class="btn-primary apply-correction" style="padding: 0.8rem 2rem; background:#ff007f !important; cursor:pointer; border: none; border-radius: 0.5rem; color: white; font-weight: bold; transition: all 0.2s ease;" disabled>
+                        <i class="fas fa-check" style="color: white; margin-right: 0.5rem;"></i> APLICAR CORRECCIÓN
+                    </button>
+                    <style>
+                        .apply-correction:active {
+                            transform: scale(0.95);
+                            background: #d4006a !important;
+                            box-shadow: 0 0 15px rgba(255, 0, 127, 0.5);
+                        }
+                        .apply-correction:not(:disabled):hover {
+                            background: #ff3399 !important;
+                        }
+                    </style>
                 </div>
             </div>
         `;

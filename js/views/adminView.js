@@ -46,6 +46,8 @@ export class AdminView {
                 development: 'Desarrollo',
                 assignment: 'Asignación',
                 reports: 'Reportes',
+                dashboard: 'Dashboard',
+                backup: 'Backup Automático',
                 admin: 'Admin'
             };
             
@@ -140,10 +142,9 @@ export class AdminView {
                     <div class="form-group">
                         <label>🔒 Contraseña:</label>
                         <div class="password-group">
-                            <input type="password" id="modalPassword" value="${userToEdit ? '********' : ''}" placeholder="${isEditing ? 'Dejar vacío para mantener' : 'Ingrese contraseña'}">
-                            <i class="fas fa-eye-slash toggle-password"></i>
+                            <input type="text" id="modalPassword" value="${userToEdit ? userToEdit.password : ''}" placeholder="Ingrese contraseña">
                         </div>
-                        <small>${isEditing ? 'Dejar vacío para mantener la misma contraseña' : 'Mínimo 6 caracteres'}</small>
+                        <small>${isEditing ? 'Puedes ver y editar la contraseña actual aquí' : 'Mínimo 6 caracteres'}</small>
                     </div>
                     ${!isEditingMaster ? `
                     <div class="permissions-group">
@@ -155,6 +156,8 @@ export class AdminView {
                             <label><input type="checkbox" value="development" ${userToEdit?.permissions?.includes('development') ? 'checked' : ''}> Desarrollo</label>
                             <label><input type="checkbox" value="assignment" ${userToEdit?.permissions?.includes('assignment') ? 'checked' : ''}> Asignación</label>
                             <label><input type="checkbox" value="reports" ${userToEdit?.permissions?.includes('reports') ? 'checked' : ''}> Reportes</label>
+                            <label><input type="checkbox" value="dashboard" ${userToEdit?.permissions?.includes('dashboard') ? 'checked' : ''}> Dashboard</label>
+                            <label><input type="checkbox" value="backup" ${userToEdit?.permissions?.includes('backup') ? 'checked' : ''}> Backup Automático</label>
                             <label><input type="checkbox" value="admin" ${userToEdit?.permissions?.includes('admin') ? 'checked' : ''}> Admin</label>
                         </div>
                     </div>
@@ -223,7 +226,8 @@ export class AdminView {
                 return;
             }
             
-            if (isEditing && password === '********') {
+            if (isEditing && !password) {
+                // Si está vacío en edición, no enviamos password para no sobreescribir
                 password = null;
             }
             

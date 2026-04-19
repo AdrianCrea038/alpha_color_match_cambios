@@ -88,7 +88,8 @@
     border-radius: 4px;
 }
 
-.neon-title.pink::before { background: #ff007f; box-shadow: 0 0 10px #ff007f; }
+.neon-title.pink::before { background: #00ff88; box-shadow: 0 0 15px #00ff88, 0 0 30px rgba(0, 255, 136, 0.4); }
+.neon-title.green::before { background: #00ff88; box-shadow: 0 0 15px #00ff88, 0 0 30px rgba(0, 255, 136, 0.4); }
 .neon-title.blue::before { background: #00e5ff; box-shadow: 0 0 10px #00e5ff; }
 .neon-title.orange::before { background: #ff8c00; box-shadow: 0 0 10px #ff8c00; }
 

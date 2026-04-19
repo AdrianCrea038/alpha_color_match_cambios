@@ -1,0 +1,27 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Supabase</title>
+</head>
+<body>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+        const SUPABASE_URL = 'https://cdiwriptqmqnexxukqaf.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_vX6RQCfPpA14Pg9ZVgDrFg_l3jY7KVw';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function debug() {
+            console.log('Fetching equivalency_groups...');
+            const { data, error } = await supabase.from('equivalency_groups').select('*');
+            if (error) {
+                console.error('Error:', error);
+            } else {
+                console.log('Data:', data);
+                document.body.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            }
+        }
+        debug();
+    </script>
+</body>
+</html>

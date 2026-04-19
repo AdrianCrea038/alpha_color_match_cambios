@@ -21,7 +21,6 @@ export function clearAllCache() {
         'alphaColorMatchEquivalencyRows',
         'developmentColors',
         'alphaColorMatchLibrary',
-        'alphaColorMatchInbox',
         'alphaColorMatchGroupIds',
         'alphaColorMatchUsers',
         'alphaColorMatchCurrentUser',

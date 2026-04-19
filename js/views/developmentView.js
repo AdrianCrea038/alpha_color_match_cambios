@@ -1,6 +1,5 @@
-// js/views/developmentView.js
 import { escapeHtml } from '../core/utils.js';
-import { supabase } from '../core/supabaseClient.js';
+import { supabase, getAllNks } from '../core/supabaseClient.js';
 import { EQUIVALENCY_ROWS as CONST_EQUIVALENCY_ROWS } from '../core/constants.js';
 
 export class DevelopmentView {
@@ -10,6 +9,7 @@ export class DevelopmentView {
         this.nextId = 1;
         this.history = [];
         this.expandedGroups = new Set();
+        this.isEquivalenceCollapsed = true;
         this.filterText = '';
         
         this.loadFromLocalStorage();
@@ -27,22 +27,43 @@ export class DevelopmentView {
     
     async loadEquivalencyGroups() {
         try {
-            // Intentar cargar desde Supabase
+            console.log('📡 Intentando cargar grupos desde Supabase (tabla: equivalency_groups)...');
             const { data, error } = await supabase
                 .from('equivalency_groups')
                 .select('*')
                 .order('group_id');
             
             if (!error && data && data.length > 0) {
-                window.EQUIVALENCY_ROWS = data.map(row => row.colors);
-                console.log('✅ Grupos cargados desde Supabase:', window.EQUIVALENCY_ROWS.length);
+                // Verificar estructura: ¿es un array de colores o una fila por color?
+                if (data[0].colors && Array.isArray(data[0].colors)) {
+                    // Formato: group_id, colors[]
+                    window.EQUIVALENCY_ROWS = data.map(row => {
+                        // Asegurar que el ID del grupo esté en la primera posición si no lo está
+                        const colors = [...row.colors];
+                        if (colors[0] !== row.group_id) {
+                            return [row.group_id, ...colors];
+                        }
+                        return colors;
+                    });
+                } else {
+                    // Formato: group_id, color_name (agrupar en JS)
+                    const grouped = {};
+                    data.forEach(row => {
+                        const gid = row.group_id || 'SIN_GRUPO';
+                        const cname = row.color_name || row.color || row.name;
+                        if (!grouped[gid]) grouped[gid] = [gid];
+                        if (cname && !grouped[gid].includes(cname)) grouped[gid].push(cname);
+                    });
+                    window.EQUIVALENCY_ROWS = Object.values(grouped);
+                }
+                console.log(`✅ ${window.EQUIVALENCY_ROWS.length} grupos cargados correctamente de Supabase.`);
             } else {
-                // Si no hay datos en Supabase, usar constants.js
+                if (error) console.error('❌ Error de Supabase:', error);
                 window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
-                console.log('✅ Grupos cargados desde constants.js:', window.EQUIVALENCY_ROWS.length);
+                console.log('⚠️ Usando constants.js como fallback.');
             }
         } catch (error) {
-            console.log('Error cargando desde Supabase, usando constants.js');
+            console.error('❌ Error crítico cargando grupos:', error);
             window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
         }
         
@@ -120,6 +141,7 @@ export class DevelopmentView {
     }
     
     render() {
+        if (!this.container) return;
         this.container.innerHTML = `
             <style>
                 .dev-section {
@@ -366,8 +388,12 @@ export class DevelopmentView {
                 </div>
                 
                 <div class="dev-section">
-                    <div class="dev-section-header">
-                        <h3><i class="fas fa-layer-group"></i> 📁 Grupos de Equivalencia Existentes</h3>
+                    <div class="dev-section-header" id="equivalenceHeader" style="cursor: pointer;">
+                        <h3>
+                            <i class="fas fa-layer-group"></i> 
+                            <span id="equivalenceToggleIcon" style="display:inline-block; transition:transform 0.2s; transform: ${this.isEquivalenceCollapsed ? 'rotate(0deg)' : 'rotate(90deg)'}">▶</span>
+                            📁 Grupos de Equivalencia Existentes
+                        </h3>
                         <div class="dev-actions">
                             <button id="devAddGroupBtn" class="dev-btn success"><i class="fas fa-plus"></i> Nuevo grupo</button>
                             <button id="devExportTableBtn" class="dev-btn"><i class="fas fa-download"></i> Exportar</button>
@@ -375,7 +401,7 @@ export class DevelopmentView {
                             <button id="devHistoryBtn" class="dev-btn"><i class="fas fa-history"></i> Historial</button>
                         </div>
                     </div>
-                    <div id="devGroupsContainer" style="padding: 1rem;"></div>
+                    <div id="devGroupsContainer" style="padding: 1rem; display: ${this.isEquivalenceCollapsed ? 'none' : 'block'};"></div>
                 </div>
             </div>
         `;
@@ -403,6 +429,19 @@ export class DevelopmentView {
         if (importBtn) importBtn.onclick = () => this.importTable();
         if (historyBtn) historyBtn.onclick = () => this.showHistoryModal();
         
+        const equivalenceHeader = document.getElementById('equivalenceHeader');
+        if (equivalenceHeader) {
+            equivalenceHeader.onclick = (e) => {
+                if (e.target.closest('.dev-actions')) return;
+                this.isEquivalenceCollapsed = !this.isEquivalenceCollapsed;
+                const container = document.getElementById('devGroupsContainer');
+                const icon = document.getElementById('equivalenceToggleIcon');
+                if (container) container.style.display = this.isEquivalenceCollapsed ? 'none' : 'block';
+                if (icon) icon.style.transform = this.isEquivalenceCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+                if (!this.isEquivalenceCollapsed) this.renderGroups();
+            };
+        }
+        
         if (this.pendingTableBody) {
             this.pendingTableBody.onclick = (e) => {
                 const btn = e.target.closest('.dev-edit-pending, .dev-approve-pending, .dev-delete-pending');
@@ -419,7 +458,7 @@ export class DevelopmentView {
         if (this.groupsContainer) {
             this.groupsContainer.onclick = (e) => {
                 const header = e.target.closest('.dev-group-header');
-                if (header && !e.target.closest('.group-rename-btn') && !e.target.closest('.group-delete-btn')) {
+                if (header && !e.target.closest('.group-rename-btn') && !e.target.closest('.group-delete-btn') && !e.target.closest('.group-toggle-btn')) {
                     const group = header.dataset.group;
                     if (this.expandedGroups.has(group)) this.expandedGroups.delete(group);
                     else this.expandedGroups.add(group);
@@ -448,19 +487,19 @@ export class DevelopmentView {
         }
         this.pendingTableBody.innerHTML = pendingColors.map(color => `
             <tr>
-                <td>${color.id}<\/td>
-                <td><strong>${escapeHtml(color.name)}<\/strong><\/td>
-                <td>${escapeHtml(color.nk)}<\/td>
-                <td>${color.cmyk.c}%<\/td>
-                <td>${color.cmyk.m}%<\/td>
-                <td>${color.cmyk.y}%<\/td>
-                <td>${color.cmyk.k}%<\/td>
-                <td>${color.channels?.tq || 0}%<\/td>
-                <td>${color.channels?.o || 0}%<\/td>
-                <td>${color.channels?.fy || 0}%<\/td>
-                <td>${color.channels?.fp || 0}%<\/td>
-                <td>${escapeHtml(color.group)}<\/td>
-                <td><span class="status-badge pending">⏳ Pendiente<\/span><\/td>
+                <td>${color.id}</td>
+                <td><strong>${escapeHtml(color.name)}</strong></td>
+                <td>${escapeHtml(color.nk)}</td>
+                <td>${color.cmyk.c}%</td>
+                <td>${color.cmyk.m}%</td>
+                <td>${color.cmyk.y}%</td>
+                <td>${color.cmyk.k}%</td>
+                <td>${color.channels?.tq || 0}%</td>
+                <td>${color.channels?.o || 0}%</td>
+                <td>${color.channels?.fy || 0}%</td>
+                <td>${color.channels?.fp || 0}%</td>
+                <td>${escapeHtml(color.group)}</td>
+                <td><span class="status-badge pending">⏳ Pendiente</span></td>
                 <td>
                     <button class="dev-btn dev-edit-pending" data-id="${color.id}" style="border-color:#00e5ff; color:#00e5ff;"><i class="fas fa-edit"></i><\/button>
                     <button class="dev-btn dev-approve-pending" data-id="${color.id}" style="border-color:#4ade80; color:#4ade80;"><i class="fas fa-check-circle"></i><\/button>
@@ -506,7 +545,7 @@ export class DevelopmentView {
                             <button class="dev-btn group-toggle-btn" data-group="${escapeHtml(groupId)}"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></button>
                         </div>
                     </div>
-                    <div class="dev-group-colors" style="${isExpanded ? 'display:flex' : 'display:none'}">
+                    <div class="dev-group-colors" style="display: ${isExpanded ? 'flex' : 'none'}; padding: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
                         ${colors.map(color => `<div class="dev-color-tag">${escapeHtml(color)}<button class="remove-color-btn" data-group="${escapeHtml(groupId)}" data-color="${escapeHtml(color)}" title="Eliminar color"><i class="fas fa-times-circle"></i></button></div>`).join('')}
                     </div>
                 </div>
@@ -514,11 +553,21 @@ export class DevelopmentView {
         }).join('');
     }
     
-    showAddColorModal() {
+    async showAddColorModal() {
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.style.zIndex = '10001';
         
+        // Cargar NKs existentes desde la librería (library_txt)
+        let existingNks = [];
+        try {
+            const nks = await getAllNks();
+            // Filtrar únicos
+            existingNks = [...new Set(nks.map(item => item.nk))].sort();
+        } catch (e) {
+            console.error('Error cargando NKs de library_txt:', e);
+        }
+
         const getFullGroups = () => {
             const groups = [];
             const equivalencyRows = window.EQUIVALENCY_ROWS || [];
@@ -573,12 +622,27 @@ export class DevelopmentView {
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 600px;">
                 <div class="modal-header" style="background: #15803d;">
-                    <h3 style="color: white;">➕ Agregar nuevo color</h3>
+                    <h3 style="color: white;">➕ Agregar nuevo color para Desarrollo</h3>
                     <button class="modal-close" style="color: white; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group"><label>Nombre del color:</label><input type="text" id="colorName" placeholder="Ej: NEON GREEN" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></div>
-                    <div class="form-group"><label>NK:</label><input type="text" id="colorNK" placeholder="Ej: NK001" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;"></div>
+                    <div class="form-group">
+                        <label>Nombre del color:</label>
+                        <input type="text" id="colorName" placeholder="Ej: NEON GREEN" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>NK Maestro:</label>
+                        <select id="nkSelect" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
+                            <option value="">-- Seleccionar NK existente --</option>
+                        </select>
+                    </div>
+
+                    <div id="newNkInputContainer" class="form-group" style="display: none; border-left: 3px solid #10b981; padding-left: 1rem;">
+                        <label>Nuevo NK Code:</label>
+                        <input type="text" id="newNkCode" placeholder="Ej: NK711075" style="width:100%; padding:0.5rem; background:#1e1e2c; border:1px solid #4b5563; border-radius:0.4rem; color:white;">
+                    </div>
+
                     <div class="channel-group">
                         <div><div class="channel-label">C (Cian)</div><input type="number" id="cmykC" value="0" min="0" max="100" step="1" class="dev-input-number" style="width:100%;"></div>
                         <div><div class="channel-label">M (Magenta)</div><input type="number" id="cmykM" value="0" min="0" max="100" step="1" class="dev-input-number" style="width:100%;"></div>
@@ -596,7 +660,6 @@ export class DevelopmentView {
                         <input type="text" id="groupSearch" placeholder="Escribe ID o nombre del color..." autocomplete="off" class="group-filter-input">
                         <div id="filteredGroupsContainer" class="groups-list-container"></div>
                         <input type="hidden" id="selectedGroup" value="">
-                        <small style="color:#6b7280; display:block; margin-top:0.25rem;">💡 Escribe para filtrar. Haz clic en el grupo deseado para seleccionarlo.</small>
                     </div>
                     <div class="form-group"><label>Observación:</label><textarea id="observation" rows="3" class="observation-textarea" placeholder="Ej: Nuevo color para la colección primavera..."></textarea></div>
                 </div>
@@ -610,6 +673,23 @@ export class DevelopmentView {
         document.body.appendChild(modal);
         setTimeout(() => modal.classList.add('active'), 10);
         
+        // CARGAR NKs EN SEGUNDO PLANO (Refresco opcional)
+        getAllNks().then(nks => {
+            const select = modal.querySelector('#nkSelect');
+            if (select) {
+                const uniqueNks = [...new Set(nks.map(n => n.nk))].sort();
+                const options = uniqueNks.map(nk => `<option value="${escapeHtml(nk)}">${escapeHtml(nk)}</option>`).join('');
+                select.innerHTML = '<option value="">-- Seleccionar NK de Librería --</option>' + options + 
+                                  '<option value="NEW_NK" style="color: #10b981; font-weight: bold;">+ Agregar nuevo NK (Desarrollo)...</option>';
+            }
+        }).catch(() => {});
+
+        const nkSelectEl = modal.querySelector('#nkSelect');
+        const newNkInputContainer = modal.querySelector('#newNkInputContainer');
+        nkSelectEl.onchange = (e) => {
+            newNkInputContainer.style.display = e.target.value === 'NEW_NK' ? 'block' : 'none';
+        };
+        
         const closeModal = () => { modal.classList.remove('active'); setTimeout(() => modal.remove(), 300); };
         modal.querySelector('.modal-close').onclick = closeModal;
         modal.querySelector('.cancel-modal').onclick = closeModal;
@@ -620,9 +700,13 @@ export class DevelopmentView {
         searchInput.addEventListener('input', (e) => renderFilteredGroups(e.target.value));
         renderFilteredGroups('');
         
-        modal.querySelector('.confirm-modal').onclick = () => {
-            const name = modal.querySelector('#colorName').value.trim();
-            const nk = modal.querySelector('#colorNK').value.trim();
+        modal.querySelector('.confirm-modal').onclick = async () => {
+            const name = modal.querySelector('#colorName').value.trim().toUpperCase();
+            
+            let nk = nkSelectEl.value;
+            if (nk === 'NEW_NK') {
+                nk = modal.querySelector('#newNkCode').value.trim().toUpperCase();
+            }
             const selectedGroup = hiddenInput.value;
             const observation = modal.querySelector('#observation').value.trim();
             const c = parseInt(modal.querySelector('#cmykC').value) || 0;
@@ -633,9 +717,19 @@ export class DevelopmentView {
             const o = parseInt(modal.querySelector('#channelO').value) || 0;
             const fy = parseInt(modal.querySelector('#channelFY').value) || 0;
             const fp = parseInt(modal.querySelector('#channelFP').value) || 0;
+            
             if (!name) { alert('⚠️ Debe ingresar el nombre del color.'); return; }
             if (!nk) { alert('⚠️ Debe ingresar el NK.'); return; }
             if (!selectedGroup) { alert('⚠️ Debe seleccionar un grupo.'); return; }
+            
+            // Registrar NK si es nuevo (sin bloquear)
+            try {
+                const masterNks = await getAllMasterNks();
+                if (nk && !masterNks.includes(nk)) {
+                    await addMasterNk(nk, this.app?.auth?.getCurrentUser()?.username);
+                }
+            } catch (e) {}
+            
             this.addPendingColor({ name, nk, group: selectedGroup, cmyk: { c, m, y, k }, channels: { tq, o, fy, fp }, observation });
             this.addHistoryEntry('ADD_PENDING', `Color "${name}" agregado a pendientes (Grupo: ${selectedGroup})`, observation);
             closeModal();
@@ -1257,45 +1351,92 @@ export class DevelopmentView {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.csv';
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 const content = event.target.result;
                 const lines = content.split(/\r?\n/);
-                const newRows = [];
+                if (lines.length <= 1) return;
+
+                const newNks = new Set();
+                const groupsToUpdate = new Map(); // GroupID -> Set of ColorNames
+
+                // Formato esperado: NK, NombreColor, GrupoID (opcional)
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
-                    const match = line.match(/^"([^"]+)","([^"]+)"$/);
-                    if (match) newRows.push([match[1], ...match[2].split('|')]);
-                }
-                if (newRows.length > 0) {
-                    if (!window.EQUIVALENCY_ROWS) window.EQUIVALENCY_ROWS = [];
-                    for (const row of newRows) {
-                        const existingIndex = window.EQUIVALENCY_ROWS.findIndex(r => r[0] === row[0]);
-                        if (existingIndex !== -1) {
-                            window.EQUIVALENCY_ROWS[existingIndex] = row;
-                        } else {
-                            window.EQUIVALENCY_ROWS.push(row);
-                        }
-                    }
-                    localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(window.EQUIVALENCY_ROWS));
                     
-                    if (this.app) {
-                        this.app.equivalencyRows = window.EQUIVALENCY_ROWS;
-                        if (typeof this.app.buildEquivalenceMap === 'function') {
-                            this.app.equivalenceMap = this.app.buildEquivalenceMap();
-                        }
-                        if (typeof this.app.buildAllValidColorNames === 'function') {
-                            this.app.buildAllValidColorNames();
+                    // Manejo básico de CSV (separado por comas)
+                    const parts = line.split(',').map(p => p.replace(/^"|"$/g, '').trim().toUpperCase());
+                    if (parts.length < 2) continue;
+
+                    const nk = parts[0];
+                    const colorName = parts[1];
+                    const groupId = parts[2] || nk; // Si no hay grupo, el NK es el grupo
+
+                    newNks.add(nk);
+                    if (!groupsToUpdate.has(groupId)) groupsToUpdate.set(groupId, new Set());
+                    groupsToUpdate.get(groupId).add(colorName);
+                }
+
+                if (newNks.size === 0) {
+                    alert('No se encontraron datos válidos en el archivo.');
+                    return;
+                }
+
+                // 1. Sincronizar NKs con la tabla maestra
+                const currentUser = this.app?.auth?.getCurrentUser()?.username || 'sistema';
+                let nksAdded = 0;
+                for (const nk of newNks) {
+                    const res = await addMasterNk(nk, currentUser);
+                    if (res.success) nksAdded++;
+                }
+
+                // 2. Sincronizar Grupos de Equivalencia
+                const equivalencyRows = window.EQUIVALENCY_ROWS || [];
+                let groupsCreated = 0;
+                let colorsAdded = 0;
+
+                for (const [groupId, colorNames] of groupsToUpdate) {
+                    let rowIndex = equivalencyRows.findIndex(r => r[0] === groupId);
+                    
+                    if (rowIndex === -1) {
+                        // Crear grupo nuevo
+                        equivalencyRows.push([groupId, ...Array.from(colorNames)]);
+                        groupsCreated++;
+                        colorsAdded += colorNames.size;
+                    } else {
+                        // Actualizar grupo existente (evitar duplicados)
+                        const existingColors = new Set(equivalencyRows[rowIndex].slice(1));
+                        let addedToGroup = 0;
+                        for (const name of colorNames) {
+                            if (!existingColors.has(name)) {
+                                equivalencyRows[rowIndex].push(name);
+                                addedToGroup++;
+                                colorsAdded++;
+                            }
                         }
                     }
-                    this.renderGroups();
-                    this.addHistoryEntry('IMPORT_TABLE', `Importados ${newRows.length} grupos`, 'Importación masiva');
-                    alert(`✅ Importados ${newRows.length} grupos.`);
-                } else alert('No se encontraron datos válidos en el archivo.');
+                }
+
+                // Guardar cambios
+                window.EQUIVALENCY_ROWS = equivalencyRows;
+                localStorage.setItem('alphaColorMatchEquivalencyRows', JSON.stringify(window.EQUIVALENCY_ROWS));
+                
+                if (this.app) {
+                    this.app.equivalencyRows = window.EQUIVALENCY_ROWS;
+                    if (typeof this.app.buildEquivalenceMap === 'function') {
+                        this.app.equivalenceMap = this.app.buildEquivalenceMap();
+                    }
+                }
+
+                this.renderGroups();
+                this.addHistoryEntry('SMART_IMPORT', `Sincronizados ${newNks.size} NKs y ${groupsToUpdate.size} grupos.`, `Importación masiva: ${colorsAdded} colores procesados.`);
+                
+                alert(`✅ Sincronización Completa:\n- NKs registrados/validados: ${newNks.size}\n- Grupos nuevos/actualizados: ${groupsToUpdate.size}\n- Colores añadidos: ${colorsAdded}`);
             };
             reader.readAsText(file);
         };
