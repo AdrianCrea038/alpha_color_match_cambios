@@ -48,7 +48,8 @@ export class AdminView {
                 reports: 'Reportes',
                 dashboard: 'Dashboard',
                 backup: 'Backup Automático',
-                admin: 'Admin'
+                admin: 'Admin',
+                linearization: 'Comprobación'
             };
             
             tableBody.innerHTML = users.map(user => {
@@ -159,6 +160,7 @@ export class AdminView {
                             <label><input type="checkbox" value="dashboard" ${userToEdit?.permissions?.includes('dashboard') ? 'checked' : ''}> Dashboard</label>
                             <label><input type="checkbox" value="backup" ${userToEdit?.permissions?.includes('backup') ? 'checked' : ''}> Backup Automático</label>
                             <label><input type="checkbox" value="admin" ${userToEdit?.permissions?.includes('admin') ? 'checked' : ''}> Admin</label>
+                            <label><input type="checkbox" value="linearization" ${userToEdit?.permissions?.includes('linearization') ? 'checked' : ''}> Comprobación</label>
                         </div>
                     </div>
                     <div class="master-checkbox">

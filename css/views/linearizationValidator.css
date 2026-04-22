@@ -1,0 +1,73 @@
+/* css/views/linearizationValidator.css */
+
+.error-row {
+    background: rgba(248, 113, 113, 0.05);
+}
+
+.error-row:hover {
+    background: rgba(248, 113, 113, 0.08) !important;
+}
+
+.error-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nk-badge {
+    background: #1e1e2c;
+    color: #00e5ff;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    border: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.data-table tr.error-row td {
+    border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.3s ease;
+}
+
+.badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#linResetBtn {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+#linResetBtn:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+#linResetBtn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+#linResetBtn i {
+    transition: transform 0.5s ease;
+}
+
+#linResetBtn:hover i {
+    transform: rotate(180deg);
+}

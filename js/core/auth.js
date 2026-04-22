@@ -10,7 +10,8 @@ export const PERMISSIONS = {
     REPORTS: 'reports',
     DASHBOARD: 'dashboard',
     BACKUP: 'backup',
-    ADMIN: 'admin'
+    ADMIN: 'admin',
+    LINEARIZATION: 'linearization'
 };
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS);

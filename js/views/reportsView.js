@@ -86,7 +86,7 @@ export class ReportsView {
         const rows = [];
         for (const a of assignments) {
             const start = new Date(a.fecha_asignacion);
-            const end = a.estado === 'completado' ? new Date(a.fecha_actualizacion || a.updated_at || a.fecha_asignacion) : new Date();
+            const end = a.estado === 'completado' ? new Date(a.updated_at || a.fecha_asignacion) : new Date();
             const hours = Math.max(0, (end - start) / 36e5);
             rows.push({
                 type: 'assignment_time',
@@ -491,43 +491,95 @@ export class ReportsView {
     }
 
     async exportPdfErrors() {
-        await this.ensureJsPdf();
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        await this.drawPdfHeader(doc, 'Reporte de Errores');
-        
-        const logs = this.getComparisonLogs();
+        try {
+            console.log('📄 Iniciando generación de reporte de auditoría...');
+            await this.ensureJsPdf();
+            
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) throw new Error('No se pudo cargar la librería jsPDF');
+            
+            const doc = new jsPDF();
+            const logs = this.getComparisonLogs();
+            
+            if (!logs || logs.length === 0) {
+                alert('⚠️ No hay datos de comparaciones recientes para generar este reporte. Realice una comparación primero.');
+                return;
+            }
 
-        // Gráfica de intensidad de errores
-        let chartY = 50;
-        doc.setFontSize(10);
-        doc.text('INTENSIDAD DE ERRORES POR COMPARACIÓN:', 14, chartY - 5);
-        
-        logs.slice(0, 3).forEach((l, i) => {
-            const totalErr = (l.unmatched || 0) + (l.invalidCmyk || 0);
-            const intensity = Math.min(100, totalErr * 5); // Escala visual
-            this.drawPdfBar(doc, 14, chartY + (i * 15), 180, 8, l.primaryFile, intensity, [244, 63, 94]);
-        });
+            console.log(`📊 Generando PDF con ${logs.length} registros...`);
+            await this.drawPdfHeader(doc, 'Reporte de Auditoría (Comparación)');
+            
+            // --- RESUMEN EJECUTIVO (KPIs) ---
+            let startY = 50;
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 41, 59);
+            doc.text('RESUMEN DE AUDITORÍA HISTÓRICA:', 14, startY);
+            
+            const stats = {
+                totalCorrections: logs.reduce((sum, l) => sum + (Number(l.corrections) || 0), 0),
+                totalDuplicates: logs.reduce((sum, l) => sum + (Number(l.duplicates) || 0), 0),
+                totalAdded: logs.reduce((sum, l) => sum + (Number(l.addedColors) || 0), 0)
+            };
 
-        const tableData = logs.map(l => [
-            new Date(l.createdAt).toLocaleDateString(),
-            l.user,
-            l.primaryFile,
-            l.unmatched || 0,
-            l.invalidCmyk || 0
-        ]);
+            startY += 10;
+            const kpiWidth = 60;
+            const kpiHeight = 25;
+            
+            // Tarjeta 1: Correcciones
+            doc.setFillColor(239, 246, 255);
+            doc.roundedRect(14, startY, kpiWidth, kpiHeight, 3, 3, 'F');
+            doc.setTextColor(37, 99, 235);
+            doc.setFontSize(14);
+            doc.text(String(stats.totalCorrections), 14 + kpiWidth/2, startY + 12, { align: 'center' });
+            doc.setFontSize(8);
+            doc.text('CORRECCIONES DE NOMBRE', 14 + kpiWidth/2, startY + 20, { align: 'center' });
 
-        doc.autoTable({
-            startY: chartY + 50,
-            head: [['Fecha', 'Usuario', 'Archivo Base', 'Sin Coincidencia', 'CMYK Inválido']],
-            body: tableData,
-            headStyles: { fillColor: [244, 63, 94], textColor: 255 },
-            alternateRowStyles: { fillColor: [255, 241, 242] },
-            margin: { top: 50 }
-        });
+            // Tarjeta 2: Duplicados
+            doc.setFillColor(254, 242, 242);
+            doc.roundedRect(14 + kpiWidth + 5, startY, kpiWidth, kpiHeight, 3, 3, 'F');
+            doc.setTextColor(220, 38, 38);
+            doc.setFontSize(14);
+            doc.text(String(stats.totalDuplicates), 14 + kpiWidth + 5 + kpiWidth/2, startY + 12, { align: 'center' });
+            doc.setFontSize(8);
+            doc.text('DUPLICADOS RESUELTOS', 14 + kpiWidth + 5 + kpiWidth/2, startY + 20, { align: 'center' });
 
-        doc.save(`Errores_AlphaColor_${new Date().toISOString().slice(0,10)}.pdf`);
+            // Tarjeta 3: Agregados
+            doc.setFillColor(240, 253, 244);
+            doc.roundedRect(14 + (kpiWidth + 5) * 2, startY, kpiWidth, kpiHeight, 3, 3, 'F');
+            doc.setTextColor(22, 163, 74);
+            doc.setFontSize(14);
+            doc.text(String(stats.totalAdded), 14 + (kpiWidth + 5) * 2 + kpiWidth/2, startY + 12, { align: 'center' });
+            doc.setFontSize(8);
+            doc.text('COLORES NUEVOS AGREGADOS', 14 + (kpiWidth + 5) * 2 + kpiWidth/2, startY + 20, { align: 'center' });
+
+            // --- TABLA DETALLADA ---
+            const tableData = logs.slice(0, 100).map(l => [
+                l.createdAt ? new Date(l.createdAt).toLocaleDateString() : 'N/A',
+                l.user || 'N/A',
+                String(l.primaryFile || 'Sin nombre').slice(0, 30),
+                l.corrections || 0,
+                l.duplicates || 0,
+                l.addedColors || 0
+            ]);
+
+            doc.autoTable({
+                startY: startY + kpiHeight + 15,
+                head: [['Fecha', 'Usuario', 'Archivo Base', 'Corr.', 'Dupl.', 'Agreg.']],
+                body: tableData,
+                headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+                styles: { fontSize: 8, cellPadding: 3 },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                margin: { top: 50 }
+            });
+
+            doc.save(`Reporte_Auditoria_Comparacion_${new Date().toISOString().slice(0,10)}.pdf`);
+            console.log('✅ Reporte descargado con éxito');
+
+        } catch (error) {
+            console.error('❌ Error generando PDF:', error);
+            alert(`❌ Error al generar el reporte: ${error.message}`);
+        }
     }
 
     async exportPdfColors() {

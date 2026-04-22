@@ -7,6 +7,7 @@ import { renderResults } from './modules/resultsRenderer.js';
 import { exportResults } from './modules/exporter.js';
 import { clearAllCache, saveComparatorState, loadComparatorState } from './modules/cacheManager.js';
 import { showNotification } from './core/utils.js';
+import { findDuplicateGroups, showDuplicateModal } from './modules/duplicateHandler.js';
 
 // Importar vistas
 import { PaletteValidatorView } from './views/paletteValidatorView.js';
@@ -16,7 +17,8 @@ import { AssignmentView } from './views/assignmentView.js';
 import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
 import { DashboardView } from './views/dashboardView.js';
-import { supabase } from './core/supabaseClient.js';
+import { LinearizationValidatorView } from './views/linearizationValidatorView.js';
+import { supabase, getAllMasterNks, getCustomValidColorNames } from './core/supabaseClient.js';
 
 class AlphaColorMatch {
     constructor() {
@@ -41,6 +43,7 @@ class AlphaColorMatch {
         this.adminView = null;
         this.reportsView = null;
         this.dashboardView = null;
+        this.linearizationValidatorView = null;
         
         this.init();
     }
@@ -53,6 +56,7 @@ class AlphaColorMatch {
         
         this.updateUIForUser();
         this.loadSavedState();
+        await this.loadMasterData();
         this.initViews();
         this.initMenuNavigation();
         this.bindEvents();
@@ -87,6 +91,20 @@ class AlphaColorMatch {
         }
         
         console.log('✅ Alpha Color Match iniciado');
+    }
+
+    async loadMasterData() {
+        try {
+            // Cargar NKs maestros
+            window.ALL_MASTER_NKS = await getAllMasterNks();
+            // Cargar nombres de colores válidos
+            window.ALL_VALID_COLOR_NAMES = await getCustomValidColorNames();
+            console.log(`📡 Catálogos cargados: ${window.ALL_MASTER_NKS.length} NKs y ${window.ALL_VALID_COLOR_NAMES.length} nombres.`);
+        } catch (error) {
+            console.error('❌ Error cargando catálogos:', error);
+            window.ALL_MASTER_NKS = [];
+            window.ALL_VALID_COLOR_NAMES = [];
+        }
     }
     
     loadSavedState() {
@@ -163,37 +181,20 @@ class AlphaColorMatch {
         const file = event.target.files[0];
         if (!file) return;
         
-        console.log('📁 Cargando archivo principal:', file.name);
-        
         try {
-            const { records, fileName } = await loadFile(file);
-            console.log('📊 Registros parseados:', records.length);
-            
-            let correctionsApplied = 0;
-            
-            const onCorrection = (oldName, newName, reason) => {
-                correctionsApplied++;
-                console.log(`✏️ Corrección ${correctionsApplied}: "${oldName}" → "${newName}" (Motivo: ${reason})`);
-                this.saveCorrectionHistory(oldName, newName, reason);
-            };
-            
-            const result = await validateAndCorrectRecords(records, 'primary', onCorrection);
-            
-            if (result.records.length === 0) {
-                alert('❌ No se pudieron cargar los datos del archivo principal.');
-                return;
-            }
-            
-            this.primaryData = result.records;
-            this.primaryFileName = fileName;
-            this.updateFileInfo('primary', fileName, this.primaryData.length);
-            this.renderDataList('primary', this.primaryData);
-            this.saveCurrentState();
-            
-            if (correctionsApplied > 0) {
-                alert(`✅ Archivo principal cargado: ${this.primaryData.length} colores\n✏️ Correcciones aplicadas: ${correctionsApplied}`);
-            } else {
-                alert(`✅ Archivo principal cargado: ${this.primaryData.length} colores`);
+            const result = await this.processFileWithValidation(file, 'primary');
+            if (result) {
+                this.primaryData = result.records;
+                this.primaryFileName = result.fileName;
+                this.updateFileInfo('primary', result.fileName, this.primaryData.length);
+                this.renderDataList('primary', this.primaryData);
+                this.saveCurrentState();
+                
+                if (result.correctionsApplied > 0 || result.duplicatesResolved > 0) {
+                    showNotification('Archivo Cargado', `Se procesaron ${this.primaryData.length} registros. (Correcciones: ${result.correctionsApplied}, Duplicados: ${result.duplicatesResolved})`, 'success');
+                } else {
+                    showNotification('Archivo Cargado', `Se cargaron ${this.primaryData.length} registros correctamente.`, 'success');
+                }
             }
         } catch (error) {
             console.error('❌ Error:', error);
@@ -205,42 +206,92 @@ class AlphaColorMatch {
         const file = event.target.files[0];
         if (!file) return;
         
-        console.log('📁 Cargando archivo secundario:', file.name);
-        
         try {
-            const { records, fileName } = await loadFile(file);
-            console.log('📊 Registros parseados:', records.length);
-            
-            let correctionsApplied = 0;
-            
-            const onCorrection = (oldName, newName, reason) => {
-                correctionsApplied++;
-                console.log(`✏️ Corrección ${correctionsApplied}: "${oldName}" → "${newName}" (Motivo: ${reason})`);
-                this.saveCorrectionHistory(oldName, newName, reason);
-            };
-            
-            const result = await validateAndCorrectRecords(records, 'secondary', onCorrection);
-            
-            if (result.records.length === 0) {
-                alert('❌ No se pudieron cargar los datos del archivo secundario.');
-                return;
-            }
-            
-            this.secondaryData = result.records;
-            this.secondaryFileName = fileName;
-            this.updateFileInfo('secondary', fileName, this.secondaryData.length);
-            this.renderDataList('secondary', this.secondaryData);
-            this.saveCurrentState();
-            
-            if (correctionsApplied > 0) {
-                alert(`✅ Archivo secundario cargado: ${this.secondaryData.length} colores\n✏️ Correcciones aplicadas: ${correctionsApplied}`);
-            } else {
-                alert(`✅ Archivo secundario cargado: ${this.secondaryData.length} colores`);
+            const result = await this.processFileWithValidation(file, 'secondary');
+            if (result) {
+                this.secondaryData = result.records;
+                this.secondaryFileName = result.fileName;
+                this.updateFileInfo('secondary', result.fileName, this.secondaryData.length);
+                this.renderDataList('secondary', this.secondaryData);
+                
+                // Guardar estadísticas para el log de comparación
+                localStorage.setItem('lastFileLoadStats', JSON.stringify({
+                    corrections: result.correctionsApplied,
+                    duplicates: result.duplicatesResolved
+                }));
+
+                this.saveCurrentState();
+                
+                if (result.correctionsApplied > 0 || result.duplicatesResolved > 0) {
+                    showNotification('Archivo Cargado', `Se procesaron ${this.secondaryData.length} registros. (Correcciones: ${result.correctionsApplied}, Duplicados: ${result.duplicatesResolved})`, 'success');
+                } else {
+                    showNotification('Archivo Cargado', `Se cargaron ${this.secondaryData.length} registros correctamente.`, 'success');
+                }
             }
         } catch (error) {
             console.error('❌ Error:', error);
             alert(`❌ Error al cargar archivo secundario: ${error.message || error}`);
         }
+    }
+
+    async processFileWithValidation(file, fileType) {
+        console.log(`📁 Procesando archivo ${fileType}: ${file.name}`);
+        const { records: rawRecords, fileName } = await loadFile(file, true); 
+        
+        // 1. Calcular sugerencia de NK basado en lo predominante en el archivo
+        const nkCounts = {};
+        rawRecords.forEach(r => {
+            if (r.nk) {
+                const cleanNk = (r.nk || '').trim().toUpperCase();
+                nkCounts[cleanNk] = (nkCounts[cleanNk] || 0) + 1;
+            }
+        });
+        const suggestedNk = Object.entries(nkCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+
+        // 2. Detectar duplicados y mala nomenclatura básica
+        const duplicateGroups = findDuplicateGroups(rawRecords);
+        const hasParentheses = rawRecords.some(r => /\([^)]*\)/.test(r.name)); 
+        
+        // 3. NUEVO: Detectar si faltan NKs según la tabla maestra
+        const masterNks = (window.ALL_MASTER_NKS || []).map(n => n.toUpperCase());
+        const hasMissingNks = rawRecords.some(r => !r.nk || (masterNks.length > 0 && !masterNks.includes(r.nk.toUpperCase())));
+
+        if (duplicateGroups.length > 0 || hasParentheses || hasMissingNks) {
+            showNotification('Auditoría de Archivo', `Se detectaron problemas que requieren su atención. Iniciando asistente...`, 'info');
+        }
+
+        let currentRecords = [...rawRecords];
+        let duplicatesResolved = 0;
+
+        // 4. Resolver Duplicados
+        if (duplicateGroups.length > 0) {
+            const indicesToRemove = await showDuplicateModal(duplicateGroups);
+            if (indicesToRemove.length > 0) {
+                currentRecords = currentRecords.filter((_, idx) => !indicesToRemove.includes(idx));
+                duplicatesResolved = duplicateGroups.length;
+            }
+        }
+
+        // 5. Resolver Nombres Mal Escritos y NKs Faltantes
+        let correctionsApplied = 0;
+        const onCorrection = (oldName, newName, reason) => {
+            correctionsApplied++;
+            this.saveCorrectionHistory(oldName, newName, reason);
+        };
+
+        const validationResult = await validateAndCorrectRecords(currentRecords, fileType, onCorrection, suggestedNk);
+        
+        if (validationResult.records.length === 0 && currentRecords.length > 0) {
+            return null; // Cancelado
+        }
+
+        return {
+            records: validationResult.records,
+            fileName,
+            correctionsApplied,
+            duplicatesResolved,
+            totalOriginal: rawRecords.length
+        };
     }
     
     compareFiles() {
@@ -264,6 +315,8 @@ class AlphaColorMatch {
         
         this.results = compareFiles(this.primaryData, this.secondaryData);
         console.log('📊 Resultados:', this.results.length);
+        
+        // Guardar métricas iniciales de la sesión (se actualizarán al exportar si es necesario)
         this.logComparisonSession();
         
         renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
@@ -356,7 +409,10 @@ class AlphaColorMatch {
             this.results, this.groupSelections, this.selectedPending, this.deletedPending,
             this.primaryData, this.secondaryData
         );
-        if (success) this.saveCurrentState();
+        if (success) {
+            this.logComparisonSession(); // Guardar estado final (colores agregados, etc)
+            this.saveCurrentState();
+        }
     }
     
     clearCache() {
@@ -430,6 +486,7 @@ class AlphaColorMatch {
         this.adminView = new AdminView(this, this.auth);
         this.reportsView = new ReportsView(this);
         this.dashboardView = new DashboardView(this);
+        this.linearizationValidatorView = new LinearizationValidatorView(this);
     }
     
     initMenuNavigation() {
@@ -442,6 +499,7 @@ class AlphaColorMatch {
             assignment: document.getElementById('assignmentView'),
             reports: document.getElementById('reportsView'),
             dashboard: document.getElementById('dashboardView'),
+            linearizationValidator: document.getElementById('linearizationValidatorView'),
             admin: document.getElementById('adminView')
         };
         
@@ -478,6 +536,9 @@ class AlphaColorMatch {
             }
             if (viewName === 'dashboard' && this.dashboardView) {
                 this.dashboardView.render();
+            }
+            if (viewName === 'linearizationValidator' && this.linearizationValidatorView) {
+                this.linearizationValidatorView.render();
             }
             if (viewName === 'admin' && this.adminView) {
                 this.adminView.render();
@@ -534,9 +595,12 @@ class AlphaColorMatch {
         const unmatched = this.results.filter(item =>
             item.matchType === 'pending_primary' || item.matchType === 'pending_secondary'
         ).length;
-        const invalidCmyk = [...this.primaryData, ...this.secondaryData].filter(rec =>
-            !Array.isArray(rec.cmyk) || rec.cmyk.length < 4 || rec.cmyk.some(v => !Number.isFinite(v) || v < 0 || v > 100)
-        ).length;
+        
+        const addedColors = Array.from(this.selectedPending).filter(id => id.startsWith('pending_secondary')).length;
+        
+        // Recuperar contadores de la última carga de archivos
+        const lastCargas = JSON.parse(localStorage.getItem('lastFileLoadStats') || '{"corrections":0, "duplicates":0}');
+
         const entry = {
             id: `cmp_${Date.now()}`,
             createdAt: new Date().toISOString(),
@@ -544,8 +608,12 @@ class AlphaColorMatch {
             primaryFile: this.primaryFileName || 'principal',
             secondaryFile: this.secondaryFileName || 'secundario',
             unmatched,
-            invalidCmyk
+            addedColors,
+            corrections: lastCargas.corrections || 0,
+            duplicates: lastCargas.duplicates || 0,
+            totalRecords: this.primaryData.length + this.secondaryData.length
         };
+
         let logs = [];
         try {
             logs = JSON.parse(localStorage.getItem('comparisonReportLogs') || '[]');

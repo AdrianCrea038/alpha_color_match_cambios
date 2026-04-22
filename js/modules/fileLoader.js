@@ -2,7 +2,7 @@
 import { normalizeSpaces, extractNK, extractBaseName } from '../core/utils.js';
 import { normalizeRecordsCmyk } from './cmykNormalizer.js';
 
-export function parseTxtContent(content) {
+export function parseTxtContent(content, keepDuplicates = false) {
     const lines = content.split(/\r?\n/);
     let dataStarted = false;
     const records = [];
@@ -47,6 +47,8 @@ export function parseTxtContent(content) {
     const { records: normalizedRecords, warnings } = normalizeRecordsCmyk(records);
     if (warnings.length > 0) console.warn('Advertencias de normalización CMYK:', warnings.length);
 
+    if (keepDuplicates) return normalizedRecords;
+
     // Eliminar duplicados exactos para evitar líneas repetidas en comparación/exportación.
     const uniqueRecords = [];
     const seen = new Set();
@@ -69,7 +71,7 @@ export function parseTxtContent(content) {
     return uniqueRecords;
 }
 
-export function loadFile(file) {
+export function loadFile(file, keepDuplicates = false) {
     return new Promise((resolve, reject) => {
         if (!file) {
             reject('No se seleccionó ningún archivo');
@@ -79,7 +81,7 @@ export function loadFile(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const records = parseTxtContent(e.target.result);
+                const records = parseTxtContent(e.target.result, keepDuplicates);
                 console.log(`📁 Archivo "${file.name}" parseado: ${records.length} registros`);
                 resolve({ records, fileName: file.name });
             } catch (error) {

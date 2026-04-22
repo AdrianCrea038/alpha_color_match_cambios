@@ -5,10 +5,15 @@ import { extractNK, extractBaseName } from '../core/utils.js';
 function expandWithEquivalents(item, nk, baseName) {
     const equivalents = getAllEquivalentNames(baseName);
     const expanded = [];
+    const nkStr = (nk || '').trim();
+    
     for (const eqName of equivalents) {
+        // Solo añadir el NK si existe, de lo contrario dejar el nombre limpio
+        const finalName = nkStr ? `${eqName} ${nkStr}` : eqName;
+        
         expanded.push({
             ...item,
-            name: `${eqName} ${nk}`,
+            name: finalName,
             isEquivalent: eqName !== baseName
         });
     }

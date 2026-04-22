@@ -357,4 +357,5 @@ export async function addMasterNk(nkCode, user = 'sistema') {
         console.error('Error en addMasterNk:', error);
         return { success: false, error: error.message };
     }
-}
+}
+

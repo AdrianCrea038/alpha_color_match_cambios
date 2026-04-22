@@ -23,7 +23,6 @@ export function clearAllCache() {
         'alphaColorMatchLibrary',
         'alphaColorMatchGroupIds',
         'alphaColorMatchUsers',
-        'alphaColorMatchCurrentUser',
         'nameCorrectionHistory',
         'alphaColorMatchAssignments'
     ];
