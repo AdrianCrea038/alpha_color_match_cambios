@@ -190,4 +190,46 @@
     .dashboard-neon-container {
         padding: 0.75rem !important;
     }
+
+    /* 10. Filtros Dashboard (Mini) */
+    .dashboard-filter-mini {
+        flex-direction: column !important;
+        width: 100% !important;
+        align-items: stretch !important;
+        gap: 0.75rem !important;
+    }
+
+    #summaryDateContainer {
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+    }
+
+    .filter-group-mini {
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+    }
+
+    .filter-date, #summaryPeriodSelect {
+        width: 100% !important;
+        height: 40px !important;
+        margin: 0 !important;
+    }
+
+    #btnProjectMode {
+        width: 100% !important;
+        margin: 0 !important;
+        height: 40px !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .neon-title-wrapper {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 1rem !important;
+    }
 }
