@@ -5,41 +5,135 @@ import { normalizeRecordsCmyk } from './cmykNormalizer.js';
 export function parseTxtContent(content, keepDuplicates = false) {
     const lines = content.split(/\r?\n/);
     let dataStarted = false;
+    
+    // Verificación proactiva: Si el archivo NO tiene BEGIN_DATA pero tiene líneas que parecen datos (ID + Nombre + Números)
+    // activamos dataStarted de inmediato para no perder información.
+    const hasBeginData = content.includes('BEGIN_DATA');
+    if (!hasBeginData) {
+        dataStarted = true; 
+    }
+
     const records = [];
     let tempCounter = 0;
     
     for (let line of lines) {
-        if (line.trim() === '') continue;
-        if (line.trim() === 'BEGIN_DATA') { dataStarted = true; continue; }
-        if (dataStarted && line.trim() === 'END_DATA') break;
+        const trimmed = line.trim();
+        if (trimmed === '') continue;
+        
+        if (trimmed === 'BEGIN_DATA') { dataStarted = true; continue; }
+        if (trimmed === 'END_DATA') break;
+        
         if (!dataStarted) continue;
         
-        const match = line.match(/^(\d+)\.?\s+(?:"([^"]+)"|([^\s]+(?:\s+[^\s]+)*?))\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)(?:\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+))?/);
-        if (match) {
-            let rawName = match[2] || match[3];
-            if (rawName) {
-                const normalizedName = normalizeSpaces(rawName);
-                const nk = extractNK(normalizedName);
-                const baseName = extractBaseName(normalizedName);
-                const tempId = Date.now() + '_' + (++tempCounter);
-                
-                let lVal = 100, aVal = 0, bVal = 0;
-                if (match[8] && match[9] && match[10]) {
-                    lVal = parseFloat(match[8]); if (isNaN(lVal)) lVal = 100;
-                    aVal = parseFloat(match[9]); if (isNaN(aVal)) aVal = 0;
-                    bVal = parseFloat(match[10]); if (isNaN(bVal)) bVal = 0;
-                }
-                records.push({
-                    tempId: tempId,
-                    id: match[1],
-                    name: normalizedName,
-                    nk: nk,
-                    baseName: baseName,
-                    cmyk: [parseFloat(match[4]), parseFloat(match[5]), parseFloat(match[6]), parseFloat(match[7])],
-                    lab: [lVal, aVal, bVal],
-                    originalLine: line
-                });
+        // Ignorar otras cabeceras si estamos en modo auto-start
+        if (!hasBeginData && (trimmed.includes('ORIGINATOR') || trimmed.includes('NUMBER_OF_FIELDS') || trimmed.includes('BEGIN_DATA_FORMAT'))) continue;
+
+        // Intentar primero por Tabulación (Más preciso para nombres con números al inicio)
+        let parts = line.split('\t');
+        if (parts.length >= 7) {
+            const id = parts[0].trim();
+            const rawName = normalizeSpaces(parts[1]);
+            const nk = extractNK(rawName);
+            const baseName = extractBaseName(rawName);
+            const tempId = Date.now() + '_' + (++tempCounter);
+
+            // CMYK están en 2,3,4,5. LAB en 6,7,8 (opcional)
+            const cmyk = [parseFloat(parts[2]), parseFloat(parts[3]), parseFloat(parts[4]), parseFloat(parts[5])];
+            let lab = [100, 0, 0];
+            if (parts[6] !== undefined && parts[7] !== undefined && parts[8] !== undefined) {
+                lab = [parseFloat(parts[6]), parseFloat(parts[7]), parseFloat(parts[8])];
             }
+
+            const nameWithSpace = nk ? `${baseName} ${nk}` : baseName;
+
+            records.push({
+                tempId, id, name: nameWithSpace, nk, baseName, cmyk, lab, originalLine: line
+            });
+            continue;
+        }
+
+        // 1. Intentar capturar por formato estándar con COMILLAS (El más seguro)
+        // Ejemplo: 1 "00A BLACK NK675426" 89.0 13.0 ...
+        const quoteMatch = line.match(/^(\d+)?(?:\.|\s+)*"([^"]+)"\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+)(?:\s+([\d\.\-]+)\s+([\d\.\-]+)\s+([\d\.\-]+))?/);
+        
+        let id, rawName, cmyk, lab, matchFound = false;
+
+        if (quoteMatch) {
+            id = quoteMatch[1] || "S/ID";
+            rawName = quoteMatch[2];
+            cmyk = [parseFloat(quoteMatch[3]), parseFloat(quoteMatch[4]), parseFloat(quoteMatch[5]), parseFloat(quoteMatch[6])];
+            lab = [parseFloat(quoteMatch[7] || 100), parseFloat(quoteMatch[8] || 0), parseFloat(quoteMatch[9] || 0)];
+            matchFound = true;
+        } else {
+            // 2. Fallback: Si no hay comillas, intentar por Tabulaciones
+            const parts = line.split('\t');
+            if (parts.length >= 6) {
+                id = parts[0].trim();
+                rawName = normalizeSpaces(parts[1]);
+                cmyk = [parseFloat(parts[2]), parseFloat(parts[3]), parseFloat(parts[4]), parseFloat(parts[5])];
+                lab = [parseFloat(parts[6] || 100), parseFloat(parts[7] || 0), parseFloat(parts[8] || 0)];
+                matchFound = true;
+            } else {
+                // 3. Fallback final: Buscar el bloque de 4 números CMYK al final
+                const words = line.trim().split(/\s+/);
+                // Buscamos los últimos 4 o 7 números que corresponden a CMYK o CMYK+LAB
+                let lastNumIdx = -1;
+                for (let i = words.length - 1; i >= 0; i--) {
+                    if (isNaN(parseFloat(words[i])) || !/^-?\d*\.?\d+$/.test(words[i])) {
+                        lastNumIdx = i + 1;
+                        break;
+                    }
+                }
+                
+                if (lastNumIdx > 0 && lastNumIdx < words.length) {
+                    const nameParts = words.slice(0, lastNumIdx);
+                    // Si el primer elemento es solo un número, es el ID
+                    if (/^\d+$/.test(nameParts[0])) {
+                        id = nameParts[0];
+                        rawName = nameParts.slice(1).join(' ');
+                    } else {
+                        id = "S/ID";
+                        rawName = nameParts.join(' ');
+                    }
+                    const dataParts = words.slice(lastNumIdx);
+                    cmyk = dataParts.slice(0, 4).map(v => parseFloat(v));
+                    lab = dataParts.slice(4, 7).map(v => parseFloat(v || 0));
+                    if (lab.length < 3) lab = [100, 0, 0];
+                    matchFound = true;
+                }
+            }
+        }
+
+        // Función interna para validar número estricto (evita letras y doble punto)
+        const isStrictNumber = (val) => {
+            if (typeof val !== 'string') return false;
+            const trimmed = val.trim();
+            // Permite opcionalmente un signo menos, dígitos y UN solo punto decimal
+            return /^-?\d*(\.\d+)?$/.test(trimmed) && !isNaN(parseFloat(trimmed));
+        };
+
+        if (matchFound && rawName) {
+            const normalizedName = normalizeSpaces(rawName);
+            const tempId = Date.now() + '_' + (++tempCounter);
+            
+            // Separación estricta: El nombre es el nombre, el NK es el NK.
+            const nk = extractNK(normalizedName);
+            const baseName = extractBaseName(normalizedName);
+
+            // Validar integridad de valores numéricos
+            const cmykValid = cmyk.every(v => isStrictNumber(String(v)));
+            const labValid = lab.every(v => isStrictNumber(String(v)));
+
+            records.push({
+                id: id,
+                _uid: `file_${tempId}`,
+                name: normalizedName,
+                baseName: baseName,
+                nk: nk,
+                cmyk: cmyk.map(v => isStrictNumber(String(v)) ? parseFloat(v) : NaN),
+                lab: lab.map(v => isStrictNumber(String(v)) ? parseFloat(v) : NaN),
+                isCorrupted: !cmykValid || !labValid
+            });
         }
     }
     

@@ -23,6 +23,9 @@ export class PaletteValidatorView {
         this.uploadToDbBtn = null;
         this.plotterSelect = null;
         this.assignmentsListDiv = null;
+        this.toggleExtraBtn = null;
+        
+        this.hideExtraColumns = localStorage.getItem('paletteHideExtra') === 'true';
         
         this.epsHelper = new EPSView(app);
         
@@ -37,6 +40,7 @@ export class PaletteValidatorView {
         this.loadLibraryBtn = document.getElementById('loadLibraryBtn');
         this.uploadToDbBtn = document.getElementById('uploadToDbBtn');
         this.plotterSelect = document.getElementById('globalPlotter');
+        this.toggleExtraBtn = document.getElementById('toggleExtraChannelsBtn');
         
         if (!this.tableBody) return;
         
@@ -76,8 +80,52 @@ export class PaletteValidatorView {
         if (this.sendToInboxBtn) {
             this.sendToInboxBtn.onclick = () => this.showSendToInboxModal();
         }
+
+        if (this.toggleExtraBtn) {
+            this.toggleExtraBtn.onclick = () => this.toggleExtraChannels();
+            this.updateToggleBtnUI();
+        }
         
         this.resetTable();
+    }
+
+    toggleExtraChannels() {
+        this.hideExtraColumns = !this.hideExtraColumns;
+        localStorage.setItem('paletteHideExtra', this.hideExtraColumns);
+        
+        const table = document.getElementById('validatorTable');
+        if (table) {
+            if (this.hideExtraColumns) {
+                table.classList.add('hide-extra');
+            } else {
+                table.classList.remove('hide-extra');
+            }
+        }
+        
+        this.updateToggleBtnUI();
+    }
+
+    updateToggleBtnUI() {
+        if (!this.toggleExtraBtn) return;
+        
+        const table = document.getElementById('validatorTable');
+        if (table) {
+            if (this.hideExtraColumns) {
+                table.classList.add('hide-extra');
+            } else {
+                table.classList.remove('hide-extra');
+            }
+        }
+
+        if (this.hideExtraColumns) {
+            this.toggleExtraBtn.innerHTML = '<i class="fas fa-eye"></i> Mostrar TQ-O-FY-FP';
+            this.toggleExtraBtn.style.borderColor = '#4ade80';
+            this.toggleExtraBtn.style.color = '#4ade80';
+        } else {
+            this.toggleExtraBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar TQ-O-FY-FP';
+            this.toggleExtraBtn.style.borderColor = '#a78bfa';
+            this.toggleExtraBtn.style.color = '#a78bfa';
+        }
     }
 
     async loadAssignedTxt() {
@@ -255,30 +303,32 @@ export class PaletteValidatorView {
         
         const listDiv = document.createElement('div');
         listDiv.id = 'assignmentsList';
-        listDiv.style.cssText = 'background: #0c0c12; border: 1px solid #2d3748; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem;';
+        listDiv.className = 'comparator-card assignments-mini-list';
         listDiv.innerHTML = `
-            <h4 style="color: #eab308; margin-bottom: 0.75rem; font-size: 0.9rem;">
+            <div class="info-title" style="color: #fbbf24;">
                 <i class="fas fa-tasks"></i> Otras Asignaciones Pendientes (${assignmentsToShow.length})
-            </h4>
-            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 ${assignmentsToShow.length === 0 ? '<div style="color:#6b7280; font-size:0.8rem; text-align:center; padding:0.5rem;">No hay más asignaciones pendientes</div>' : ''}
                 ${assignmentsToShow.map(assignment => {
                     const progress = assignment.progreso || 0;
                     return `
-                        <div class="assignment-item-select" data-id="${assignment.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1f1f2a; border: 1px solid #2d3748; border-radius: 8px; cursor: pointer;">
-                            <div style="flex: 1;">
-                                <strong style="color: #00e5ff;">${assignment.txt_nombre || assignment.txt_id}</strong>
-                                <div style="font-size: 0.7rem; color: #9ca3af;">📅 ${new Date(assignment.fecha_asignacion).toLocaleString()}</div>
-                                <div style="margin-top: 0.5rem;">
-                                    <div style="background: #2d3748; border-radius: 10px; height: 6px; width: 100%; overflow: hidden;">
-                                        <div style="background: linear-gradient(90deg, #00e5ff, #0099cc); width: ${progress}%; height: 100%; border-radius: 10px;"></div>
-                                    </div>
-                                    <div style="font-size: 0.65rem; color: #9ca3af; margin-top: 0.2rem;">Progreso: ${progress}%</div>
+                        <div class="assignment-mini-item" data-id="${assignment.id}">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                                <div class="mini-item-name">${this.escapeHtml(assignment.txt_nombre || assignment.txt_id)}</div>
+                                <button class="mini-upload-btn primary-border btn-load-assignment" data-id="${assignment.id}" style="padding: 0.2rem 0.6rem; font-size: 0.7rem; width: auto;">
+                                    <i class="fas fa-folder-open"></i> Cargar
+                                </button>
+                            </div>
+                            <div class="progress-container" style="margin-top: 0;">
+                                <div class="progress-bar-bg" style="height: 4px;">
+                                    <div class="progress-bar-fill" style="width: ${progress}%;"></div>
+                                </div>
+                                <div class="progress-text" style="font-size: 0.6rem;">
+                                    <span>Progreso</span>
+                                    <span>${progress}%</span>
                                 </div>
                             </div>
-                            <button class="btn-load-assignment" data-id="${assignment.id}" style="background: transparent; border: 1.5px solid #4ade80; color: #4ade80; padding: 0.3rem 0.8rem; border-radius: 6px; cursor: pointer; margin-left: 1rem;">
-                                <i class="fas fa-folder-open"></i> Cargar
-                            </button>
                         </div>
                     `;
                 }).join('')}
@@ -291,17 +341,6 @@ export class PaletteValidatorView {
             btn.onclick = (e) => {
                 e.stopPropagation();
                 const id = parseInt(btn.dataset.id);
-                const assignment = this.userAssignments.find(a => a.id === id);
-                if (assignment) {
-                    this.loadAssignmentContent(assignment);
-                }
-            };
-        });
-        
-        document.querySelectorAll('.assignment-item-select').forEach(item => {
-            item.onclick = (e) => {
-                if (e.target.classList.contains('btn-load-assignment')) return;
-                const id = parseInt(item.dataset.id);
                 const assignment = this.userAssignments.find(a => a.id === id);
                 if (assignment) {
                     this.loadAssignmentContent(assignment);
@@ -337,20 +376,26 @@ export class PaletteValidatorView {
             if (progressPercent) progressPercent.textContent = progress;
             
             const infoDiv = document.createElement('div');
-            infoDiv.className = 'assignment-info';
+            infoDiv.className = 'comparator-card assignment-info-card';
             infoDiv.id = 'currentAssignmentInfo';
-            infoDiv.style.cssText = 'background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.75rem;';
             infoDiv.innerHTML = `
-                <strong><i class="fas fa-tasks"></i> Asignación actual:</strong><br>
-                📄 Archivo: ${assignment.txt_nombre || assignment.txt_id}<br>
-                🖨️ Plotter: ${assignment.plotter}<br>
-                💬 Comentario: ${assignment.comentario || 'Sin comentario'}<br>
-                📅 Fecha: ${new Date(assignment.fecha_asignacion).toLocaleString()}
-                <div style="margin-top: 0.5rem;">
-                    <div style="background: #2d3748; border-radius: 10px; height: 6px; width: 100%; overflow: hidden;">
-                        <div id="progressBarFill" style="background: linear-gradient(90deg, #00e5ff, #0099cc); width: ${progress}%; height: 100%; border-radius: 10px;"></div>
+                <div class="info-title">
+                    <i class="fas fa-file-signature"></i> Asignación Activa
+                </div>
+                <div class="info-details">
+                    <div><span>Archivo:</span> ${assignment.txt_nombre || assignment.txt_id}</div>
+                    <div><span>Plotter:</span> ${assignment.plotter}</div>
+                    <div><span>Asignado:</span> ${new Date(assignment.fecha_asignacion).toLocaleDateString()}</div>
+                    <div style="margin-top: 0.5rem; font-style: italic;">"${assignment.comentario || 'Sin comentario'}"</div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div id="progressBarFill" class="progress-bar-fill" style="width: ${progress}%;"></div>
                     </div>
-                    <div style="font-size: 0.65rem; color: #9ca3af; margin-top: 0.2rem;">Progreso: <span id="progressPercent">${progress}</span>%</div>
+                    <div class="progress-text">
+                        <span>Validación Completada</span>
+                        <span><span id="progressPercent">${progress}</span>%</span>
+                    </div>
                 </div>
             `;
             
@@ -874,36 +919,65 @@ export class PaletteValidatorView {
     renderTable() {
         if (!this.tableBody) return;
         if (this.colors.length === 0) {
-            this.tableBody.innerHTML = '<tr><td colspan="13" class="empty-state">Seleccione un archivo TXT o una asignación para comenzar<\/td><\/tr>';
+            this.tableBody.innerHTML = '<tr><td colspan="12" class="empty-state">Seleccione un archivo TXT o una asignación para comenzar</td></tr>';
             this.checkButtonsState();
             return;
+        }
+        
+        const total = this.colors.length;
+        const locked = this.colors.filter(c => c.isLocked).length;
+        const pending = total - locked;
+        
+        // Actualizar badges de estadísticas
+        const statsBadges = document.getElementById('valStatsBadges');
+        if (statsBadges) {
+            statsBadges.innerHTML = `
+                <div class="stat-badge"><i class="fas fa-list"></i> Total: ${total}</div>
+                <div class="stat-badge success"><i class="fas fa-check-double"></i> Listos: ${locked}</div>
+                <div class="stat-badge warning"><i class="fas fa-clock"></i> Pendientes: ${pending}</div>
+            `;
         }
         
         this.tableBody.innerHTML = this.colors.map((color, index) => {
             const isLocked = color.isLocked;
             const disabledAttr = isLocked ? 'disabled' : '';
-            const statusBadge = isLocked ? '<span class="status-badge locked">✅ Bueno (🔒)</span>' : '<span class="status-badge pending">⏳ Pendiente</span>';
+            
+            const statusLabel = isLocked ? 'BUENO' : 'PENDIENTE';
+            const statusClass = isLocked ? 'status-ok' : 'status-warn';
+            
             const actionButton = isLocked 
-                ? `<button class="small-btn btn-modify" data-id="${color.id}" title="Modificar"><i class="fas fa-edit"></i></button>`
-                : `<button class="small-btn btn-lock" data-id="${color.id}" title="Marcar como bueno"><i class="fas fa-check-circle"></i></button>`;
-            const nameStyle = !color.isValid ? 'color: #f87171; text-decoration: line-through;' : '';
-            const nameTitle = !color.isValid ? `Original: ${color.originalName}` : '';
+                ? `<button class="btn-action-circle btn-unlock-warn" data-id="${color.id}" title="Modificar"><i class="fas fa-edit"></i></button>`
+                : `<button class="btn-action-circle btn-lock-ok" data-id="${color.id}" title="Marcar como bueno"><i class="fas fa-check"></i></button>`;
+            
+            const nameError = !color.isValid;
             
             return `
                 <tr class="${isLocked ? 'locked-row' : ''}" data-id="${color.id}">
-                    <td class="row-number">${index + 1}${isLocked ? ' 🔒' : ''}<\/td>
-                    <td><input type="text" class="color-name-input" value="${this.escapeHtml(color.name)}" style="${nameStyle}" title="${nameTitle}" disabled><\/td>
-                    <td><input type="text" class="nk-input" value="${this.escapeHtml(color.nk)}" disabled><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.c.toFixed(6)}" ${disabledAttr} data-field="cmyk_c" data-id="${color.id}" class="cmyk-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.m.toFixed(6)}" ${disabledAttr} data-field="cmyk_m" data-id="${color.id}" class="cmyk-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.y.toFixed(6)}" ${disabledAttr} data-field="cmyk_y" data-id="${color.id}" class="cmyk-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.cmyk.k.toFixed(6)}" ${disabledAttr} data-field="cmyk_k" data-id="${color.id}" class="cmyk-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.tq.toFixed(6)}" ${disabledAttr} data-field="channel_tq" data-id="${color.id}" class="channel-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.o.toFixed(6)}" ${disabledAttr} data-field="channel_o" data-id="${color.id}" class="channel-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.fy.toFixed(6)}" ${disabledAttr} data-field="channel_fy" data-id="${color.id}" class="channel-input"><\/td>
-                    <td><input type="number" step="0.000001" min="0" max="100" value="${color.channels.fp.toFixed(6)}" ${disabledAttr} data-field="channel_fp" data-id="${color.id}" class="channel-input"><\/td>
-                    <td class="status-cell">${statusBadge}<\/td>
-                    <td class="actions-cell">${actionButton}<\/td>
+                    <td class="row-number">${index + 1}${isLocked ? ' <i class="fas fa-lock" style="font-size:0.6rem; color:#10b981;"></i>' : ''}</td>
+                    <td>
+                        <div class="color-info-cell">
+                            <div class="color-name ${nameError ? 'error-text' : ''}" title="${nameError ? 'Original: ' + color.originalName : ''}">
+                                ${this.escapeHtml(color.name)}
+                            </div>
+                            <div class="color-meta">
+                                <span class="nk-pill ${nameError ? 'warning' : ''}">${this.escapeHtml(color.nk)}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td><input type="number" step="0.000001" value="${color.cmyk.c.toFixed(4)}" ${disabledAttr} data-field="cmyk_c" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.cmyk.m.toFixed(4)}" ${disabledAttr} data-field="cmyk_m" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.cmyk.y.toFixed(4)}" ${disabledAttr} data-field="cmyk_y" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.cmyk.k.toFixed(4)}" ${disabledAttr} data-field="cmyk_k" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.channels.tq.toFixed(4)}" ${disabledAttr} data-field="channel_tq" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.channels.o.toFixed(4)}" ${disabledAttr} data-field="channel_o" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.channels.fy.toFixed(4)}" ${disabledAttr} data-field="channel_fy" data-id="${color.id}" class="table-input"></td>
+                    <td><input type="number" step="0.000001" value="${color.channels.fp.toFixed(4)}" ${disabledAttr} data-field="channel_fp" data-id="${color.id}" class="table-input"></td>
+                    <td class="text-center">
+                        <span class="status-badge ${statusClass}">${statusLabel}</span>
+                    </td>
+                    <td class="text-center">
+                        ${actionButton}
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -916,6 +990,7 @@ export class PaletteValidatorView {
         this.attachInputEvents();
         this.attachActionEvents();
     }
+
     
     attachInputEvents() {
         const inputs = this.tableBody.querySelectorAll('input:not([disabled])');
@@ -949,14 +1024,14 @@ export class PaletteValidatorView {
     }
     
     attachActionEvents() {
-        const lockBtns = this.tableBody.querySelectorAll('.btn-lock');
+        const lockBtns = this.tableBody.querySelectorAll('.btn-lock-ok');
         lockBtns.forEach(btn => {
             btn.onclick = (e) => {
                 e.stopPropagation();
                 this.lockColor(parseInt(btn.dataset.id));
             };
         });
-        const modifyBtns = this.tableBody.querySelectorAll('.btn-modify');
+        const modifyBtns = this.tableBody.querySelectorAll('.btn-unlock-warn');
         modifyBtns.forEach(btn => {
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -1031,18 +1106,66 @@ export class PaletteValidatorView {
     }
     
     getExportData() {
+        console.log('📦 Iniciando preparación de datos para TXT...');
         const exportItems = [];
-        const processedColors = new Set();
-        for (const color of this.colors) {
-            const key = `${color.name}|${color.nk}`;
-            if (processedColors.has(key)) continue;
-            processedColors.add(key);
-            exportItems.push({
-                name: `${color.name} ${color.nk}`,
-                cmyk: [color.cmyk.c, color.cmyk.m, color.cmyk.y, color.cmyk.k],
-                lab: [color.lab.l, color.lab.a, color.lab.b]
-            });
+        const processedNames = new Set();
+        
+        // Funciones de ayuda desde el ámbito global
+        const _getAllEquivalentNames = window.getAllEquivalentNames;
+        const _getGroupIdForColor = window.getGroupIdForColor;
+
+        if (typeof _getAllEquivalentNames !== 'function') {
+            console.error('❌ Error: La función getAllEquivalentNames no está disponible.');
         }
+
+        this.colors.forEach(color => {
+            if (!color.name) return;
+
+            // 1. Obtener la familia completa para este color
+            let family = [];
+            if (typeof _getAllEquivalentNames === 'function') {
+                family = _getAllEquivalentNames(color.name);
+            }
+            
+            // Si no hay familia o la función falló, al menos exportamos el color actual
+            if (!family || family.length === 0) {
+                family = [color.name];
+            }
+
+            console.log(`🔍 Procesando color: ${color.name}. Familia encontrada: ${family.join(', ')}`);
+
+            // 2. Por cada miembro de la familia, crear una entrada en el TXT
+            family.forEach(member => {
+                const upperMember = member.toUpperCase().trim();
+                
+                // Evitamos duplicar nombres en el mismo archivo TXT
+                if (!processedNames.has(upperMember)) {
+                    processedNames.add(upperMember);
+                    
+                    // Armamos el nombre final con el NK original del color validado
+                    const finalName = `${member} ${color.nk}`;
+                    
+                    exportItems.push({
+                        name: finalName,
+                        baseName: member,
+                        cmyk: [color.cmyk.c, color.cmyk.m, color.cmyk.y, color.cmyk.k],
+                        lab: [color.lab.l, color.lab.a, color.lab.b],
+                        groupId: typeof _getGroupIdForColor === 'function' ? _getGroupIdForColor(member) : 'ZZZ'
+                    });
+                }
+            });
+        });
+        
+        // 3. ORDENAR: Agrupar por familia (groupId) y luego por nombre
+        exportItems.sort((a, b) => {
+            const groupA = a.groupId || 'ZZZ';
+            const groupB = b.groupId || 'ZZZ';
+            
+            if (groupA !== groupB) return groupA.localeCompare(groupB);
+            return a.name.localeCompare(b.name);
+        });
+
+        console.log(`✅ Preparación completa. ${exportItems.length} registros listos para el TXT.`);
         return exportItems;
     }
     

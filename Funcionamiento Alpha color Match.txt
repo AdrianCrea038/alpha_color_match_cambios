@@ -1,5 +1,5 @@
 ================================================================================
-          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V2.1)
+          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V4.0)
 ================================================================================
 
 Este documento describe la arquitectura, lógica y flujo de datos del sistema
@@ -13,62 +13,140 @@ en planta a través de un Dashboard Ejecutivo de alto rendimiento.
 
 2. ARQUITECTURA TÉCNICA
 -----------------------
-- Frontend: HTML5, CSS3 (Efectos Neón/RGB) y JavaScript Vanilla.
-- Backend/Base de Datos: Supabase (PostgreSQL) con sincronización Real-Time.
-- Gráficos: Chart.js 4.4.3 con optimización de actualización incremental.
-- Persistencia: Sistema híbrido entre Supabase y LocalStorage (Caché).
+- Frontend: HTML5, CSS3 (Efectos Neón/RGB) y JavaScript Vanilla (ES Modules).
+- Backend/Base de Datos: Supabase (PostgreSQL).
+  · Tabla 'equivalencias': columnas 'grupo_id' (texto) y 'colores' (array de texto).
+  · Tabla 'master_nks': columna 'nk_code' (texto). Es la fuente oficial de NKs válidos.
+- Gráficos: Chart.js 4.4.3.
+- Persistencia: Sistema híbrido Supabase + LocalStorage (caché).
 
-3. MÓDULOS PRINCIPALES
+3. MOTOR GLOBAL DE VALIDACIÓN (CRÍTICO - NO MODIFICAR SIN ENTENDER)
+--------------------------------------------------------------------
+Archivo: js/modules/nameValidator.js
+Expuesto globalmente como: window.isValidColorName(nombre) y window.isValidNK(nk)
+
+  · isValidColorName: Valida contra el catálogo de nombres en la tabla
+    'equivalencias' (columna 'colores'). MODO ESTRICTO: requiere coincidencia
+    exacta de caracteres (case-insensitive). Devuelve false si hay errores de
+    tipeo, espacios extra, guiones mal puestos, etc.
+
+  · isValidNK: Valida contra la columna 'nk_code' de la tabla 'master_nks'.
+    Comparación LITERAL y EXACTA (solo trim + toUpperCase). NO recorta el
+    prefijo "NK". Ejemplo: "NK675426" debe existir en master_nks.nk_code.
+
+Archivo: js/core/constants.js
+  · EQUIVALENCE_MAP: Map construido desde Supabase. La CLAVE se genera con
+    normalización agresiva: nombre.toUpperCase().replace(/[^A-Z0-9]/gi, '').
+    CRÍTICO: getAllEquivalentNames() debe usar esa misma normalización al buscar
+    (ya corregido en V4.0). Si no coincide, el exportador falla.
+
+  · getAllEquivalentNames(baseName): Devuelve todos los nombres del mismo grupo
+    de equivalencia. DEPENDE de que EQUIVALENCE_MAP esté cargado desde Supabase.
+
+4. MÓDULOS PRINCIPALES Y QUÉ HACE CADA UNO
+-------------------------------------------
 
    A. DASHBOARD EJECUTIVO (AVANCE DE PALETAS)
-      - Vista centralizada de KPIs: Coincidencias, errores CMYK, metas diarias.
-      - Gráficos: 
-        1. Resumen de Período (Dona): Participación por usuario.
-        2. Comparativa (Barras): Rendimiento individual por día/semana/mes.
-      - Modo Proyección: Interfaz minimalista diseñada para monitores de planta,
-        ocultando menús y filtros para enfoque total en el avance operativo.
-      - Optimización Anti-Flicker: Implementa detección de cambios por "Hash".
-        Si los datos no han cambiado en Supabase, la interfaz NO se recarga.
+      - Vista centralizada de KPIs.
+      - Optimización Anti-Flicker por Hash.
 
    B. BANDEJA DE ENTRADA (INBOX)
-      - Almacenamiento: Tabla 'inbox' en Supabase.
-      - Funcionalidad: Los usuarios envían resultados de validación a otros
-        departamentos. Los mensajes incluyen el contenido completo del .txt.
-      - Persistencia: Protegida contra limpieza de caché. Respaldo local activo.
+      - Gestión de mensajes técnicos .txt desde Supabase.
 
-   C. COMPARADOR Y VALIDADOR DE NOMBRES
-      - Motor de Comparación: Identifica coincidencias Exactas, Equivalentes
-        y Pendientes entre archivos Principales y Secundarios.
-      - Grupos de Equivalencia: Gestionados en la tabla 'equivalency_groups'.
-        Permite que nombres como "NEON GREEN" y "GREEN NEON" sean equivalentes.
-      - Smart Modal: Permite corregir nombres mal escritos al momento de cargar.
+   C. COMPARADOR PROFESIONAL / AUDITORÍA PRINCIPAL (js/main.js)
+      PROPÓSITO: Comparar dos archivos TXT (Maestro vs Secundario) para generar
+      un TXT fusionado y validado listo para producción.
 
-   D. DESARROLLO (DEVELOPMENT)
-      - Permite agregar nuevos colores a la base de datos maestra.
-      - Integración con NKs: Sugiere códigos NK existentes de la 'library_txt'.
+      FLUJO COMPLETO AL CARGAR UN ARCHIVO:
+      1. FileLoader parsea el TXT y extrae: name, nk (separados), baseName, cmyk, lab.
+      2. validateAndCorrectRecords (nameValidator.js) se ejecuta OBLIGATORIAMENTE:
+         · PASO 1 (Modal): Corregir Nombres inválidos (contra catálogo Supabase).
+         · PASO 2 (Modal): Corregir NKs inválidos (contra master_nks.nk_code).
+         · PASO 3 (Modal): Corregir valores CMYK fuera de rango 0-100.
+           - Muestra el valor original con 6 decimales para referencia.
+           - El botón de continuar está bloqueado hasta que todo sea válido.
+      3. compareFiles() (comparator.js) empareja los registros.
 
-4. SISTEMA DE SEGURIDAD Y BACKUP
---------------------------------
-- Backup Automático: Ejecuta una descarga completa de la base de datos cada
-  día a las 5:40 PM (17:40 hrs).
-- Tablas Incluidas: usuarios, assignments, validation_progress, library_txt,
+      LÓGICA DE COMPARACIÓN (comparator.js):
+      - Agrupa por NK EXACTO (color.nk, sin expresiones regulares invasivas).
+      - Dentro del mismo NK, empareja por NOMBRE BASE EXACTO (baseName).
+      - NO usa Family ID (grupo_id) para el emparejamiento. El grupo_id es
+        solo decorativo en la visualización (columna "GRUPO:" en la tabla).
+      - matchType: 'exact' (mismo nombre+NK), 'pending_primary' (solo en master),
+        'pending_secondary' (solo en secundario).
+      - compareStrict() (mode='ciclico') usa clave "NOMBRE|NK" en mayúsculas.
+
+      EXPORTACIÓN (exporter.js):
+      - buildExportItems: construye la lista de registros a exportar.
+      - expandWithEquivalents: por cada registro, llama getAllEquivalentNames()
+        para agregar TODOS los nombres equivalentes del grupo con el mismo CMYK/LAB.
+      - generateCGATSContent: genera el formato CGATS.17 con 6 decimales.
+      - El TXT exportado reunifica Nombre + NK dentro de comillas:
+        "2DH MEDIUM OLIVE NK675426"
+
+   D. AUDITORÍA DIRECTA (js/views/directAuditView.js)
+      PROPÓSITO: Cargar un solo TXT y auditarlo fila por fila con edición en vivo.
+      - Al cargar: llama ensureValidColorCatalogLoaded(true) para forzar
+        sincronización con Supabase (ignora caché).
+      - Modal de edición: valida en tiempo real nombre, NK y CMYK.
+      - Botón de exportación BLOQUEADO si hay cualquier error activo.
+
+   E. AUDITORÍA CÍCLICO 2 (js/views/cyclicAuditView.js)
+      PROPÓSITO: Comparación estricta de un archivo cíclico contra el maestro.
+      - Usa compareStrict() que empareja por "NOMBRE|NK" exacto.
+      - Panel de edición idéntico al de Auditoría Directa.
+      - Botón exportar bloqueado si existen errores.
+
+   F. COMPROBACIÓN / LINEARIZACIÓN (js/views/linearizationValidatorView.js)
+      PROPÓSITO: Validar un archivo de linearización contra el catálogo oficial.
+      - Sistema de diagnóstico por colores:
+        🔴 Rojo: Duplicados o valor CMYK > 100 o color inexistente en catálogo.
+        🔴 Rojo oscuro: NK no existe en master_nks.nk_code.
+        🟡 Amarillo: Error de nomenclatura (paréntesis con números).
+        🔵 Azul: Registro sin NK.
+        🟣 Púrpura: Inconsistencia entre colores del mismo NK (modo cíclico).
+
+   G. DESARROLLO (DEVELOPMENT)
+      - Gestión de la base de datos maestra de colores y NKs en Supabase.
+
+5. SISTEMA DE EXPORTACIÓN (CGATS.17)
+-------------------------------------
+- Re-ensamblaje: Al exportar el TXT, se re-une Nombre + NK dentro de comillas.
+- Precisión: 6 decimales para CMYK y LAB.
+- Expansión de Equivalentes: Por cada color del resultado, se exportan TODOS
+  los nombres equivalentes del mismo grupo de Supabase con el mismo CMYK/LAB.
+  BUG CORREGIDO EN V4.0: getAllEquivalentNames usaba normalización incorrecta
+  al buscar en EQUIVALENCE_MAP, devolviendo solo 1 nombre. Ya corregido.
+
+6. SINCRONIZACIÓN CON SUPABASE
+-------------------------------
+- ensureValidColorCatalogLoaded(forceRefresh): carga familias de equivalencias
+  y NKs maestros. Con forceRefresh=true ignora caché y descarga de nuevo.
+- Se llama SIEMPRE al cargar archivos en Auditoría Directa y Cíclico 2.
+- window.ALL_MASTER_NKS: array de todos los nk_code de master_nks (en mayúsculas).
+- window.EQUIVALENCE_MAP: Map del catálogo de equivalencias.
+- window.EQUIVALENCY_ROWS: Array de filas [groupId, nombre1, nombre2, ...].
+
+7. SISTEMA DE SEGURIDAD Y BACKUP
+---------------------------------
+- Backup Automático: Descarga diaria a las 5:40 PM (17:40 hrs).
+- Tablas: usuarios, assignments, validation_progress, library_txt,
   valid_color_names, inbox, equivalency_groups.
-- Versión de Datos: 1.1 (JSON format).
 
-5. CONFIGURACIÓN VISUAL (AESTHETICS)
-------------------------------------
-- Tema: Dark Mode con acentos en Electric Neon Green (#00ff88).
-- Botones: Implementan feedback táctil (scale 0.95) y glows RGB.
-
-6. REGLAS PARA FUTUROS CAMBIOS
-------------------------------
-1. Siempre usar .update() en Chart.js en lugar de destruir los gráficos.
-2. No usar innerHTML para actualizaciones frecuentes; preferir textContent
-   o comparadores de nodos para evitar parpadeos visuales.
-3. Al modificar la lógica de la bandeja, asegurar compatibilidad con los
-   campos 'is_read' y 'created_at' de la base de datos.
+8. REGLAS DE ORO PARA FUTUROS CAMBIOS (ESTRICTAS)
+---------------------------------------------------
+1. NUNCA concatenar el NK al nombre dentro de la lógica interna (solo al exportar).
+2. NUNCA ignorar el catálogo de Supabase en las vistas de validación/auditoría.
+3. Mantener los prefijos de familia (2DH, 20Q, 00A, TM, TNL) como parte del nombre.
+4. Cualquier cambio en validación de NOMBRES debe pasar por window.isValidColorName.
+5. Cualquier cambio en validación de NKs debe pasar por window.isValidNK.
+6. El EQUIVALENCE_MAP usa normalización agresiva en la clave (sin espacios/símbolos).
+   getAllEquivalentNames() DEBE usar la misma normalización al buscar.
+7. La comparación en el Comparador Principal (comparator.js) se hace por
+   NOMBRE EXACTO + NK EXACTO. El grupo_id NO dicta quién se empareja con quién.
+8. El PASO 3 de CMYK en validateAndCorrectRecords es OBLIGATORIO y BLOQUEANTE.
 
 ================================================================================
 Desarrollado por: Antigravity (Google Deepmind - Advanced Agentic Coding)
-Fecha de entrega: 19 de Abril, 2026
+Fecha de actualización: 01 de Mayo, 2026 (V4.0)
 ================================================================================

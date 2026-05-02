@@ -1,12 +1,13 @@
-// ============================================================
-// HISTORY VIEW - Bandeja de Entrada (antes Historial)
-// ============================================================
-
 export class HistoryView {
     constructor(app) {
         this.app = app;
         this.container = null;
         this.listContainer = null;
+        this.detailContainer = null;
+        this.detailEmpty = null;
+        this.detailContent = null;
+        this.layout = null;
+        this.selectedId = null;
         
         this.init();
     }
@@ -16,6 +17,10 @@ export class HistoryView {
         if (!this.container) return;
         
         this.listContainer = this.container.querySelector('#historyList');
+        this.detailContainer = this.container.querySelector('#mailDetailContainer');
+        this.detailEmpty = this.container.querySelector('#mailDetailEmpty');
+        this.detailContent = this.container.querySelector('#mailDetailContent');
+        this.layout = this.container.querySelector('#mailLayout');
         
         this.render();
         
@@ -25,148 +30,171 @@ export class HistoryView {
             }
         });
         
-        console.log('✅ HistoryView (Bandeja) inicializado');
+        console.log('✅ HistoryView (Bandeja) inicializado con Master-Detail');
     }
     
     render() {
         if (!this.listContainer) return;
         
         const items = this.app ? this.app.getInboxItems() : [];
+        const badge = document.getElementById('mailCountBadge');
+        if (badge) badge.textContent = items.length;
         
         if (items.length === 0) {
             this.listContainer.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📭</div>
-                    <p>No hay mensajes en la bandeja</p>
+                    <p>No hay mensajes</p>
                 </div>
             `;
+            this.showEmpty();
             return;
         }
         
         this.listContainer.innerHTML = items.map(item => {
-            const date = new Date(item.date);
-            const dateStr = date.toLocaleString();
-            const statusBadge = item.isRead 
-                ? '<span class="status-badge read" style="background:#15803d; color:white; padding:0.2rem 0.5rem; border-radius:1rem; font-size:0.7rem;">✅ Leído</span>'
-                : '<span class="status-badge unread" style="background:#b45309; color:white; padding:0.2rem 0.5rem; border-radius:1rem; font-size:0.7rem;">📩 No leído</span>';
-            
-            const actionButton = item.isRead
-                ? `<button class="small-btn btn-mark-unread" data-id="${item.id}" style="background:#b45309; color:white;"><i class="fas fa-envelope"></i> Marcar como no leído</button>`
-                : `<button class="small-btn btn-mark-read" data-id="${item.id}" style="background:#15803d; color:white;"><i class="fas fa-check-circle"></i> Marcar como leído</button>`;
+            const date = new Date(item.created_at || item.date);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const isRead = item.is_read || item.read;
+            const activeClass = this.selectedId === item.id ? 'active' : '';
+            const unreadClass = !isRead ? 'unread' : '';
             
             return `
-                <div class="history-item" data-id="${item.id}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                        <strong><i class="fas fa-file-alt"></i> ${this.escapeHtml(item.filename)}</strong>
-                        ${statusBadge}
+                <div class="mail-item ${activeClass} ${unreadClass}" data-id="${item.id}">
+                    <div class="mail-item-header">
+                        <span class="mail-item-title">${this.escapeHtml(item.filename)}</span>
+                        <span class="mail-item-date">${timeStr}</span>
                     </div>
-                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: #1e1e2c; border-radius: 0.5rem;">
-                        <div><strong>Enviado por:</strong> ${this.escapeHtml(item.user)}</div>
-                        <div><strong>Fecha:</strong> ${dateStr}</div>
-                        <div><strong>Plotter:</strong> ${item.plotter}</div>
-                        <div><strong>Colores:</strong> ${item.colorCount}</div>
-                        <div><strong>Motivo:</strong> ${this.escapeHtml(item.reason)}</div>
-                    </div>
-                    <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button class="small-btn btn-view-content" data-id="${item.id}" style="background:#2d3748; color:white;"><i class="fas fa-eye"></i> Ver contenido</button>
-                        ${actionButton}
-                        <button class="small-btn btn-load-to-secondary" data-id="${item.id}" style="background:#2d4ed6; color:white;"><i class="fas fa-upload"></i> Cargar a Secundario</button>
+                    <div class="mail-item-preview">
+                        ${item.plotter ? `Plotter ${item.plotter} • ` : ''} ${this.escapeHtml(item.reason || 'Sin motivo')}
                     </div>
                 </div>
             `;
         }).join('');
         
         this.attachEvents();
+        
+        // Si hay un item seleccionado, asegurarse de que se vea el detalle (útil al refrescar)
+        if (this.selectedId) {
+            const selectedItem = items.find(i => i.id === this.selectedId);
+            if (selectedItem) this.showDetail(selectedItem);
+        }
     }
     
     attachEvents() {
-        this.listContainer.querySelectorAll('.btn-view-content').forEach(btn => {
-            btn.onclick = () => {
-                const id = parseInt(btn.dataset.id);
-                const item = this.app.getInboxItems().find(i => i.id === id);
+        this.listContainer.querySelectorAll('.mail-item').forEach(itemEl => {
+            itemEl.onclick = () => {
+                const id = itemEl.dataset.id;
+                const items = this.app.getInboxItems();
+                const item = items.find(i => String(i.id) === String(id));
                 if (item) {
-                    this.showContentModal(item);
+                    this.selectedId = item.id;
+                    this.showDetail(item);
+                    
+                    // Marcar como leído si no lo está
+                    if (!(item.is_read || item.read)) {
+                        this.app.markInboxAsRead(item.id);
+                        // No llamamos a render() inmediatamente para no perder el estado del scroll o animación, 
+                        // pero actualizamos la clase localmente
+                        itemEl.classList.remove('unread');
+                        this.app.updateInboxBell();
+                    }
+                    
+                    // Actualizar clase activa
+                    this.listContainer.querySelectorAll('.mail-item').forEach(el => el.classList.remove('active'));
+                    itemEl.classList.add('active');
                 }
             };
         });
+    }
+    
+    showDetail(item) {
+        if (!this.detailContent || !this.detailEmpty) return;
         
-        this.listContainer.querySelectorAll('.btn-mark-read').forEach(btn => {
-            btn.onclick = () => {
-                const id = parseInt(btn.dataset.id);
-                this.app.markInboxAsRead(id);
-                this.render();
+        this.detailEmpty.style.display = 'none';
+        this.detailContent.style.display = 'flex';
+        
+        const date = new Date(item.created_at || item.date);
+        
+        this.detailContent.innerHTML = `
+            <div class="mail-detail-header">
+                <button class="btn-back-to-list" id="btnBackToList">
+                    <i class="fas fa-arrow-left"></i> Volver a la lista
+                </button>
+                <div class="mail-detail-title">
+                    <i class="fas fa-file-alt"></i> ${this.escapeHtml(item.filename)}
+                </div>
+                <div class="mail-detail-meta">
+                    <div><strong>De:</strong> ${this.escapeHtml(item.user || item.sender || 'Sistema')}</div>
+                    <div><strong>Fecha:</strong> ${date.toLocaleString()}</div>
+                    <div><strong>Plotter:</strong> ${item.plotter || 'N/A'} | <strong>Colores:</strong> ${item.color_count || item.colorCount || 0}</div>
+                    <div style="margin-top: 0.5rem; color: #fbbf24;"><strong>Motivo:</strong> ${this.escapeHtml(item.reason || 'No especificado')}</div>
+                </div>
+            </div>
+            <div class="mail-detail-body">
+                <div class="mail-content-raw">${this.escapeHtml(item.content)}</div>
+            </div>
+            <div class="mail-detail-actions">
+                <button class="btn-primary btn-load-to-secondary" data-id="${item.id}" style="background:#2d4ed6;">
+                    <i class="fas fa-upload"></i> CARGAR A SECUNDARIO
+                </button>
+                <button class="btn-secondary btn-mark-unread" data-id="${item.id}">
+                    <i class="fas fa-envelope"></i> Marcar como no leído
+                </button>
+            </div>
+        `;
+        
+        // Manejo de responsive (mostrar detalle, ocultar lista)
+        if (this.layout) {
+            this.layout.classList.add('showing-detail');
+        }
+        
+        // Eventos del detalle
+        const backBtn = this.detailContent.querySelector('#btnBackToList');
+        if (backBtn) {
+            backBtn.onclick = () => {
+                this.layout.classList.remove('showing-detail');
+                this.selectedId = null;
+                this.listContainer.querySelectorAll('.mail-item').forEach(el => el.classList.remove('active'));
             };
-        });
+        }
         
-        this.listContainer.querySelectorAll('.btn-mark-unread').forEach(btn => {
-            btn.onclick = () => {
-                const id = parseInt(btn.dataset.id);
-                this.app.markInboxAsUnread(id);
+        const loadBtn = this.detailContent.querySelector('.btn-load-to-secondary');
+        if (loadBtn) {
+            loadBtn.onclick = () => this.loadToSecondary(item);
+        }
+        
+        const unreadBtn = this.detailContent.querySelector('.btn-mark-unread');
+        if (unreadBtn) {
+            unreadBtn.onclick = () => {
+                this.app.markInboxAsUnread(item.id);
                 this.render();
-            };
-        });
-        
-        this.listContainer.querySelectorAll('.btn-load-to-secondary').forEach(btn => {
-            btn.onclick = () => {
-                const id = parseInt(btn.dataset.id);
-                const item = this.app.getInboxItems().find(i => i.id === id);
-                if (item) {
-                    this.loadToSecondary(item);
+                if (window.innerWidth <= 900) {
+                    this.layout.classList.remove('showing-detail');
                 }
             };
-        });
+        }
+    }
+    
+    showEmpty() {
+        if (this.detailContent && this.detailEmpty) {
+            this.detailContent.style.display = 'none';
+            this.detailEmpty.style.display = 'flex';
+        }
     }
     
     loadToSecondary(item) {
         if (this.app) {
             const success = this.app.loadSecondaryFromInbox(item.content, item.filename);
             if (success) {
-                alert(`✅ Archivo "${item.filename}" cargado a Datos Secundario.\nAhora puedes hacer clic en COMPARAR.`);
+                window.showNotification('Éxito', `Archivo "${item.filename}" cargado.`, 'success');
+                // Opcional: switch a vista comparador
+                if (confirm('¿Deseas ir al Comparador ahora?')) {
+                    this.app.switchView('comparator');
+                }
             } else {
-                alert('❌ Error al cargar el archivo a Datos Secundario.');
+                alert('❌ Error al cargar el archivo.');
             }
         }
-    }
-    
-    showContentModal(item) {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width: 900px; max-height: 85vh;">
-                <div class="modal-header" style="background: #2d4ed6;">
-                    <h3 style="color: white;"><i class="fas fa-file-alt"></i> ${this.escapeHtml(item.filename)}</h3>
-                    <button class="modal-close" style="color: white;">&times;</button>
-                </div>
-                <div class="modal-body" style="overflow: auto; max-height: 65vh;">
-                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #1e1e2c; border-radius: 0.5rem;">
-                        <strong>📊 Información:</strong><br>
-                        Enviado por: ${this.escapeHtml(item.user)}<br>
-                        Fecha: ${new Date(item.date).toLocaleString()}<br>
-                        Plotter: ${item.plotter}<br>
-                        Colores: ${item.colorCount}<br>
-                        Motivo: ${this.escapeHtml(item.reason)}
-                    </div>
-                    <div style="font-family: monospace; font-size: 0.7rem; background: #0a0a0a; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap;">
-                        <pre style="margin: 0; color: #e2e8f0;">${this.escapeHtml(item.content)}</pre>
-                    </div>
-                </div>
-                <div class="modal-buttons">
-                    <button class="btn btn-secondary close-modal" style="color:white;">Cerrar</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        setTimeout(() => modal.classList.add('active'), 10);
-        
-        const closeModal = () => {
-            modal.classList.remove('active');
-            setTimeout(() => modal.remove(), 300);
-        };
-        
-        modal.querySelector('.modal-close').onclick = closeModal;
-        modal.querySelector('.close-modal').onclick = closeModal;
-        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
     }
     
     escapeHtml(str) {

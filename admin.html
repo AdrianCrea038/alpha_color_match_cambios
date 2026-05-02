@@ -24,6 +24,9 @@
             <div class="admin-section-header">
                 <h3><i class="fas fa-users"></i> Gestión de Usuarios</h3>
                 <button id="addUserBtn" class="btn-primary"><i class="fas fa-plus"></i> Crear Usuario</button>
+                <button id="migrateMasterBtn" style="display:none; align-items:center; gap:8px; background:linear-gradient(135deg,#7c3aed,#4c1d95); border:none; color:white; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:700; font-size:0.85rem;">
+                    <i class="fas fa-layer-group"></i> Establecer Jerarquía MASTER/COMPLETO
+                </button>
             </div>
             <div class="admin-table-wrapper">
                 <table class="admin-table">
@@ -319,6 +322,48 @@
             auth.logout();
             window.location.href = 'login.html';
         };
+
+        // Botón de migración MASTER → COMPLETO (solo visible para el MASTER real)
+        const migrateBtn = document.getElementById('migrateMasterBtn');
+        if (currentUser.isMaster) {
+            migrateBtn.style.display = 'inline-flex';
+            migrateBtn.onclick = async () => {
+                const { supabase } = await import('./js/core/supabaseClient.js');
+                const users = await auth.getAllUsers();
+                const otherMasters = users.filter(u => u.is_master && u.id !== currentUser.id);
+
+                if (otherMasters.length === 0) {
+                    alert('ℹ️ No hay otros usuarios MASTER que convertir. La jerarquía ya está correcta.');
+                    return;
+                }
+
+                const names = otherMasters.map(u => u.username).join('\n  • ');
+                if (!confirm(`⚠️ ESTABLECER JERARQUÍA\n\nEstos usuarios cambiarán de MASTER → COMPLETO:\n  • ${names}\n\nMantendrán acceso a todas las secciones, pero SOLO TÚ (MASTER) podrás editarlos.\n\n¿Continuar?`)) return;
+
+                migrateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+                migrateBtn.disabled = true;
+
+                let ok = 0, fail = 0;
+                for (const user of otherMasters) {
+                    const { error } = await supabase
+                        .from('usuarios')
+                        .update({ is_master: false, permisos: ALL_PERMISSIONS })
+                        .eq('id', user.id);
+                    if (error) { console.error('Error:', user.username, error); fail++; }
+                    else ok++;
+                }
+
+                migrateBtn.innerHTML = '<i class="fas fa-layer-group"></i> Establecer Jerarquía MASTER/COMPLETO';
+                migrateBtn.disabled = false;
+
+                if (ok > 0) {
+                    alert(`✅ ${ok} usuario(s) convertidos a COMPLETO correctamente.${fail > 0 ? `\n⚠️ ${fail} fallaron, revisa la consola.` : ''}`);
+                    await renderUsers();
+                } else {
+                    alert('❌ No se completó la migración. Revisa la consola.');
+                }
+            };
+        }
         
         renderUsers();
     </script>

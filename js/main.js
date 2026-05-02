@@ -1,13 +1,23 @@
 // js/main.js
 import { Auth } from './core/auth.js';
 import { loadFile, parseTxtContent } from './modules/fileLoader.js';
-import { validateAndCorrectRecords } from './modules/nameValidator.js';
-import { compareFiles } from './modules/comparator.js';
-import { renderResults } from './modules/resultsRenderer.js';
+import { validateAndCorrectRecords, setAppInstance, ensureValidColorCatalogLoaded } from './modules/nameValidator.js';
+import { compareFiles as compareLogic } from './modules/comparator.js';
+import { renderResults as renderResultsUI } from './modules/resultsRenderer.js';
 import { exportResults } from './modules/exporter.js';
 import { clearAllCache, saveComparatorState, loadComparatorState } from './modules/cacheManager.js';
-import { showNotification } from './core/utils.js';
+import { showNotification, escapeHtml } from './core/utils.js';
 import { findDuplicateGroups, showDuplicateModal } from './modules/duplicateHandler.js';
+import { showFusionWizard } from './modules/fusionWizard.js';
+import { initAuditHandler } from './modules/auditHandler.js';
+
+// Hacer globales para acceso desde otros módulos y eventos inline
+window.showNotification = showNotification;
+window.escapeHtml = escapeHtml;
+window.FileLoader = {
+    parseTxt: parseTxtContent,
+    loadFile: loadFile
+};
 
 // Importar vistas
 import { PaletteValidatorView } from './views/paletteValidatorView.js';
@@ -17,11 +27,12 @@ import { AssignmentView } from './views/assignmentView.js';
 import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
 import { DashboardView } from './views/dashboardView.js';
-import { LinearizationValidatorView } from './views/linearizationValidatorView.js';
+import { CyclicHubView } from './views/cyclicHubView.js';
 import { supabase, getAllMasterNks, getCustomValidColorNames } from './core/supabaseClient.js';
 
 class AlphaColorMatch {
     constructor() {
+        window.app = this;
         this.auth = new Auth();
         
         this.primaryData = [];
@@ -34,6 +45,7 @@ class AlphaColorMatch {
         this.groupSelections = new Map();
         this.manualGroupSelections = new Set();
         this.inboxItems = [];
+        this.pendingAudit = new Map(); // [id] -> record con errores
         
         // Vistas
         this.paletteValidatorView = null;
@@ -43,9 +55,14 @@ class AlphaColorMatch {
         this.adminView = null;
         this.reportsView = null;
         this.dashboardView = null;
-        this.linearizationValidatorView = null;
+        this.cyclicHubView = null;
+
+        // Inicializar el validador con la instancia de la app
+        setAppInstance(this);
+        initAuditHandler(this);
         
         this.init();
+        window.app = this;
     }
     
     async init() {
@@ -59,6 +76,7 @@ class AlphaColorMatch {
         await this.loadMasterData();
         this.initViews();
         this.initMenuNavigation();
+
         this.bindEvents();
         await this.loadInbox();
         
@@ -79,14 +97,14 @@ class AlphaColorMatch {
         
         if (this.primaryData.length > 0) {
             this.renderDataList('primary', this.primaryData);
-            this.updateFileInfo('primary', 'Datos cargados desde caché', this.primaryData.length);
+            this.updateFileInfo('primary', this.primaryFileName || 'Archivo Recuperado', this.primaryData.length);
         }
         if (this.secondaryData.length > 0) {
             this.renderDataList('secondary', this.secondaryData);
-            this.updateFileInfo('secondary', 'Datos cargados desde caché', this.secondaryData.length);
+            this.updateFileInfo('secondary', this.secondaryFileName || 'Archivo Recuperado', this.secondaryData.length);
         }
         if (this.results.length > 0) {
-            renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+            this.renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
             this.validateExportReady();
         }
         
@@ -95,13 +113,39 @@ class AlphaColorMatch {
 
     async loadMasterData() {
         try {
-            // Cargar NKs maestros
+            // Sincronizar catálogos y EQUIVALENCIAS desde DB (Supabase)
+            console.log('📡 Sincronizando catálogos maestros y equivalencias...');
+            await ensureValidColorCatalogLoaded();
+            
+            // Cargar NKs maestros (Fallback/Seguridad)
             window.ALL_MASTER_NKS = await getAllMasterNks();
-            // Cargar nombres de colores válidos
-            window.ALL_VALID_COLOR_NAMES = await getCustomValidColorNames();
-            console.log(`📡 Catálogos cargados: ${window.ALL_MASTER_NKS.length} NKs y ${window.ALL_VALID_COLOR_NAMES.length} nombres.`);
+            
+            // NUEVO: Cargar todos los registros maestros (CMYK) para referencia en auditoría
+            try {
+                const { getTxtVersions } = await import('./core/supabaseClient.js');
+                const versions = await getTxtVersions();
+                const activeTxts = versions.filter(v => v.activo);
+                let allMaster = [];
+                const { parseTxtContent } = await import('./modules/fileLoader.js');
+                
+                for (const txt of activeTxts) {
+                    const records = parseTxtContent(txt.contenido);
+                    if (records.length > 0) {
+                        allMaster = allMaster.concat(records);
+                        console.log(`📦 Cargados ${records.length} colores de: ${txt.nombre}`);
+                    } else {
+                        console.warn(`⚠️ El archivo maestro "${txt.nombre}" devolvió 0 registros. Posible error de formato.`);
+                    }
+                }
+                window.ALL_MASTER_RECORDS = allMaster;
+                console.log(`✅ TOTAL: ${allMaster.length} registros maestros en memoria.`);
+            } catch (e) {
+                console.warn('⚠️ No se pudieron cargar los registros maestros para referencia:', e);
+            }
+
+            console.log('✅ Catálogos sincronizados desde Supabase');
         } catch (error) {
-            console.error('❌ Error cargando catálogos:', error);
+            console.error('Error al sincronizar catálogos:', error);
             window.ALL_MASTER_NKS = [];
             window.ALL_VALID_COLOR_NAMES = [];
         }
@@ -117,6 +161,8 @@ class AlphaColorMatch {
             this.deletedPending = saved.deletedPending;
             this.groupSelections = saved.groupSelections;
             this.manualGroupSelections = saved.manualGroupSelections;
+            this.primaryFileName = saved.primaryFileName || '';
+            this.secondaryFileName = saved.secondaryFileName || '';
         }
     }
     
@@ -124,7 +170,8 @@ class AlphaColorMatch {
         saveComparatorState(
             this.primaryData, this.secondaryData, this.results,
             this.selectedPending, this.deletedPending,
-            this.groupSelections, this.manualGroupSelections
+            this.groupSelections, this.manualGroupSelections,
+            this.primaryFileName, this.secondaryFileName
         );
     }
     
@@ -168,21 +215,104 @@ class AlphaColorMatch {
         const exportBtn = document.getElementById('exportBtn');
         const replaceAllSecondaryBtn = document.getElementById('replaceAllSecondaryBtn');
         const clearCacheBtn = document.getElementById('clearCacheBtn');
+
         
         if (primaryInput) primaryInput.addEventListener('change', (e) => this.loadPrimaryFile(e));
         if (secondaryInput) secondaryInput.addEventListener('change', (e) => this.loadSecondaryFile(e));
-        if (compareBtn) compareBtn.addEventListener('click', () => this.compareFiles());
         if (exportBtn) exportBtn.addEventListener('click', () => this.exportFiles());
         if (replaceAllSecondaryBtn) replaceAllSecondaryBtn.addEventListener('click', () => this.replaceAllWithSecondary());
         if (clearCacheBtn) clearCacheBtn.addEventListener('click', () => this.clearCache());
+        
+        const keepAllMasterBtn = document.getElementById('keepAllMasterBtn');
+        const addAllSecBtn = document.getElementById('addAllSecondaryBtn');
+
+        
+        if (addAllSecBtn) {
+            addAllSecBtn.onclick = () => this.addAllSecondaryItems();
+        }
+
+        // Eventos de Colapso Unificado (Triángulo)
+        const toggleBtn = document.getElementById('toggleDataGridBtn');
+        const container = document.getElementById('dataGridContainer');
+        console.log('🔍 Buscando elementos de toggle:', { toggleBtn: !!toggleBtn, container: !!container });
+        
+        if (toggleBtn && container) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('📐 Toggling data grid state...');
+                container.classList.toggle('collapsed');
+                toggleBtn.classList.toggle('collapsed');
+                
+                // Forzar reflow para asegurar que la animación se dispare
+                void container.offsetHeight;
+            });
+        } else {
+            console.error('❌ No se encontró toggleBtn o dataGridContainer');
+        }
+    }
+
+
+    keepAllMasterItems() {
+        if (!this.results || this.results.length === 0) return;
+        
+        let count = 0;
+        for (const item of this.results) {
+            if (item.matchType === 'pending_primary') {
+                this.selectedPending.add(item.id);
+                this.deletedPending.delete(item.id);
+                count++;
+            }
+        }
+        
+        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.validateExportReady();
+        window.showNotification('Acción Masiva', `Se conservarán ${count} colores del archivo Master.`, 'success');
     }
     
+    addAllSecondaryItems() {
+        if (!this.results || this.results.length === 0) return;
+        
+        const btn = document.getElementById('addAllSecondaryBtn');
+        const originalContent = btn.innerHTML;
+        
+        let count = 0;
+        for (const item of this.results) {
+            if (item.matchType === 'pending_secondary') {
+                if (!this.selectedPending.has(item.id)) {
+                    this.selectedPending.add(item.id);
+                    this.deletedPending.delete(item.id);
+                    count++;
+                }
+            }
+        }
+        
+        // Feedback visual en el botón
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> ¡LISTO! ' + count + ' Agregados';
+            btn.style.background = '#059669'; // Verde más oscuro/intenso
+            btn.style.transform = 'scale(1.05)';
+            
+            setTimeout(() => {
+                btn.style.transform = '';
+                // El renderResults se encargará de deshabilitarlo si ya no hay pendientes
+                renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+            }, 600);
+        } else {
+            renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        }
+        
+        this.validateExportReady();
+        window.showNotification('Acción Masiva', `Se agregaron ${count} colores nuevos satisfactoriamente.`, 'success');
+    }
+
     async loadPrimaryFile(event) {
         const file = event.target.files[0];
         if (!file) return;
         
         try {
+            // ELIMINADA CARGA RÁPIDA: Todo archivo debe ser validado estrictamente
             const result = await this.processFileWithValidation(file, 'primary');
+
             if (result) {
                 this.primaryData = result.records;
                 this.primaryFileName = result.fileName;
@@ -190,11 +320,10 @@ class AlphaColorMatch {
                 this.renderDataList('primary', this.primaryData);
                 this.saveCurrentState();
                 
-                if (result.correctionsApplied > 0 || result.duplicatesResolved > 0) {
-                    showNotification('Archivo Cargado', `Se procesaron ${this.primaryData.length} registros. (Correcciones: ${result.correctionsApplied}, Duplicados: ${result.duplicatesResolved})`, 'success');
-                } else {
-                    showNotification('Archivo Cargado', `Se cargaron ${this.primaryData.length} registros correctamente.`, 'success');
-                }
+                window.showNotification('Archivo Cargado', `Master: ${this.primaryData.length} registros.`, 'success');
+                
+                // Comparación automática
+                if (this.secondaryData.length > 0) this.compareFiles();
             }
         } catch (error) {
             console.error('❌ Error:', error);
@@ -207,6 +336,7 @@ class AlphaColorMatch {
         if (!file) return;
         
         try {
+            // El secundario SIEMPRE se valida estrictamente en ambos modos
             const result = await this.processFileWithValidation(file, 'secondary');
             if (result) {
                 this.secondaryData = result.records;
@@ -214,19 +344,11 @@ class AlphaColorMatch {
                 this.updateFileInfo('secondary', result.fileName, this.secondaryData.length);
                 this.renderDataList('secondary', this.secondaryData);
                 
-                // Guardar estadísticas para el log de comparación
-                localStorage.setItem('lastFileLoadStats', JSON.stringify({
-                    corrections: result.correctionsApplied,
-                    duplicates: result.duplicatesResolved
-                }));
-
                 this.saveCurrentState();
+                window.showNotification('Archivo de Cambios Cargado', `Listo: ${this.secondaryData.length} registros validados.`, 'success');
                 
-                if (result.correctionsApplied > 0 || result.duplicatesResolved > 0) {
-                    showNotification('Archivo Cargado', `Se procesaron ${this.secondaryData.length} registros. (Correcciones: ${result.correctionsApplied}, Duplicados: ${result.duplicatesResolved})`, 'success');
-                } else {
-                    showNotification('Archivo Cargado', `Se cargaron ${this.secondaryData.length} registros correctamente.`, 'success');
-                }
+                // Comparación automática
+                if (this.primaryData.length > 0) this.compareFiles();
             }
         } catch (error) {
             console.error('❌ Error:', error);
@@ -238,7 +360,7 @@ class AlphaColorMatch {
         console.log(`📁 Procesando archivo ${fileType}: ${file.name}`);
         const { records: rawRecords, fileName } = await loadFile(file, true); 
         
-        // 1. Calcular sugerencia de NK basado en lo predominante en el archivo
+        // 1. Calcular sugerencia de NK
         const nkCounts = {};
         rawRecords.forEach(r => {
             if (r.nk) {
@@ -248,22 +370,20 @@ class AlphaColorMatch {
         });
         const suggestedNk = Object.entries(nkCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 
-        // 2. Detectar duplicados y mala nomenclatura básica
+        // 2. Detectar problemas
         const duplicateGroups = findDuplicateGroups(rawRecords);
         const hasParentheses = rawRecords.some(r => /\([^)]*\)/.test(r.name)); 
-        
-        // 3. NUEVO: Detectar si faltan NKs según la tabla maestra
         const masterNks = (window.ALL_MASTER_NKS || []).map(n => n.toUpperCase());
         const hasMissingNks = rawRecords.some(r => !r.nk || (masterNks.length > 0 && !masterNks.includes(r.nk.toUpperCase())));
 
         if (duplicateGroups.length > 0 || hasParentheses || hasMissingNks) {
-            showNotification('Auditoría de Archivo', `Se detectaron problemas que requieren su atención. Iniciando asistente...`, 'info');
+            window.showNotification('Auditoría de Archivo', `Se detectaron problemas en ${fileType}.`, 'info');
         }
 
         let currentRecords = [...rawRecords];
         let duplicatesResolved = 0;
 
-        // 4. Resolver Duplicados
+        // 3. Resolver Duplicados
         if (duplicateGroups.length > 0) {
             const indicesToRemove = await showDuplicateModal(duplicateGroups);
             if (indicesToRemove.length > 0) {
@@ -272,29 +392,50 @@ class AlphaColorMatch {
             }
         }
 
-        // 5. Resolver Nombres Mal Escritos y NKs Faltantes
-        let correctionsApplied = 0;
-        const onCorrection = (oldName, newName, reason) => {
-            correctionsApplied++;
-            this.saveCorrectionHistory(oldName, newName, reason);
-        };
-
-        const validationResult = await validateAndCorrectRecords(currentRecords, fileType, onCorrection, suggestedNk);
+        // 4. Auditoría Interactiva (Ventana Emergente)
+        const validationResult = await validateAndCorrectRecords(currentRecords, fileType, { silent: false });
         
-        if (validationResult.records.length === 0 && currentRecords.length > 0) {
-            return null; // Cancelado
+        if (validationResult.cancelled) {
+            this.clearFile(fileType);
+            return;
+        }
+        
+        // Limpiar auditorías anteriores para este archivo
+        for (const [id, rec] of this.pendingAudit.entries()) {
+            if (rec._fileType === fileType) this.pendingAudit.delete(id);
+        }
+        
+        currentRecords = validationResult.records;
+        if (currentRecords.length === 0) {
+            this.clearFile(fileType);
+            return;
+        }
+
+        // 5. RE-VALIDACIÓN DE DUPLICADOS (Crucial después de correcciones)
+        const finalDuplicateGroups = findDuplicateGroups(currentRecords);
+        if (finalDuplicateGroups.length > 0) {
+            window.showNotification('Duplicados Detectados', 'Las correcciones de nombre generaron duplicados. Por favor, resuélvalos.', 'warning');
+            const indicesToRemove = await showDuplicateModal(finalDuplicateGroups);
+            if (indicesToRemove.length > 0) {
+                currentRecords = currentRecords.filter((_, idx) => !indicesToRemove.includes(idx));
+                duplicatesResolved += indicesToRemove.length;
+            }
         }
 
         return {
-            records: validationResult.records,
+            records: currentRecords,
             fileName,
-            correctionsApplied,
+            correctionsApplied: validationResult.correctionsApplied || 0,
             duplicatesResolved,
             totalOriginal: rawRecords.length
         };
     }
     
-    compareFiles() {
+    renderResults() {
+        renderResultsUI(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+    }
+
+    async compareFiles() {
         if (this.primaryData.length === 0) {
             alert('⚠️ Cargue archivo principal primero.');
             return;
@@ -305,31 +446,36 @@ class AlphaColorMatch {
         }
         
         console.log('🔍 Comparando archivos...');
-        console.log('Primary:', this.primaryData.length, 'colores');
-        console.log('Secondary:', this.secondaryData.length, 'colores');
         
         this.selectedPending.clear();
         this.deletedPending.clear();
         this.groupSelections.clear();
         this.manualGroupSelections.clear();
         
-        this.results = compareFiles(this.primaryData, this.secondaryData);
-        console.log('📊 Resultados:', this.results.length);
+        this.results = compareLogic(this.primaryData, this.secondaryData);
         
-        // Guardar métricas iniciales de la sesión (se actualizarán al exportar si es necesario)
+        // --- AUDITORÍA FINAL: AUTO-AGREGAR MAESTRO ---
+        // Si el color está en el principal pero no en el secundario, 
+        // se agrega solo para no obligar al usuario a hacer miles de clics.
+        this.results.forEach(item => {
+            if (item.matchType === 'pending_primary') {
+                this.selectedPending.add(item.id);
+            }
+        });
+        // ---------------------------------------------
+
         this.logComparisonSession();
-        
-        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.renderResults();
         this.validateExportReady();
         this.saveCurrentState();
         
-        showNotification('Comparación completada', `${this.results.length} registros procesados`, 'success');
+        window.showNotification('Proceso completado', `${this.results.length} registros listos.`, 'success');
     }
     
     selectGroup(groupId, source) {
         this.groupSelections.set(groupId, source);
         this.manualGroupSelections.add(groupId);
-        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.renderResults();
         this.validateExportReady();
         this.saveCurrentState();
     }
@@ -346,7 +492,7 @@ class AlphaColorMatch {
         for (const groupId of groups) {
             this.groupSelections.set(groupId, 'secondary');
         }
-        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.renderResults();
         this.validateExportReady();
         this.saveCurrentState();
         
@@ -359,14 +505,14 @@ class AlphaColorMatch {
             replaceBtn.style.opacity = '1';
         }, 1500);
         
-        showNotification('Valores actualizados', `${groups.size} grupos cambiados a valor secundario`, 'info');
+        window.showNotification('Valores actualizados', `${groups.size} grupos cambiados a valor secundario`, 'info');
     }
     
     togglePendingAdd(itemId) {
         if (this.selectedPending.has(itemId)) return;
         this.selectedPending.add(itemId);
         this.deletedPending.delete(itemId);
-        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.renderResults();
         this.validateExportReady();
         this.saveCurrentState();
     }
@@ -375,7 +521,7 @@ class AlphaColorMatch {
         if (this.deletedPending.has(itemId)) return;
         this.deletedPending.add(itemId);
         this.selectedPending.delete(itemId);
-        renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+        this.renderResults();
         this.validateExportReady();
         this.saveCurrentState();
     }
@@ -390,14 +536,24 @@ class AlphaColorMatch {
             !this.deletedPending.has(item.id)
         );
         
-        const isReady = pendingUndecided.length === 0;
+        const hasPendingAudit = this.pendingAudit.size > 0;
+        const isReady = pendingUndecided.length === 0 && !hasPendingAudit;
         exportBtn.disabled = !isReady;
         
         const validationMsg = document.getElementById('validationMessage');
         if (validationMsg) {
-            if (pendingUndecided.length > 0) {
+            if (hasPendingAudit) {
+                validationMsg.innerHTML = `❌ SE REQUIERE ATENCIÓN: Hay ${this.pendingAudit.size} registros con errores (Paréntesis, CMYK > 100 o NKs inválidos) que deben ser corregidos en la tabla inferior.`;
+                validationMsg.style.display = 'block';
+                validationMsg.style.background = 'rgba(239, 68, 68, 0.2)';
+                validationMsg.style.borderColor = '#ef4444';
+                validationMsg.style.color = '#f87171';
+            } else if (pendingUndecided.length > 0) {
                 validationMsg.innerHTML = `⚠️ Faltan ${pendingUndecided.length} colores pendientes por decidir (Agregar o Eliminar)`;
                 validationMsg.style.display = 'block';
+                validationMsg.style.background = 'rgba(180, 83, 9, 0.2)';
+                validationMsg.style.borderColor = '#b45309';
+                validationMsg.style.color = '#fbbf24';
             } else {
                 validationMsg.style.display = 'none';
             }
@@ -464,6 +620,16 @@ class AlphaColorMatch {
             if (filenameSpan) filenameSpan.textContent = filename;
             if (recordCountSpan) recordCountSpan.textContent = `${count} registro${count !== 1 ? 's' : ''}`;
         }
+
+        // Sugerir nombre de exportación basado en el archivo principal
+        if (type === 'primary' && filename !== 'Ningún archivo cargado') {
+            const exportNameInput = document.getElementById('exportFileName');
+            if (exportNameInput) {
+                // Quitar extensión .txt y limpiar caracteres raros
+                const cleanName = filename.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+                exportNameInput.value = cleanName;
+            }
+        }
     }
     
     renderDataList(type, data) {
@@ -486,7 +652,7 @@ class AlphaColorMatch {
         this.adminView = new AdminView(this, this.auth);
         this.reportsView = new ReportsView(this);
         this.dashboardView = new DashboardView(this);
-        this.linearizationValidatorView = new LinearizationValidatorView(this);
+        this.cyclicHubView = new CyclicHubView();
     }
     
     initMenuNavigation() {
@@ -499,8 +665,9 @@ class AlphaColorMatch {
             assignment: document.getElementById('assignmentView'),
             reports: document.getElementById('reportsView'),
             dashboard: document.getElementById('dashboardView'),
-            linearizationValidator: document.getElementById('linearizationValidatorView'),
-            admin: document.getElementById('adminView')
+            admin: document.getElementById('adminView'),
+            comparator: document.getElementById('comparatorView'),
+            cyclicHub: document.getElementById('cyclicHubView')
         };
         
         const switchView = (viewName) => {
@@ -517,6 +684,7 @@ class AlphaColorMatch {
                 if (item.dataset.view === viewName) item.classList.add('active');
             });
             
+            // Removido showTaskSelectorModal de aquí para evitar que salte al refrescar
             if (viewName === 'paletteValidator' && this.paletteValidatorView) {
                 this.paletteValidatorView.renderTable();
             }
@@ -527,21 +695,34 @@ class AlphaColorMatch {
                 this.historyView.render();
             }
             if (viewName === 'assignment' && this.assignmentView) {
-                this.assignmentView.updateTxtList();
-                this.assignmentView.renderHistory();
+                this.assignmentView.loadTxtList();
+                this.assignmentView.loadAssignmentsFromSupabase();
             }
             if (viewName === 'reports' && this.reportsView) {
                 this.reportsView.updateFilters();
                 this.reportsView.render();
             }
+            if (viewName === 'assignment' && this.assignmentView) {
+                this.assignmentView.loadTxtList();
+                this.assignmentView.loadAssignmentsFromSupabase();
+            }
             if (viewName === 'dashboard' && this.dashboardView) {
                 this.dashboardView.render();
             }
-            if (viewName === 'linearizationValidator' && this.linearizationValidatorView) {
-                this.linearizationValidatorView.render();
-            }
             if (viewName === 'admin' && this.adminView) {
                 this.adminView.render();
+            }
+            if (viewName === 'cyclicHub' && this.cyclicHubView) {
+                this.cyclicHubView.init();
+            }
+            if (viewName === 'comparator') {
+                 // El comparador ya se maneja por eventos globales
+            }
+
+            // Controlar visibilidad del footer de instrucciones (solo para comparador)
+            const footer = document.querySelector('.footer');
+            if (footer) {
+                footer.style.display = (viewName === 'comparator') ? 'block' : 'none';
             }
         };
         this.switchView = switchView;
@@ -549,7 +730,9 @@ class AlphaColorMatch {
         menuItems.forEach(item => {
             item.addEventListener('click', () => {
                 const viewName = item.dataset.view;
-                if (viewName && this.auth.hasPermission(viewName)) {
+                const requiredPerm = item.dataset.perm;
+                if (viewName && (!requiredPerm || this.auth.hasPermission(requiredPerm))) {
+                    // Modal de selección eliminado - flujo directo a vista
                     switchView(viewName);
                 }
             });
@@ -591,36 +774,45 @@ class AlphaColorMatch {
         this.updateInboxBell();
     }
 
-    logComparisonSession() {
+    async logComparisonSession() {
         const unmatched = this.results.filter(item =>
             item.matchType === 'pending_primary' || item.matchType === 'pending_secondary'
         ).length;
         
         const addedColors = Array.from(this.selectedPending).filter(id => id.startsWith('pending_secondary')).length;
-        
-        // Recuperar contadores de la última carga de archivos
         const lastCargas = JSON.parse(localStorage.getItem('lastFileLoadStats') || '{"corrections":0, "duplicates":0}');
+        const totalColors = this.primaryData.length;
 
         const entry = {
-            id: `cmp_${Date.now()}`,
-            createdAt: new Date().toISOString(),
+            created_at: new Date().toISOString(),
             user: this.auth.getCurrentUser()?.username || 'usuario',
-            primaryFile: this.primaryFileName || 'principal',
-            secondaryFile: this.secondaryFileName || 'secundario',
-            unmatched,
-            addedColors,
+            primary_file: this.primaryFileName || 'principal',
+            secondary_file: this.secondaryFileName || 'secundario',
+            total_colors: totalColors,
+            unmatched: unmatched,
+            added_colors: addedColors,
             corrections: lastCargas.corrections || 0,
             duplicates: lastCargas.duplicates || 0,
-            totalRecords: this.primaryData.length + this.secondaryData.length
+            invalid_cmyk: lastCargas.invalidCmyk || 0
         };
 
+        // 1. Guardar en Supabase para Reportes Reales
+        try {
+            const { error } = await supabase.from('comparison_logs').insert(entry);
+            if (error) throw error;
+            console.log('✅ Auditoría guardada en la nube');
+        } catch (e) {
+            console.warn('⚠️ No se pudo guardar en DB, usando LocalStorage:', e.message);
+        }
+
+        // 2. Respaldo en LocalStorage (Legacy)
         let logs = [];
         try {
             logs = JSON.parse(localStorage.getItem('comparisonReportLogs') || '[]');
         } catch (e) {
             logs = [];
         }
-        logs.unshift(entry);
+        logs.unshift({ ...entry, id: `cmp_${Date.now()}`, primaryFile: entry.primary_file });
         if (logs.length > 2000) logs = logs.slice(0, 2000);
         localStorage.setItem('comparisonReportLogs', JSON.stringify(logs));
     }
@@ -634,6 +826,7 @@ class AlphaColorMatch {
     getInboxItems() {
         return [...this.inboxItems].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
+
 
     updateInboxBell() {
         const count = this.inboxItems.filter(item => !item.is_read && !item.read).length;
@@ -807,7 +1000,7 @@ class AlphaColorMatch {
             URL.revokeObjectURL(url);
             
             localStorage.setItem('lastBackupDate', new Date().toDateString());
-            showNotification('✅ Backup automático completado con éxito', 'success');
+            window.showNotification('✅ Backup automático completado con éxito', 'success');
         } catch (e) {
             console.error('Error en backup:', e);
         }

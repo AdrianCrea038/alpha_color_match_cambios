@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alpha Color Match - Comparador Profesional</title>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/components/sidebar.css">
     <link rel="stylesheet" href="css/views/creator.css">
@@ -14,15 +14,99 @@
     <link rel="stylesheet" href="css/views/admin.css">
     <link rel="stylesheet" href="css/views/reports.css">
     <link rel="stylesheet" href="css/views/dashboard.css">
+    <link rel="stylesheet" href="css/components/premium.css">
+    <style>
+        /* Estilos Premium para la Tabla de Auditoría */
+        .row-match-exact { background: rgba(16, 185, 129, 0.08) !important; border-left: 4px solid #10b981; }
+        .row-match-equivalent { background: rgba(59, 130, 246, 0.08) !important; border-left: 4px solid #3b82f6; }
+        .row-pending { background: rgba(245, 158, 11, 0.08) !important; border-left: 4px solid #f59e0b; }
+        .row-added { background: rgba(16, 185, 129, 0.15) !important; border-left: 4px solid #10b981; }
+        .row-deleted { background: rgba(239, 68, 68, 0.15) !important; border-left: 4px solid #ef4444; opacity: 0.6; }
+
+        .selection-btn {
+            border: 2px solid transparent !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            font-weight: 800 !important;
+            text-transform: uppercase;
+            font-size: 0.7rem !important;
+            border-radius: 8px !important;
+            letter-spacing: 0.5px;
+        }
+
+        .selection-btn.p-btn { background: rgba(59, 130, 246, 0.1) !important; color: #3b82f6 !important; border-color: rgba(59, 130, 246, 0.2) !important; }
+        .selection-btn.p-btn.active { background: #3b82f6 !important; color: white !important; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important; }
+
+        .selection-btn.s-btn { background: rgba(245, 158, 11, 0.1) !important; color: #f59e0b !important; border-color: rgba(245, 158, 11, 0.2) !important; }
+        .selection-btn.s-btn.active { background: #f59e0b !important; color: white !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4) !important; }
+
+        .status-premium {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .status-ok-premium { background: #065f46; color: #34d399; }
+        .status-warn-premium { background: #78350f; color: #fbbf24; }
+        .status-info-premium { background: #1e3a8a; color: #93c5fd; }
+        .status-err-premium { background: #7f1d1d; color: #f87171; }
+
+        .color-cell { padding: 10px; }
+        .nk-tag { background: #1e293b; color: #3b82f6; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 900; display: inline-block; margin-bottom: 6px; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .name-text { font-size: 0.9rem; font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+        .cmyk-row { font-size: 0.75rem; color: #94a3b8; font-family: monospace; display: flex; align-items: center; gap: 10px; }
+
+        /* Estilos para los Filtros (Chips) */
+        .badge.premium-filter {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+        }
+
+        .badge.premium-filter:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+
+        .badge.premium-filter.active[data-filter="exact"] { background: #065f46; color: #34d399; border-color: #34d399; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+        .badge.premium-filter.active[data-filter="equivalent"] { background: #1e3a8a; color: #93c5fd; border-color: #93c5fd; box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+        .badge.premium-filter.active[data-filter="pendingPrimary"], 
+        .badge.premium-filter.active[data-filter="pendingSecondary"] { background: #78350f; color: #fbbf24; border-color: #fbbf24; box-shadow: 0 0 15px rgba(245, 158, 11, 0.3); }
+        .badge.premium-filter.active[data-filter="added"] { background: #14532d; color: #4ade80; border-color: #4ade80; box-shadow: 0 0 15px rgba(20, 83, 45, 0.3); }
+        .badge.premium-filter.active[data-filter="deleted"] { background: #7f1d1d; color: #f87171; border-color: #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+
+        .badge.premium-filter strong { margin-left: 4px; font-size: 0.85rem; }
+    </style>
     <link rel="stylesheet" href="css/views/linearizationValidator.css">
+    <link rel="stylesheet" href="css/views/cyclicHub.css">
+    <link rel="stylesheet" href="css/views/history.css">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
     <div id="mainApp" class="app-wrapper">
         <div class="sidebar-menu">
             <div class="menu-item active" data-view="comparator" data-perm="comparator">
-                <i class="fas fa-code-compare"></i>
-                <span>Comparar</span>
+                <i class="fas fa-shield-check"></i>
+                <span>Auditoría</span>
+            </div>
+            <div class="menu-item" data-view="cyclicHub" data-perm="linearization">
+                <i class="fas fa-sync-alt"></i>
+                <span>Cíclico 2</span>
             </div>
             <div class="menu-item" data-view="history" data-perm="history">
                 <i class="fas fa-inbox"></i>
@@ -31,10 +115,6 @@
             <div class="menu-item" data-view="paletteValidator" data-perm="paletteValidator">
                 <i class="fas fa-palette"></i>
                 <span>Validar Paleta</span>
-            </div>
-            <div class="menu-item" data-view="linearizationValidator" data-perm="linearization">
-                <i class="fas fa-microscope"></i>
-                <span>Comprobación</span>
             </div>
             <div class="menu-item" data-view="development" data-perm="development">
                 <i class="fas fa-paintbrush"></i>
@@ -74,9 +154,11 @@
 
                 <!-- Vista Comparador -->
                 <div id="comparatorView" class="view-content active">
+                    <!-- Sección de archivos cargados -->
+
                     <div class="upload-section">
                         <div class="upload-card">
-                            <h3>📁 Archivo Principal</h3>
+                            <h3>📁 Archivo Principal (Master)</h3>
                             <div class="upload-area">
                                 <input type="file" id="primaryFileInput" accept=".txt" class="file-input">
                                 <label for="primaryFileInput" class="file-label">Seleccionar archivo</label>
@@ -100,7 +182,7 @@
                     </div>
 
                     <div style="text-align: center; display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap;">
-                        <button id="compareBtn" class="compare-btn">🔍 COMPARAR</button>
+                        <button id="keepAllMasterBtn" class="compare-btn" style="background: #0099cc; display: none;">✅ Conservar todo el Master</button>
                         <button id="replaceAllSecondaryBtn" class="compare-btn" style="background: #b45309;">🔄 Actualización a valor secundario</button>
                         <button id="exportBtn" class="compare-btn" style="background: #15803d;" disabled>📥 EXPORTAR ARCHIVO</button>
                         <button id="clearCacheBtn" class="compare-btn" style="border-color: #9ca3af; color: #9ca3af;">🗑️ LIMPIAR CACHÉ</button>
@@ -114,7 +196,14 @@
 
                     <div id="validationMessage" class="validation-message" style="display: none;"></div>
 
-                    <div class="data-grid">
+                    <div class="data-section-header" style="margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="font-size: 1.1rem; color: #9ca3af;"><i class="fas fa-database"></i> Visualización de Archivos Cargados</h3>
+                        <button id="toggleDataGridBtn" class="toggle-btn" style="background: transparent; border: none; color: #00e5ff; cursor: pointer; font-size: 1.2rem;">
+                            <i class="fas fa-caret-down toggle-icon"></i>
+                        </button>
+                    </div>
+
+                    <div id="dataGridContainer" class="data-grid">
                         <div class="data-card">
                             <h3>📁 Datos Principal</h3>
                             <div class="data-list" id="primaryDataList">
@@ -130,9 +219,14 @@
                     </div>
 
                     <div class="results-panel" id="resultsPanel" style="display: none;">
-                        <div class="results-header">
+                        <div class="results-header" style="display: flex; justify-content: space-between; align-items: center;">
                             <h3>📊 Resultados de comparación</h3>
-                            <div class="stats-badge" id="statsBadges"></div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <button id="addAllSecondaryBtn" class="premium-btn" style="background: #10b981; font-size: 0.75rem; padding: 0.4rem 1rem;">
+                                    <i class="fas fa-plus-double"></i> Agregar todos los Nuevos
+                                </button>
+                                <div class="stats-badge" id="statsBadges"></div>
+                            </div>
                         </div>
                         <table class="results-table">
                             <thead>
@@ -145,13 +239,27 @@
 
                 <!-- Vista Bandeja de Entrada -->
                 <div id="historyView" class="view-content">
-                    <div class="history-header">
-                        <h3>📬 Bandeja de Entrada</h3>
-                    </div>
-                    <div class="history-list" id="historyList">
-                        <div class="empty-state">
-                            <div class="empty-icon">📭</div>
-                            <p>No hay registros en la bandeja</p>
+                    <div class="mail-layout" id="mailLayout">
+                        <!-- Lista de Mensajes -->
+                        <div class="mail-list-container">
+                            <div class="mail-list-header">
+                                <h3 style="margin:0; font-size: 1.1rem;"><i class="fas fa-inbox"></i> Bandeja</h3>
+                                <span id="mailCountBadge" class="status-badge" style="background: rgba(0, 229, 255, 0.2); color: #00e5ff; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px;">0</span>
+                            </div>
+                            <div class="mail-list" id="historyList">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+
+                        <!-- Detalle del Mensaje -->
+                        <div class="mail-detail-container" id="mailDetailContainer">
+                            <div class="mail-detail-empty" id="mailDetailEmpty">
+                                <i class="fas fa-envelope-open"></i>
+                                <p>Selecciona un mensaje para ver su contenido</p>
+                            </div>
+                            <div class="mail-detail-content" id="mailDetailContent" style="display: none;">
+                                <!-- Se llena dinámicamente -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -159,44 +267,90 @@
                 <!-- Vista Validación Paleta -->
                 <div id="paletteValidatorView" class="view-content">
                     <div class="palette-validator-container">
-                        <div class="palette-validator-header">
-                            <h3><i class="fas fa-palette"></i> Validación de Paleta</h3>
-                            <div class="plotter-selector">
-                                <label for="globalPlotter">🖨️ Plotter (1-17):</label>
-                                <select id="globalPlotter" class="plotter-select">
-                                    <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                                    <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-                                    <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-                                    <option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                                    <option value="13">13</option><option value="14" selected>14</option>
-                                    <option value="15">15</option><option value="16">16</option><option value="17">17</option>
-                                </select>
+                        <div class="view-header">
+                            <div class="header-main">
+                                <h2 class="premium-title"><i class="fas fa-palette"></i> Validación de Paleta</h2>
+                                <p class="subtitle">Validación técnica de valores CMYK y canales especiales</p>
+                            </div>
+                            <div class="header-actions">
+                                <div class="plotter-selector premium-selector">
+                                    <label for="globalPlotter">🖨️ Plotter:</label>
+                                    <select id="globalPlotter" class="plotter-select">
+                                        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                                        <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                                        <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                                        <option value="13">13</option><option value="14" selected>14</option>
+                                        <option value="15">15</option><option value="16">16</option><option value="17">17</option>
+                                    </select>
+                                </div>
+                                <button id="loadLibraryBtn" class="premium-btn secondary"><i class="fas fa-folder-open"></i> Mis Asignaciones</button>
                             </div>
                         </div>
-                        <div class="palette-validator-actions">
-                            <button id="loadLibraryBtn" class="btn-secondary">📥 Cargar TXT asignado</button>
-                            <button id="downloadTxtBtn" class="btn-primary" disabled>📥 Exportar TXT</button>
-                            <button id="exportEpsBtn" class="btn-primary" disabled>📄 Exportar EPS</button>
-                            <button id="sendToInboxBtn" class="btn-secondary" disabled>📤 Enviar a Bandeja</button>
+
+                        <!-- Panel de Acciones Superiores -->
+                        <div class="palette-validator-actions" style="margin-bottom: 2rem; background: rgba(30, 30, 44, 0.4); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; align-items: center; gap: 0.75rem;">
+                            <button id="downloadTxtBtn" class="premium-btn primary" disabled><i class="fas fa-file-export"></i> Exportar TXT</button>
+                            <button id="exportEpsBtn" class="premium-btn primary" disabled><i class="fas fa-file-pdf"></i> Exportar EPS</button>
+                            
+                            <button id="toggleExtraChannelsBtn" class="premium-btn secondary" style="border-color: #a78bfa; color: #a78bfa;">
+                                <i class="fas fa-eye-slash"></i> Ocultar TQ-O-FY-FP
+                            </button>
+
+                            <button id="sendToInboxBtn" class="premium-btn secondary" disabled style="margin-left: auto;"><i class="fas fa-paper-plane"></i> Enviar a Bandeja</button>
                         </div>
-                        <div class="table-wrapper validator-table">
-                            <table class="data-table" id="validatorTable">
-                                <thead>
-                                    <tr><th style="width:40px">#</th><th>Nombre del Color</th><th style="width:80px">NK</th>
-                                    <th style="width:100px">Cian</th><th style="width:100px">Magenta</th><th style="width:100px">Yellow</th>
-                                    <th style="width:100px">Black</th><th style="width:100px">TQ</th><th style="width:100px">O</th>
-                                    <th style="width:100px">FY</th><th style="width:100px">FP</th><th style="width:100px">Estado</th><th style="width:80px">Acción</th>
-                                </thead>
-                                <tbody id="validatorTableBody">
-                                    <tr><td colspan="13" class="empty-state">Cargue un archivo TXT o use los botones para comenzar</td></tr>
-                                </tbody>
-                            </table>
+
+                        <!-- La grilla se inyecta dinámicamente o se maneja por JS -->
+                        <div class="validator-table-wrapper">
+                            <div class="validator-table-header">
+                                <div class="results-title"><i class="fas fa-table-list"></i> Matriz de Colorimetría</div>
+                                <div id="valStatsBadges" class="stats-badges"></div>
+                            </div>
+                            <div class="validator-table-scroll">
+                                <table class="premium-validator-table" id="validatorTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:40px">#</th>
+                                            <th>Color / NK</th>
+                                            <th style="width:90px">Cyan</th>
+                                            <th style="width:90px">Magenta</th>
+                                            <th style="width:90px">Yellow</th>
+                                            <th style="width:90px">Black</th>
+                                            <th style="width:90px">TQ</th>
+                                            <th style="width:90px">O</th>
+                                            <th style="width:90px">FY</th>
+                                            <th style="width:90px">FP</th>
+                                            <th class="text-center" style="width:100px">Estado</th>
+                                            <th class="text-center" style="width:80px">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="validatorTableBody">
+                                        <tr><td colspan="12" class="empty-state">Seleccione un archivo TXT o una asignación para comenzar</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Vista Validación Linearización -->
-                <div id="linearizationValidatorView" class="view-content">
+                <!-- Hub de Cíclicos (Contenedor de Modos Separados) -->
+                <div id="cyclicHubView" class="view-content">
+                    <div class="cyclic-hub-selector">
+                        <div class="hub-option direct" onclick="window.cyclicHub.switchMode('direct')">
+                            <i class="fas fa-file-alt"></i>
+                            <h3>Validar 1 TXT</h3>
+                            <p>Auditoría de integridad contra Supabase</p>
+                        </div>
+                        <div class="hub-option cyclic" onclick="window.cyclicHub.switchMode('cyclic')">
+                            <i class="fas fa-sync-alt"></i>
+                            <h3>Validar 2 TXT</h3>
+                            <p>Comparación de Maestro vs Nuevo</p>
+                        </div>
+                    </div>
+
+                    <!-- SUB-VISTAS FÍSICAMENTE SEPARADAS -->
+                    <div id="directAuditContainer" style="display: none;"></div>
+                    <div id="cyclicAuditContainer" style="display: none;"></div>
                 </div>
 
                 <!-- Vista Desarrollo -->
@@ -327,94 +481,159 @@
 
                 <!-- Vista Reportes -->
                 <div id="reportsView" class="view-content">
-                    <div class="reports-container">
-                        <div class="reports-header">
-                            <h3><i class="fas fa-chart-bar"></i> Reportes de Asignaciones</h3>
-                            <p>Busque y filtre asignaciones de trabajo</p>
+                    <div class="reports-premium-container">
+                        <!-- Cabecera con Acciones -->
+                        <div class="view-header" style="margin-bottom: 1.5rem;">
+                            <div class="header-main">
+                                <h2 class="premium-title"><i class="fas fa-analytics"></i> Inteligencia de Calidad</h2>
+                                <p class="subtitle">Análisis de rendimiento, errores y cumplimiento de producción</p>
+                            </div>
+                            <div class="header-actions">
+                                <button id="reportsExportCsvBtn" class="premium-btn secondary"><i class="fas fa-file-excel"></i> Excel</button>
+                                <button id="reportsPrintBtn" class="premium-btn primary"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
+                            </div>
                         </div>
 
-                        <div class="reports-filters">
-                            <div class="filter-row">
-                                <div class="filter-group full-width">
-                                    <label><i class="fas fa-search"></i> Buscar texto:</label>
-                                    <input type="text" id="reportsSearchText" placeholder="Buscar en archivo, usuario, motivo, plotter..." class="filter-input">
-                                </div>
-                            </div>
-                            <div class="filter-row">
+                        <!-- 1. FILTROS PRINCIPALES (Ahora arriba y prominentes) -->
+                        <div class="reports-search-box pro-style" style="margin-bottom: 2rem;">
+                            <div class="reports-filters-horizontal">
                                 <div class="filter-group">
-                                    <label><i class="fas fa-clock"></i> Agrupar por:</label>
-                                    <select id="reportsPeriod" class="filter-select">
-                                        <option value="day">Día</option>
-                                        <option value="week">Semana</option>
-                                        <option value="month" selected>Mes</option>
-                                        <option value="year">Año</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="filter-row">
-                                <div class="filter-group">
-                                    <label><i class="fas fa-calendar"></i> Fecha desde:</label>
+                                    <label><i class="fas fa-calendar"></i> Desde:</label>
                                     <input type="date" id="reportsDateFrom" class="filter-input">
                                 </div>
                                 <div class="filter-group">
-                                    <label><i class="fas fa-calendar"></i> Fecha hasta:</label>
+                                    <label><i class="fas fa-calendar"></i> Hasta:</label>
                                     <input type="date" id="reportsDateTo" class="filter-input">
                                 </div>
                                 <div class="filter-group">
                                     <label><i class="fas fa-user"></i> Usuario:</label>
-                                    <select id="reportsUserFilter" class="filter-select">
-                                        <option value="">-- Todos los usuarios --</option>
-                                    </select>
+                                    <select id="reportsUserFilter" class="filter-select"><option value="">Todos</option></select>
                                 </div>
-                            </div>
-                            <div class="filter-row">
-                                <div class="filter-group">
-                                    <label><i class="fas fa-print"></i> Plotter:</label>
-                                    <select id="reportsPlotterFilter" class="filter-select">
-                                        <option value="">-- Todos los plotters --</option>
-                                        <option value="1">Plotter 1</option><option value="2">Plotter 2</option>
-                                        <option value="3">Plotter 3</option><option value="4">Plotter 4</option>
-                                        <option value="5">Plotter 5</option><option value="6">Plotter 6</option>
-                                        <option value="7">Plotter 7</option><option value="8">Plotter 8</option>
-                                        <option value="9">Plotter 9</option><option value="10">Plotter 10</option>
-                                        <option value="11">Plotter 11</option><option value="12">Plotter 12</option>
-                                        <option value="13">Plotter 13</option><option value="14">Plotter 14</option>
-                                        <option value="15">Plotter 15</option><option value="16">Plotter 16</option>
-                                        <option value="17">Plotter 17</option>
-                                    </select>
-                                </div>
-                                <div class="filter-group">
-                                    <label><i class="fas fa-file-alt"></i> Archivo TXT:</label>
-                                    <select id="reportsTxtFilter" class="filter-select">
-                                        <option value="">-- Todos los archivos --</option>
-                                    </select>
-                                </div>
-                                <div class="filter-group filter-actions">
-                                    <label>&nbsp;</label>
-                                    <button id="reportsSearchBtn" class="btn-primary">🔍 BUSCAR</button>
-                                    <button id="reportsClearBtn" class="btn-secondary">🗑️ LIMPIAR FILTROS</button>
+                                <div class="filter-actions-inline">
+                                    <button id="reportsSearchBtn" class="premium-btn primary"><i class="fas fa-sync"></i> Actualizar Reporte</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="reports-results">
-                            <div class="reports-results-header">
-                                <h4><i class="fas fa-list"></i> Resultados</h4>
-                                <div class="reports-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                    <button id="reportsBtnProgress" class="btn-primary" style="background: #0ea5e9; border: none; padding: 0.6rem 1rem;"><i class="fas fa-chart-line"></i> 📊 Avances</button>
-                                    <button id="reportsBtnErrors" class="btn-primary" style="background: #f43f5e; border: none; padding: 0.6rem 1rem;"><i class="fas fa-exclamation-triangle"></i> ⚠️ Errores</button>
-                                    <button id="reportsBtnColors" class="btn-primary" style="background: #10b981; border: none; padding: 0.6rem 1rem;"><i class="fas fa-palette"></i> 🎨 Colores</button>
-                                    <button id="reportsExportCsvBtn" class="btn-secondary" style="padding: 0.6rem 1rem;">📥 Excel</button>
+                        <!-- 2. BARRA DE KPIs MAESTROS -->
+                        <div class="kpi-master-row" style="margin-bottom: 2rem;">
+                            <div class="kpi-pro-card">
+                                <span class="kpi-pro-label">Colores Evaluados</span>
+                                <span id="kpiTotalEvaluated" class="kpi-pro-value">0</span>
+                                <span class="kpi-pro-sub">En el periodo</span>
+                            </div>
+                            <div class="kpi-pro-card">
+                                <span class="kpi-pro-label">% Calidad Global</span>
+                                <span id="kpiQualityPercent" class="kpi-pro-value">0%</span>
+                                <div class="kpi-pro-bar-bg"><div id="kpiQualityBar" class="kpi-pro-bar-fill" style="width: 0%;"></div></div>
+                            </div>
+                            <div class="kpi-pro-card red-glow">
+                                <span class="kpi-pro-label">% De Error</span>
+                                <span id="kpiErrorPercent" class="kpi-pro-value">0%</span>
+                                <span class="kpi-pro-sub">Incidencias críticas</span>
+                            </div>
+                            <div class="kpi-pro-card orange-glow">
+                                <span class="kpi-pro-label">Alertas Activas</span>
+                                <span id="kpiActiveAlarms" class="kpi-pro-value">0</span>
+                                <span class="kpi-pro-sub">Re-validación</span>
+                            </div>
+                        </div>
+
+                        <!-- 3. SECCIÓN ANALÍTICA (Gráfico + Detalles) -->
+                        <div class="reports-main-analytics">
+                            <!-- Gráfico de Calidad -->
+                            <div class="lin-card chart-card">
+                                <div class="lin-card-header">
+                                    <i class="fas fa-chart-pie" style="color: #00e5ff;"></i>
+                                    <h3>Calidad de Auditoría</h3>
+                                </div>
+                                <div class="chart-canvas-wrapper">
+                                    <canvas id="reportsMainChart"></canvas>
                                 </div>
                             </div>
-                            <div id="reportsCount" class="reports-count"></div>
-                            <div class="reports-table-wrapper">
-                                <table class="reports-table">
+
+                            <!-- Validación de Paletas (Avances) -->
+                            <div class="lin-card palette-card">
+                                <div class="lin-card-header">
+                                    <i class="fas fa-tasks" style="color: #a78bfa;"></i>
+                                    <h3>Validación de Paletas</h3>
+                                </div>
+                                <div id="paletteValidationList" class="reports-mini-list">
+                                    <!-- Dinámico: Barras de progreso -->
+                                </div>
+                            </div>
+
+                            <!-- Alarmas de Re-validación -->
+                            <div class="lin-card alarm-card">
+                                <div class="lin-card-header">
+                                    <i class="fas fa-bell" style="color: #fbbf24;"></i>
+                                    <h3>Alarmas / Pendientes</h3>
+                                </div>
+                                <div id="reportsAlarmsList" class="reports-mini-list">
+                                    <!-- Dinámico: Lista de alarmas -->
+                                </div>
+                            </div>
+
+                            <!-- Desglose de Errores -->
+                            <div class="lin-card audit-card">
+                                <div class="lin-card-header">
+                                    <i class="fas fa-bug" style="color: #f43f5e;"></i>
+                                    <h3>Desglose de Errores</h3>
+                                </div>
+                                <div id="reportsErrorStats" class="stats-grid-detailed">
+                                    <!-- Dinámico -->
+                                </div>
+                                <div class="reports-mini-list" id="recentErrorsList" style="margin-top: 1rem;">
+                                    <!-- Lista de archivos -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. TABLA DETALLADA (Auditados) -->
+                        <div class="reports-results-premium" style="margin-top: 2rem;">
+                            <div class="results-header-bar" id="toggleTable" style="cursor: pointer;">
+                                <div class="results-title"><i class="fas fa-history"></i> Historial de Auditorías del Periodo</div>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="premium-table-wrapper" id="reportsTableArea">
+                                <table class="premium-data-table">
                                     <thead>
-                                        <tr><th>Fecha</th><th>Usuario</th><th>Plotter</th><th>Archivo</th><th>Progreso</th><th>Motivo</th>
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Usuario</th>
+                                            <th>Archivo</th>
+                                            <th>Total Colores</th>
+                                            <th>Errores</th>
+                                            <th>% Error</th>
+                                        </tr>
                                     </thead>
                                     <tbody id="reportsTableBody">
-                                        <tr><td colspan="6" class="empty-state">No hay asignaciones registradas</td></tr>
+                                        <tr><td colspan="6" class="empty-state">Seleccione un rango de fechas para analizar</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 5. TABLA DE PENDIENTES (Brecha de Auditoría) -->
+                        <div class="reports-results-premium" style="margin-top: 2rem; border-color: rgba(244, 63, 94, 0.2);">
+                            <div class="results-header-bar" style="background: rgba(244, 63, 94, 0.05);">
+                                <div class="results-title" style="color: #f43f5e;"><i class="fas fa-exclamation-triangle"></i> Archivos NO Auditados en el Periodo</div>
+                                <button id="reportsExportGapBtn" class="premium-btn" style="background: #f43f5e; font-size: 0.75rem; padding: 0.4rem 1rem;">
+                                    <i class="fas fa-file-pdf"></i> Exportar Brecha PDF
+                                </button>
+                            </div>
+                            <div class="premium-table-wrapper">
+                                <table class="premium-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Archivo TXT</th>
+                                            <th>Responsable</th>
+                                            <th>Última Validación Real</th>
+                                            <th>Días sin Validar (Hasta Hoy)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reportsPendingTableBody">
+                                        <!-- Dinámico -->
                                     </tbody>
                                 </table>
                             </div>

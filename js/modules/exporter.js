@@ -40,7 +40,8 @@ export function buildExportItems(results, groupSelections, selectedPending, dele
                     cmyk: sourceData.cmyk,
                     lab: sourceData.lab,
                     nk: nk,
-                    baseName: baseName
+                    baseName: baseName,
+                    groupId: item.groupId
                 });
             }
         }
@@ -50,12 +51,17 @@ export function buildExportItems(results, groupSelections, selectedPending, dele
             if (sourceData) {
                 const nk = sourceData.nk || extractNK(sourceData.name);
                 const baseName = sourceData.baseName || extractBaseName(sourceData.name);
+                
+                // Intentar obtener el ID de grupo para colores pendientes
+                const groupId = window.getGroupIdForColor ? window.getGroupIdForColor(baseName) : '';
+                
                 exportItems.push({
                     name: sourceData.name,
                     cmyk: sourceData.cmyk,
                     lab: sourceData.lab,
                     nk: nk,
-                    baseName: baseName
+                    baseName: baseName,
+                    groupId: groupId
                 });
             }
         }
@@ -70,12 +76,22 @@ export function buildExportItems(results, groupSelections, selectedPending, dele
     const uniqueItems = [];
     const seenNames = new Set();
     for (const item of expandedItems) {
-        if (!seenNames.has(item.name)) {
-            seenNames.add(item.name);
+        const upperName = item.name.toUpperCase().trim();
+        if (!seenNames.has(upperName)) {
+            seenNames.add(upperName);
             uniqueItems.push(item);
         }
     }
+
+    // ORDENAR: Agrupar por familia (groupId) para que salgan juntos en el TXT
+    uniqueItems.sort((a, b) => {
+        const groupA = a.groupId || 'ZZZ_' + a.baseName;
+        const groupB = b.groupId || 'ZZZ_' + b.baseName;
+        if (groupA !== groupB) return groupA.localeCompare(groupB);
+        return a.name.localeCompare(b.name);
+    });
     
+    console.log(`✅ Exportación preparada: ${uniqueItems.length} registros (familias expandidas y ordenadas).`);
     return uniqueItems;
 }
 

@@ -5,9 +5,9 @@ export class ReportsView {
     constructor(app) {
         this.app = app;
         this.rows = [];
-        this.summary = null;
+        this.assignments = [];
+        this.comparisonLogs = [];
         this.chart = null;
-        this.period = 'month';
         console.log('✅ ReportsView inicializado');
     }
 
@@ -26,25 +26,30 @@ export class ReportsView {
 
     attachEvents() {
         const searchBtn = document.getElementById('reportsSearchBtn');
-        const clearBtn = document.getElementById('reportsClearBtn');
         const exportExcelBtn = document.getElementById('reportsExportCsvBtn');
         const printBtn = document.getElementById('reportsPrintBtn');
-        const periodSel = document.getElementById('reportsPeriod');
+        const toggleTable = document.getElementById('toggleTable');
+        const exportGapBtn = document.getElementById('reportsExportGapBtn');
 
         if (searchBtn) searchBtn.onclick = () => this.render();
-        if (clearBtn) clearBtn.onclick = () => this.clearFilters();
         if (exportExcelBtn) exportExcelBtn.onclick = () => this.exportExcel();
+        if (printBtn) printBtn.onclick = () => this.exportPdf();
+        if (exportGapBtn) exportGapBtn.onclick = () => this.exportGapPdf();
         
-        // BOTONES DE REPORTE ESPECIALIZADOS
-        if (document.getElementById('reportsBtnProgress')) document.getElementById('reportsBtnProgress').onclick = () => this.exportPdfProgress();
-        if (document.getElementById('reportsBtnErrors')) document.getElementById('reportsBtnErrors').onclick = () => this.exportPdfErrors();
-        if (document.getElementById('reportsBtnColors')) document.getElementById('reportsBtnColors').onclick = () => this.exportPdfColors();
-        
-        if (periodSel) periodSel.onchange = () => this.render();
+        if (toggleTable) {
+            toggleTable.onclick = () => {
+                const area = document.getElementById('reportsTableArea');
+                if (area) {
+                    const isHidden = area.style.display === 'none';
+                    area.style.display = isHidden ? 'block' : 'none';
+                    toggleTable.querySelector('i.fa-chevron-down').style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+                }
+            };
+        }
     }
 
     clearFilters() {
-        const ids = ['reportsSearchText', 'reportsDateFrom', 'reportsDateTo', 'reportsUserFilter', 'reportsPlotterFilter', 'reportsTxtFilter'];
+        const ids = ['reportsSearchText', 'reportsDateFrom', 'reportsDateTo', 'reportsUserFilter', 'reportsPlotterFilter'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
@@ -59,181 +64,325 @@ export class ReportsView {
             .select('*')
             .order('fecha_asignacion', { ascending: false });
         if (error) throw error;
-        return data || [];
+        this.assignments = data || [];
+        return this.assignments;
     }
 
-    getComparisonLogs() {
+    async fetchComparisonLogs() {
         try {
+            const from = document.getElementById('reportsDateFrom')?.value;
+            const to = document.getElementById('reportsDateTo')?.value;
+
+            let query = supabase.from('comparison_logs').select('*');
+            if (from) query = query.gte('created_at', from);
+            if (to) query = query.lte('created_at', to + 'T23:59:59');
+
+            const { data, error } = await query.order('created_at', { ascending: false });
+            
+            if (error) {
+                console.warn('⚠️ No se pudo leer de Supabase (posible tabla faltante), usando LocalStorage:', error.message);
+                return JSON.parse(localStorage.getItem('comparisonReportLogs') || '[]');
+            }
+            return data || [];
+        } catch (e) {
             return JSON.parse(localStorage.getItem('comparisonReportLogs') || '[]');
-        } catch (e) {
-            return [];
         }
     }
 
-    getDevelopmentHistory() {
-        try {
-            return JSON.parse(localStorage.getItem('developmentHistory') || '[]');
-        } catch (e) {
-            return [];
-        }
-    }
-
-    async buildReportRows() {
+    async buildReportData() {
         const assignments = await this.fetchAssignments();
-        const comparisonLogs = this.getComparisonLogs();
-        const devHistory = this.getDevelopmentHistory();
-
-        const rows = [];
-        for (const a of assignments) {
-            const start = new Date(a.fecha_asignacion);
-            const end = a.estado === 'completado' ? new Date(a.updated_at || a.fecha_asignacion) : new Date();
-            const hours = Math.max(0, (end - start) / 36e5);
-            rows.push({
-                type: 'assignment_time',
-                date: a.fecha_asignacion,
-                usuario: a.usuario_asignado || 'N/A',
-                periodo: this.getPeriodLabel(start, this.period),
-                metric: 'Tiempo aprobación (h)',
-                value: Number(hours.toFixed(2)),
-                txt: a.txt_nombre || a.txt_id || '',
-                plotter: a.plotter || ''
+        const logs = await this.fetchComparisonLogs();
+        
+        // Traer historial completo (sin filtros) para saber la última fecha real de cada TXT
+        const { data: allLogs } = await supabase.from('comparison_logs').select('primary_file, created_at').order('created_at', { ascending: false });
+        const lastValidations = {};
+        if (allLogs) {
+            allLogs.forEach(l => {
+                const name = l.primary_file || l.primaryFile;
+                if (name && !lastValidations[name]) lastValidations[name] = l.created_at;
             });
         }
 
-        for (const c of comparisonLogs) {
-            const dt = new Date(c.createdAt);
-            rows.push({
-                type: 'compare_mismatch',
-                date: c.createdAt,
-                usuario: c.user || 'N/A',
-                periodo: this.getPeriodLabel(dt, this.period),
-                metric: 'Sin coincidencia',
-                value: c.unmatched || 0,
-                txt: `${c.primaryFile || '-'} vs ${c.secondaryFile || '-'}`,
-                plotter: ''
-            });
-            rows.push({
-                type: 'compare_cmyk',
-                date: c.createdAt,
-                usuario: c.user || 'N/A',
-                periodo: this.getPeriodLabel(dt, this.period),
-                metric: 'CMYK fuera regla',
-                value: c.invalidCmyk || 0,
-                txt: `${c.primaryFile || '-'} vs ${c.secondaryFile || '-'}`,
-                plotter: ''
-            });
-        }
+        this.comparisonLogs = logs;
+        this.assignments = assignments;
 
-        for (const h of devHistory) {
-            if (!['APPROVE_COLOR', 'ADD_PENDING', 'CREATE_GROUP'].includes(h.action)) continue;
-            const dt = new Date(h.timestamp);
-            rows.push({
-                type: 'development',
-                date: h.timestamp,
-                usuario: h.user || 'N/A',
-                periodo: this.getPeriodLabel(dt, this.period),
-                metric: h.action === 'APPROVE_COLOR' ? 'Colores nuevos desarrollo' : 'TXT/Grupo nuevos desarrollo',
-                value: 1,
-                txt: h.details || '',
-                plotter: ''
-            });
+        // Filtrar assignments por fecha también para coherencia
+        const from = document.getElementById('reportsDateFrom')?.value;
+        const to = document.getElementById('reportsDateTo')?.value;
+        
+        this.filteredAssignments = assignments.filter(a => {
+            if (from && new Date(a.fecha_asignacion) < new Date(from)) return false;
+            if (to && new Date(a.fecha_asignacion) > new Date(to + 'T23:59:59')) return false;
+            return true;
+        });
+
+        // Identificar qué archivos NO se auditaron en este periodo
+        const auditedFilesThisPeriod = new Set(logs.map(l => l.primary_file || l.primaryFile));
+        this.pendingAudits = this.filteredAssignments.filter(a => !auditedFilesThisPeriod.has(a.txt_nombre)).map(a => {
+            const lastDate = lastValidations[a.txt_nombre];
+            let daysSince = 'N/A';
+            if (lastDate) {
+                const diff = new Date() - new Date(lastDate);
+                daysSince = Math.floor(diff / (1000 * 60 * 60 * 24));
+            } else {
+                daysSince = 'Nunca';
+            }
+            return {
+                ...a,
+                lastValidationDate: lastDate,
+                daysSinceToday: daysSince
+            };
+        });
+
+        this.calculateKpis(logs, this.filteredAssignments);
+    }
+
+    calculateKpis(logs, assignments) {
+        const totalEvaluated = logs.reduce((s, l) => s + (l.total_colors || 0), 0);
+        const totalErrors = logs.reduce((s, l) => s + (l.unmatched || 0) + (l.duplicates || 0) + (l.invalid_cmyk || 0), 0);
+        
+        const errorPercent = totalEvaluated > 0 ? ((totalErrors / totalEvaluated) * 100).toFixed(1) : 0;
+        const qualityPercent = (100 - errorPercent).toFixed(1);
+
+        document.getElementById('kpiTotalEvaluated').textContent = totalEvaluated;
+        document.getElementById('kpiErrorPercent').textContent = `${errorPercent}%`;
+        document.getElementById('kpiQualityPercent').textContent = `${qualityPercent}%`;
+        
+        const qBar = document.getElementById('kpiQualityBar');
+        if (qBar) qBar.style.width = `${qualityPercent}%`;
+
+        // Alertas Activas
+        const REVALIDATION_DAYS = 30;
+        const now = new Date();
+        const activeAlarms = assignments.filter(a => {
+            if (a.estado !== 'completado') return false;
+            const completionDate = new Date(a.updated_at || a.fecha_asignacion);
+            const daysSince = (now - completionDate) / (1000 * 60 * 60 * 24);
+            return daysSince >= REVALIDATION_DAYS - 5;
+        }).length;
+        document.getElementById('kpiActiveAlarms').textContent = activeAlarms;
+
+        this.renderChart(totalEvaluated - totalErrors, totalErrors);
+        this.renderDetailedStats(logs);
+    }
+
+    renderDetailedStats(logs) {
+        const statsContainer = document.getElementById('reportsErrorStats');
+        if (!statsContainer) return;
+
+        const totals = {
+            mismatch: logs.reduce((s, l) => s + (l.unmatched || 0), 0),
+            cmyk: logs.reduce((s, l) => s + (l.invalid_cmyk || 0), 0),
+            dup: logs.reduce((s, l) => s + (l.duplicates || 0), 0),
+            corr: logs.reduce((s, l) => s + (l.corrections || 0), 0)
+        };
+
+        statsContainer.innerHTML = `
+            <div class="stat-badge-detailed">
+                <span class="val" style="color: #f43f5e;">${totals.mismatch}</span>
+                <span class="lab">No coinciden</span>
+            </div>
+            <div class="stat-badge-detailed">
+                <span class="val" style="color: #ec4899;">${totals.cmyk}</span>
+                <span class="lab">Dif. CMYK</span>
+            </div>
+            <div class="stat-badge-detailed">
+                <span class="val" style="color: #fbbf24;">${totals.dup}</span>
+                <span class="lab">Duplicados</span>
+            </div>
+            <div class="stat-badge-detailed">
+                <span class="val" style="color: #3b82f6;">${totals.corr}</span>
+                <span class="lab">Corregidos</span>
+            </div>
+        `;
+
+        const listContainer = document.getElementById('recentErrorsList');
+        if (listContainer) {
+            const recent = logs.slice(0, 5);
+            listContainer.innerHTML = recent.map(l => `
+                <div class="mini-list-item">
+                    <span class="name">${String(l.primary_file || l.primaryFile).split('_').pop()}</span>
+                    <span class="count">${(l.unmatched || 0) + (l.duplicates || 0)} err</span>
+                </div>
+            `).join('') || '<div class="empty-state">No hay registros</div>';
         }
-        return rows;
     }
 
     getPeriodLabel(dateObj, period) {
         const d = new Date(dateObj);
-        if (period === 'day') return d.toISOString().slice(0, 10);
-        if (period === 'week') {
-            const first = new Date(d);
-            first.setDate(d.getDate() - d.getDay());
-            return `Sem ${first.toISOString().slice(0, 10)}`;
-        }
-        if (period === 'year') return String(d.getFullYear());
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     }
 
-    applyFilters(rows) {
-        const search = (document.getElementById('reportsSearchText')?.value || '').toLowerCase();
-        const from = document.getElementById('reportsDateFrom')?.value;
-        const to = document.getElementById('reportsDateTo')?.value;
-        const user = document.getElementById('reportsUserFilter')?.value || '';
-        const plotter = document.getElementById('reportsPlotterFilter')?.value || '';
+    async ensureChartJs() {
+        if (window.Chart) return;
+        await this.loadScript('https://cdn.jsdelivr.net/npm/chart.js');
+    }
 
-        return rows.filter(r => {
-            if (search && !`${r.metric} ${r.txt} ${r.usuario}`.toLowerCase().includes(search)) return false;
-            if (user && r.usuario !== user) return false;
-            if (plotter && String(r.plotter) !== String(plotter)) return false;
-            if (from && new Date(r.date) < new Date(from)) return false;
-            if (to) {
-                const toDate = new Date(to);
-                toDate.setHours(23, 59, 59, 999);
-                if (new Date(r.date) > toDate) return false;
+    async renderChart(correct, errors) {
+        await this.ensureChartJs();
+        const ctx = document.getElementById('reportsMainChart')?.getContext('2d');
+        if (!ctx) return;
+
+        if (this.chart) this.chart.destroy();
+
+        this.chart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Correctos', 'Con Incidencias'],
+                datasets: [{
+                    data: [correct, errors],
+                    backgroundColor: ['#00e5ff', '#f43f5e'],
+                    borderColor: 'rgba(0,0,0,0.1)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } }
+                },
+                cutout: '70%'
             }
-            return true;
         });
     }
 
-    renderTable(rows) {
+    renderTable(logs) {
         const tbody = document.getElementById('reportsTableBody');
-        const count = document.getElementById('reportsCount');
-        if (!tbody || !count) return;
-        count.textContent = `Mostrando ${rows.length} registros`;
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay datos para los filtros seleccionados</td></tr>';
+        const pendingBody = document.getElementById('reportsPendingTableBody');
+        if (!tbody || !pendingBody) return;
+        
+        // 1. Tabla de Auditados
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay auditorías en este periodo</td></tr>';
+        } else {
+            tbody.innerHTML = logs.map(l => {
+                const total = l.total_colors || 1;
+                const errs = (l.unmatched || 0) + (l.duplicates || 0) + (l.invalid_cmyk || 0);
+                const percent = ((errs / total) * 100).toFixed(1);
+                return `
+                    <tr>
+                        <td><span style="font-size: 0.75rem; color: #94a3b8;">${new Date(l.created_at || l.createdAt).toLocaleString()}</span></td>
+                        <td><div style="font-weight: 600; color: #e2e8f0;">${l.user}</div></td>
+                        <td class="report-filename">${this.escapeHtml(l.primary_file || l.primaryFile || '-')}</td>
+                        <td style="text-align:center;">${l.total_colors || '-'}</td>
+                        <td style="text-align:center; color: #f43f5e; font-weight: 700;">${errs}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div class="kpi-pro-bar-bg" style="flex:1; height:6px; margin-top:0;">
+                                    <div class="kpi-pro-bar-fill" style="width: ${percent}%; background: #f43f5e;"></div>
+                                </div>
+                                <span style="font-size: 0.75rem; font-weight:700; color: #f43f5e;">${percent}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 2. Tabla de No Auditados (Pendientes)
+        if (!this.pendingAudits || !this.pendingAudits.length) {
+            pendingBody.innerHTML = '<tr><td colspan="4" class="empty-state">Todos los archivos del periodo fueron auditados</td></tr>';
+        } else {
+            pendingBody.innerHTML = this.pendingAudits.map(p => {
+                const isNever = p.daysSinceToday === 'Nunca';
+                const days = isNever ? '∞' : p.daysSinceToday;
+                const color = isNever || p.daysSinceToday > 30 ? '#f43f5e' : (p.daysSinceToday > 15 ? '#fbbf24' : '#10b981');
+                
+                return `
+                    <tr style="background: rgba(244, 63, 94, 0.02);">
+                        <td class="report-filename">${this.escapeHtml(p.txt_nombre)}</td>
+                        <td><div style="font-weight: 600; color: #94a3b8;">${p.usuario_asignado || 'Sin asignar'}</div></td>
+                        <td><span style="font-size: 0.75rem; color: #64748b;">${p.lastValidationDate ? new Date(p.lastValidationDate).toLocaleDateString() : 'NUNCA'}</span></td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 800; color: ${color};">${days} días</span>
+                                <span style="font-size: 0.65rem; color: #64748b;">hasta hoy</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    }
+
+    renderPaletteValidation(assignments) {
+        const list = document.getElementById('paletteValidationList');
+        if (!list) return;
+
+        if (!assignments.length) {
+            list.innerHTML = '<div class="empty-state">No hay asignaciones en este periodo</div>';
             return;
         }
-        tbody.innerHTML = rows.map(r => `
-            <tr>
-                <td>${new Date(r.date).toLocaleString()}</td>
-                <td>${r.usuario}</td>
-                <td>${r.plotter || '-'}</td>
-                <td class="report-filename">${this.escapeHtml(r.txt || '-')}</td>
-                <td><strong>${this.escapeHtml(r.metric)}</strong>: ${r.value}</td>
-                <td>${this.escapeHtml(r.periodo)}</td>
-            </tr>
+
+        list.innerHTML = assignments.slice(0, 4).map(a => `
+            <div class="mini-list-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; width: 100%; font-size: 0.8rem;">
+                    <span style="font-weight: 600; color: #e2e8f0;">${a.txt_nombre.split('_').pop()}</span>
+                    <span style="color: #a78bfa;">${a.progreso}%</span>
+                </div>
+                <div class="kpi-pro-bar-bg" style="width: 100%; height: 6px; margin-top: 0;">
+                    <div class="kpi-pro-bar-fill" style="width: ${a.progreso}%; background: linear-gradient(90deg, #a78bfa, #7c3aed);"></div>
+                </div>
+            </div>
         `).join('');
     }
 
-    summarize(rows) {
-        const sum = { mismatches: 0, invalidCmyk: 0, avgApprovalHours: 0, newColors: 0, newTxt: 0 };
-        const approvalValues = [];
-        for (const r of rows) {
-            if (r.metric === 'Sin coincidencia') sum.mismatches += r.value;
-            if (r.metric === 'CMYK fuera regla') sum.invalidCmyk += r.value;
-            if (r.metric === 'Tiempo aprobación (h)') approvalValues.push(r.value);
-            if (r.metric === 'Colores nuevos desarrollo') sum.newColors += r.value;
-            if (r.metric === 'TXT/Grupo nuevos desarrollo') sum.newTxt += r.value;
+    renderAlarms(assignments) {
+        const list = document.getElementById('reportsAlarmsList');
+        if (!list) return;
+
+        const REVALIDATION_DAYS = 30;
+        const now = new Date();
+        const alarms = assignments.filter(a => {
+            if (a.estado !== 'completado') return false;
+            const completionDate = new Date(a.updated_at || a.fecha_asignacion);
+            const daysSince = (now - completionDate) / (1000 * 60 * 60 * 24);
+            return daysSince >= REVALIDATION_DAYS - 5;
+        });
+
+        if (!alarms.length) {
+            list.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color: #10b981;"></i> Sin alertas de re-validación</div>';
+            return;
         }
-        sum.avgApprovalHours = approvalValues.length
-            ? Number((approvalValues.reduce((a, b) => a + b, 0) / approvalValues.length).toFixed(2))
-            : 0;
-        return sum;
+
+        list.innerHTML = alarms.slice(0, 4).map(a => {
+            const completionDate = new Date(a.updated_at || a.fecha_asignacion);
+            const daysSince = Math.floor((now - completionDate) / (1000 * 60 * 60 * 24));
+            const isUrgent = daysSince >= REVALIDATION_DAYS;
+            return `
+                <div class="mini-list-item" style="border-left: 3px solid ${isUrgent ? '#f43f5e' : '#fbbf24'}; padding-left: 10px;">
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-weight: 600; color: #e2e8f0; font-size: 0.8rem;">${a.txt_nombre.split('_').pop()}</span>
+                        <span style="font-size: 0.7rem; color: #94a3b8;">Validado hace ${daysSince} días</span>
+                    </div>
+                    <i class="fas fa-exclamation-triangle" style="color: ${isUrgent ? '#f43f5e' : '#fbbf24'};"></i>
+                </div>
+            `;
+        }).join('');
     }
 
     async render() {
-        const periodMap = { '': 'month', day: 'day', week: 'week', month: 'month', year: 'year' };
-        const periodControl = document.getElementById('reportsPeriod');
-        this.period = periodMap[periodControl?.value || 'month'] || 'month';
-
         try {
-            const rawRows = await this.buildReportRows();
-            this.rows = this.applyFilters(rawRows);
-            this.summary = this.summarize(this.rows);
-            this.renderTable(this.rows);
-            this.populateUserFilter(this.rows);
+            await this.buildReportData();
+            this.renderTable(this.comparisonLogs);
+            this.renderPaletteValidation(this.filteredAssignments);
+            this.renderAlarms(this.assignments); // Alarmas usan historial total
+            this.populateUserFilter(this.comparisonLogs);
+            this.attachEvents();
         } catch (error) {
+            console.error('Error rendering reports:', error);
             const tbody = document.getElementById('reportsTableBody');
-            if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error cargando reportes: ${this.escapeHtml(error.message || String(error))}</td></tr>`;
+            if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error cargando reportes: ${error.message}</td></tr>`;
         }
     }
 
-    populateUserFilter(rows) {
+    populateUserFilter(logs) {
         const sel = document.getElementById('reportsUserFilter');
         if (!sel) return;
         const current = sel.value;
-        const users = [...new Set(rows.map(r => r.usuario).filter(Boolean))].sort();
-        sel.innerHTML = '<option value="">-- Todos los usuarios --</option>' + users.map(u => `<option value="${u}">${u}</option>`).join('');
+        const users = [...new Set(logs.map(l => l.user).filter(Boolean))].sort();
+        sel.innerHTML = '<option value="">Todos</option>' + users.map(u => `<option value="${u}">${u}</option>`).join('');
         if (users.includes(current)) sel.value = current;
     }
 
@@ -252,17 +401,14 @@ export class ReportsView {
         return new Promise((resolve, reject) => {
             const existing = [...document.querySelectorAll('script')].find(s => s.src === src);
             if (existing) {
-                existing.addEventListener('load', () => resolve());
                 if (existing.dataset.loaded === '1') resolve();
+                else existing.addEventListener('load', () => resolve());
                 return;
             }
             const script = document.createElement('script');
             script.src = src;
             script.async = true;
-            script.onload = () => {
-                script.dataset.loaded = '1';
-                resolve();
-            };
+            script.onload = () => { script.dataset.loaded = '1'; resolve(); };
             script.onerror = reject;
             document.head.appendChild(script);
         });
@@ -273,45 +419,21 @@ export class ReportsView {
         const workbook = new window.ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Reporte Ejecutivo');
 
-        // TÍTULO DEL REPORTE
-        worksheet.mergeCells('A1:G1');
-        const titleCell = worksheet.getCell('A1');
-        titleCell.value = 'ALPHA COLOR MATCH - REPORTE EJECUTIVO';
-        titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0EA5E9' } };
-        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-
-        worksheet.getRow(1).height = 40;
-
-        // FECHA Y RESUMEN
-        worksheet.getCell('A2').value = `Fecha de Generación: ${new Date().toLocaleString()}`;
-        worksheet.getCell('A2').font = { italic: true };
+        worksheet.addRow(['ALPHA COLOR MATCH - REPORTE DE GESTIÓN']);
+        worksheet.addRow(['Fecha:', new Date().toLocaleString()]);
+        worksheet.addRow([]);
+        worksheet.addRow(['Fecha', 'Usuario', 'Archivo', 'Total Colores', 'Errores', '% Error']);
         
-        // ENCABEZADOS DE TABLA
-        const headerRow = worksheet.getRow(4);
-        headerRow.values = ['Fecha', 'Usuario', 'Plotter', 'Archivo', 'Métrica', 'Valor', 'Periodo'];
-        headerRow.font = { bold: true, color: { argb: 'FF1E293B' } };
-        headerRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-            cell.border = { bottom: { style: 'thin' } };
-        });
-
-        // DATOS
-        this.rows.forEach(r => {
+        this.comparisonLogs.forEach(l => {
+            const errs = (l.unmatched || 0) + (l.duplicates || 0) + (l.invalid_cmyk || 0);
             worksheet.addRow([
-                new Date(r.date).toLocaleString(),
-                r.usuario,
-                r.plotter || 'N/A',
-                r.txt || '',
-                r.metric,
-                r.value,
-                r.periodo
+                new Date(l.created_at || l.createdAt).toLocaleString(),
+                l.user,
+                l.primary_file || l.primaryFile || '',
+                l.total_colors || 0,
+                errs,
+                `${l.total_colors > 0 ? ((errs / l.total_colors) * 100).toFixed(1) : 0}%`
             ]);
-        });
-
-        // AJUSTE DE COLUMNAS
-        worksheet.columns.forEach(column => {
-            column.width = 25;
         });
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -319,353 +441,182 @@ export class ReportsView {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Reporte_AlphaColor_${new Date().toISOString().slice(0,10)}.xlsx`;
+        a.download = `Reporte_Calidad_${new Date().toISOString().slice(0,10)}.xlsx`;
         a.click();
-        window.URL.revokeObjectURL(url);
-    }
-
-    // ============================================
-    // GENERADORES DE REPORTES ESPECIALIZADOS (PDF)
-    // ============================================
-
-    async drawPdfHeader(doc, title) {
-        doc.setFillColor(248, 250, 252); // Fondo muy suave de cabecera
-        doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
-        
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.text('ALPHA COLOR MATCH', 14, 25);
-        
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text('EXECUTIVE QUALITY REPORT', 14, 32);
-        
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(16);
-        doc.text(title.toUpperCase(), doc.internal.pageSize.width - 14, 25, { align: 'right' });
-        
-        doc.setFontSize(9);
-        doc.text(`Fecha: ${new Date().toLocaleString()}`, doc.internal.pageSize.width - 14, 32, { align: 'right' });
-        
-        doc.setDrawColor(226, 232, 240);
-        doc.line(14, 40, doc.internal.pageSize.width - 14, 40);
-    }
-
-    drawPdfBar(doc, x, y, width, height, label, value, color) {
-        doc.setFillColor(241, 245, 249); 
-        doc.rect(x, y, width, height, 'F');
-        
-        const progressWidth = (width * Math.min(100, value)) / 100;
-        doc.setFillColor(color[0], color[1], color[2]);
-        doc.rect(x, y, progressWidth, height, 'F');
-        
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(8);
-        doc.text(`${label}: ${value}%`, x, y - 2);
-    }
-
-    drawPdfDonut(doc, x, y, radius, value, label, color) {
-        // Círculo de fondo (Gris claro)
-        doc.setDrawColor(241, 245, 249);
-        doc.setLineWidth(4);
-        doc.ellipse(x, y, radius, radius, 'S');
-        
-        // Arco de progreso (Con color)
-        // Como jsPDF no tiene un 'drawArc' simple, usamos una técnica de líneas para simular el arco
-        doc.setDrawColor(color[0], color[1], color[2]);
-        doc.setLineWidth(4);
-        
-        const segments = 100;
-        const startAngle = -Math.PI / 2;
-        const endAngle = startAngle + (Math.PI * 2 * (value / 100));
-        
-        for (let i = 0; i < segments * (value / 100); i++) {
-            const angle1 = startAngle + (i / segments) * Math.PI * 2;
-            const angle2 = startAngle + ((i + 1) / segments) * Math.PI * 2;
-            
-            const x1 = x + radius * Math.cos(angle1);
-            const y1 = y + radius * Math.sin(angle1);
-            const x2 = x + radius * Math.cos(angle2);
-            const y2 = y + radius * Math.sin(angle2);
-            
-            doc.line(x1, y1, x2, y2);
-        }
-        
-        // Texto central
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${value}%`, x, y + 2, { align: 'center' });
-        
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(label, x, y + 10, { align: 'center' });
-    }
-
-    async exportPdfProgress() {
-        await this.ensureJsPdf();
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        await this.drawPdfHeader(doc, 'Reporte de Avances');
-        
-        const assignments = await this.fetchAssignments();
-        
-        // Dibujar mini-gráficas de resumen primero
-        let chartY = 50;
-        const top3 = assignments.slice(0, 3);
-        doc.setFontSize(10);
-        doc.text('RESUMEN DE AVANCES POR ARCHIVO:', 14, chartY - 5);
-        
-        top3.forEach((a, i) => {
-            this.drawPdfBar(doc, 14, chartY + (i * 15), 180, 8, a.txt_nombre, a.progreso, [14, 165, 233]);
-        });
-
-        const tableData = assignments.map(a => [
-            new Date(a.fecha_asignacion).toLocaleDateString(),
-            a.usuario_asignado,
-            `Plotter ${a.plotter}`,
-            a.txt_nombre,
-            `${a.progreso}%`
-        ]);
-
-        doc.autoTable({
-            startY: chartY + 50,
-            head: [['Fecha', 'Usuario', 'Plotter', 'Archivo', 'Progreso']],
-            body: tableData,
-            headStyles: { fillColor: [14, 165, 233], textColor: 255 },
-            alternateRowStyles: { fillColor: [248, 250, 252] },
-            margin: { top: 50 }
-        });
-
-        // NUEVA SECCIÓN DE ACUMULADOS AL FINAL
-        let finalY = doc.lastAutoTable.finalY + 20;
-        if (finalY > 230) { doc.addPage(); finalY = 20; }
-
-        doc.setDrawColor(226, 232, 240);
-        doc.line(14, finalY, 196, finalY);
-        finalY += 10;
-
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('ANÁLISIS ACUMULADO POR EQUIPO', 14, finalY);
-        finalY += 15;
-
-        // Calcular promedios por usuario
-        const userStats = {};
-        assignments.forEach(a => {
-            if (!userStats[a.usuario_asignado]) userStats[a.usuario_asignado] = { total: 0, count: 0 };
-            userStats[a.usuario_asignado].total += a.progreso;
-            userStats[a.usuario_asignado].count++;
-        });
-
-        let globalTotal = 0;
-        let globalCount = 0;
-        
-        Object.keys(userStats).forEach((user, i) => {
-            const avg = Math.round(userStats[user].total / userStats[user].count);
-            this.drawPdfBar(doc, 14, finalY + (i * 15), 120, 6, user, avg, [16, 185, 129]);
-            globalTotal += userStats[user].total;
-            globalCount += userStats[user].count;
-        });
-
-        // Círculo acumulado global
-        const globalAvg = globalCount > 0 ? Math.round(globalTotal / globalCount) : 0;
-        this.drawPdfDonut(doc, 165, finalY + 15, 20, globalAvg, 'TOTAL GLOBAL', [14, 165, 233]);
-
-        // Asegurar que el texto final no pegue con los gráficos
-        const chartHeight = Math.max(Object.keys(userStats).length * 15, 40);
-        finalY += chartHeight + 15;
-        
-        if (finalY > 270) { doc.addPage(); finalY = 20; }
-        
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(100, 116, 139);
-        doc.text('Este reporte muestra el acumulado de todo el periodo en la validación de paletas, integrando el esfuerzo individual y colectivo del equipo.', 14, finalY);
-
-        doc.save(`Avances_AlphaColor_${new Date().toISOString().slice(0,10)}.pdf`);
-    }
-
-    async exportPdfErrors() {
-        try {
-            console.log('📄 Iniciando generación de reporte de auditoría...');
-            await this.ensureJsPdf();
-            
-            const { jsPDF } = window.jspdf;
-            if (!jsPDF) throw new Error('No se pudo cargar la librería jsPDF');
-            
-            const doc = new jsPDF();
-            const logs = this.getComparisonLogs();
-            
-            if (!logs || logs.length === 0) {
-                alert('⚠️ No hay datos de comparaciones recientes para generar este reporte. Realice una comparación primero.');
-                return;
-            }
-
-            console.log(`📊 Generando PDF con ${logs.length} registros...`);
-            await this.drawPdfHeader(doc, 'Reporte de Auditoría (Comparación)');
-            
-            // --- RESUMEN EJECUTIVO (KPIs) ---
-            let startY = 50;
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 41, 59);
-            doc.text('RESUMEN DE AUDITORÍA HISTÓRICA:', 14, startY);
-            
-            const stats = {
-                totalCorrections: logs.reduce((sum, l) => sum + (Number(l.corrections) || 0), 0),
-                totalDuplicates: logs.reduce((sum, l) => sum + (Number(l.duplicates) || 0), 0),
-                totalAdded: logs.reduce((sum, l) => sum + (Number(l.addedColors) || 0), 0)
-            };
-
-            startY += 10;
-            const kpiWidth = 60;
-            const kpiHeight = 25;
-            
-            // Tarjeta 1: Correcciones
-            doc.setFillColor(239, 246, 255);
-            doc.roundedRect(14, startY, kpiWidth, kpiHeight, 3, 3, 'F');
-            doc.setTextColor(37, 99, 235);
-            doc.setFontSize(14);
-            doc.text(String(stats.totalCorrections), 14 + kpiWidth/2, startY + 12, { align: 'center' });
-            doc.setFontSize(8);
-            doc.text('CORRECCIONES DE NOMBRE', 14 + kpiWidth/2, startY + 20, { align: 'center' });
-
-            // Tarjeta 2: Duplicados
-            doc.setFillColor(254, 242, 242);
-            doc.roundedRect(14 + kpiWidth + 5, startY, kpiWidth, kpiHeight, 3, 3, 'F');
-            doc.setTextColor(220, 38, 38);
-            doc.setFontSize(14);
-            doc.text(String(stats.totalDuplicates), 14 + kpiWidth + 5 + kpiWidth/2, startY + 12, { align: 'center' });
-            doc.setFontSize(8);
-            doc.text('DUPLICADOS RESUELTOS', 14 + kpiWidth + 5 + kpiWidth/2, startY + 20, { align: 'center' });
-
-            // Tarjeta 3: Agregados
-            doc.setFillColor(240, 253, 244);
-            doc.roundedRect(14 + (kpiWidth + 5) * 2, startY, kpiWidth, kpiHeight, 3, 3, 'F');
-            doc.setTextColor(22, 163, 74);
-            doc.setFontSize(14);
-            doc.text(String(stats.totalAdded), 14 + (kpiWidth + 5) * 2 + kpiWidth/2, startY + 12, { align: 'center' });
-            doc.setFontSize(8);
-            doc.text('COLORES NUEVOS AGREGADOS', 14 + (kpiWidth + 5) * 2 + kpiWidth/2, startY + 20, { align: 'center' });
-
-            // --- TABLA DETALLADA ---
-            const tableData = logs.slice(0, 100).map(l => [
-                l.createdAt ? new Date(l.createdAt).toLocaleDateString() : 'N/A',
-                l.user || 'N/A',
-                String(l.primaryFile || 'Sin nombre').slice(0, 30),
-                l.corrections || 0,
-                l.duplicates || 0,
-                l.addedColors || 0
-            ]);
-
-            doc.autoTable({
-                startY: startY + kpiHeight + 15,
-                head: [['Fecha', 'Usuario', 'Archivo Base', 'Corr.', 'Dupl.', 'Agreg.']],
-                body: tableData,
-                headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-                styles: { fontSize: 8, cellPadding: 3 },
-                alternateRowStyles: { fillColor: [248, 250, 252] },
-                margin: { top: 50 }
-            });
-
-            doc.save(`Reporte_Auditoria_Comparacion_${new Date().toISOString().slice(0,10)}.pdf`);
-            console.log('✅ Reporte descargado con éxito');
-
-        } catch (error) {
-            console.error('❌ Error generando PDF:', error);
-            alert(`❌ Error al generar el reporte: ${error.message}`);
-        }
-    }
-
-    async exportPdfColors() {
-        await this.ensureJsPdf();
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        await this.drawPdfHeader(doc, 'Reporte de Colores (Inventario)');
-        
-        const { data: groups, error } = await supabase
-            .from('equivalency_groups')
-            .select('*')
-            .order('group_id');
-            
-        const tableData = [];
-        if (!error && groups) {
-            groups.forEach(row => {
-                const gid = row.group_id;
-                // Manejar si colors es array o si tenemos que inferir
-                const colors = Array.isArray(row.colors) ? row.colors : [row.color_name || row.color];
-                colors.forEach(c => {
-                    if (c && c !== gid) {
-                        tableData.push([c, gid]);
-                    } else if (c === gid) {
-                        tableData.push([c, `GRUPO MAESTRO (${gid})`]);
-                    }
-                });
-            });
-        }
-
-        // Ordenar alfabéticamente
-        tableData.sort((a, b) => a[0].localeCompare(b[0]));
-
-        doc.autoTable({
-            startY: 50,
-            head: [['Nombre del Color', 'Grupo / Lista']],
-            body: tableData,
-            headStyles: { fillColor: [16, 185, 129], textColor: 255 },
-            alternateRowStyles: { fillColor: [240, 253, 244] },
-            margin: { top: 50 }
-        });
-
-        doc.save(`InventarioColores_AlphaColor_${new Date().toISOString().slice(0,10)}.pdf`);
     }
 
     async exportPdf() {
         await this.ensureJsPdf();
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'landscape' });
-        doc.setFontSize(16);
-        doc.text('Reporte Ejecutivo - Alpha Color Match', 14, 14);
-        doc.setFontSize(10);
-        doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 22);
-        const lines = [
-            `Sin coincidencia: ${this.summary?.mismatches || 0}`,
-            `CMYK fuera regla: ${this.summary?.invalidCmyk || 0}`,
-            `Promedio aprobación (h): ${this.summary?.avgApprovalHours || 0}`,
-            `Colores nuevos: ${this.summary?.newColors || 0}`,
-            `TXT/Grupos nuevos: ${this.summary?.newTxt || 0}`
-        ];
-        let y = 32;
-        lines.forEach(line => {
-            doc.text(line, 14, y);
-            y += 7;
+        const doc = new jsPDF();
+        const logs = this.comparisonLogs;
+        
+        // 1. Cabecera Premium
+        await this.drawPdfHeader(doc, 'Reporte Ejecutivo de Calidad');
+        
+        // 2. Sección de KPIs de Calidad
+        let startY = 45;
+        const totalEvaluated = logs.reduce((s, l) => s + (l.total_colors || 0), 0);
+        const totalErrors = logs.reduce((s, l) => s + (l.unmatched || 0) + (l.duplicates || 0) + (l.invalid_cmyk || 0), 0);
+        const errorPercent = totalEvaluated > 0 ? ((totalErrors / totalEvaluated) * 100).toFixed(1) : 0;
+        const qualityPercent = (100 - errorPercent).toFixed(1);
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RESUMEN DE CALIDAD DEL PERIODO', 14, startY);
+        
+        startY += 8;
+        // Dibujar cajas de KPIs
+        const kw = 58;
+        const kh = 22;
+        
+        // Caja 1: Total
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(14, startY, kw, kh, 3, 3, 'F');
+        doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.text('COLORES EVALUADOS', 14 + kw/2, startY + 8, { align: 'center' });
+        doc.setFontSize(14); doc.setTextColor(30, 41, 59); doc.text(String(totalEvaluated), 14 + kw/2, startY + 16, { align: 'center' });
+
+        // Caja 2: % Calidad (Verde)
+        doc.setFillColor(240, 253, 244);
+        doc.roundedRect(14 + kw + 5, startY, kw, kh, 3, 3, 'F');
+        doc.setFontSize(8); doc.setTextColor(22, 163, 74); doc.text('% DE CALIDAD', 14 + kw + 5 + kw/2, startY + 8, { align: 'center' });
+        doc.setFontSize(14); doc.text(`${qualityPercent}%`, 14 + kw + 5 + kw/2, startY + 16, { align: 'center' });
+
+        // Caja 3: % Error (Rojo)
+        doc.setFillColor(254, 242, 242);
+        doc.roundedRect(14 + (kw + 5) * 2, startY, kw, kh, 3, 3, 'F');
+        doc.setFontSize(8); doc.setTextColor(220, 38, 38); doc.text('% DE ERROR', 14 + (kw + 5) * 2 + kw/2, startY + 8, { align: 'center' });
+        doc.setFontSize(14); doc.text(`${errorPercent}%`, 14 + (kw + 5) * 2 + kw/2, startY + 16, { align: 'center' });
+
+        // 3. Tabla de Auditados
+        const tableData = logs.map(l => {
+            const errs = (l.unmatched || 0) + (l.duplicates || 0) + (l.invalid_cmyk || 0);
+            return [
+                new Date(l.created_at || l.createdAt).toLocaleDateString(),
+                l.user,
+                String(l.primary_file || l.primaryFile || '').split('_').pop().slice(0, 40),
+                l.total_colors || 0,
+                errs,
+                `${l.total_colors > 0 ? ((errs / l.total_colors) * 100).toFixed(1) : 0}%`
+            ];
         });
-        y += 3;
-        doc.text('Detalle:', 14, y);
-        y += 6;
-        this.rows.slice(0, 35).forEach(r => {
-            const t = `${new Date(r.date).toLocaleDateString()} | ${r.usuario} | ${r.metric}: ${r.value} | ${String(r.txt || '').slice(0, 70)}`;
-            doc.text(t, 14, y);
-            y += 5;
-            if (y > 190) {
-                doc.addPage();
-                y = 14;
-            }
+
+        doc.autoTable({
+            startY: startY + kh + 15,
+            head: [['Fecha', 'Usuario', 'Archivo', 'Total Col.', 'Errores', '% Error']],
+            body: tableData,
+            headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 14, right: 14 }
         });
-        doc.save(`reportes_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`);
+
+        // 4. Nueva Sección: Brecha de Auditoría
+        if (this.pendingAudits && this.pendingAudits.length > 0) {
+            doc.addPage();
+            await this.drawPdfHeader(doc, 'Brecha de Auditoría (Pendientes)');
+            
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(220, 38, 38);
+            doc.text('ARCHIVOS QUE NO SE AUDITARON EN ESTE PERIODO', 14, 45);
+            
+            const pendingData = this.pendingAudits.map(p => [
+                p.txt_nombre,
+                p.usuario_asignado || 'Sin asignar',
+                p.lastValidationDate ? new Date(p.lastValidationDate).toLocaleDateString() : 'NUNCA',
+                `${p.daysSinceToday} días`
+            ]);
+
+            doc.autoTable({
+                startY: 52,
+                head: [['Archivo TXT', 'Responsable', 'Últ. Val. Real', 'Días sin Validar (Hasta Hoy)']],
+                body: pendingData,
+                headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+                alternateRowStyles: { fillColor: [254, 242, 242] },
+                margin: { left: 14, right: 14 }
+            });
+        }
+
+        const from = document.getElementById('reportsDateFrom')?.value || 'inicio';
+        const to = document.getElementById('reportsDateTo')?.value || 'fin';
+        doc.save(`Reporte_Calidad_${from}_a_${to}.pdf`);
+    }
+
+    async exportGapPdf() {
+        if (!this.pendingAudits || this.pendingAudits.length === 0) {
+            alert('No hay archivos pendientes para exportar en este periodo.');
+            return;
+        }
+
+        await this.ensureJsPdf();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        await this.drawPdfHeader(doc, 'Brecha de Auditoría y Envejecimiento');
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(220, 38, 38);
+        doc.text('RESUMEN DE ARCHIVOS NO AUDITADOS (DÍAS DE RETRASO)', 14, 45);
+        
+        const pendingData = this.pendingAudits.map(p => [
+            p.txt_nombre,
+            p.usuario_asignado || 'Sin asignar',
+            p.lastValidationDate ? new Date(p.lastValidationDate).toLocaleDateString() : 'NUNCA',
+            `${p.daysSinceToday} días`
+        ]);
+
+        doc.autoTable({
+            startY: 52,
+            head: [['Archivo TXT', 'Responsable', 'Últ. Val. Real', 'Días sin Validar (Hasta Hoy)']],
+            body: pendingData,
+            headStyles: { fillColor: [220, 38, 38], textColor: 255 },
+            alternateRowStyles: { fillColor: [254, 242, 242] },
+            margin: { left: 14, right: 14 }
+        });
+
+        const from = document.getElementById('reportsDateFrom')?.value || 'inicio';
+        const to = document.getElementById('reportsDateTo')?.value || 'fin';
+        doc.save(`Brecha_Auditoria_${from}_a_${to}.pdf`);
+    }
+
+    async drawPdfHeader(doc, title) {
+        const pageWidth = doc.internal.pageSize.width;
+        
+        // Fondo sutil para el encabezado
+        doc.setFillColor(248, 250, 252);
+        doc.rect(0, 0, pageWidth, 35, 'F');
+        
+        // Marca / Logo (Izquierda)
+        doc.setTextColor(15, 23, 42); // Slate 900
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('ALPHA COLOR MATCH', 14, 18);
+        
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139); // Slate 500
+        doc.text('EXECUTIVE QUALITY SYSTEM', 14, 25);
+        
+        // Título del Reporte (Derecha)
+        doc.setTextColor(30, 41, 59); // Slate 800
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title.toUpperCase(), pageWidth - 14, 18, { align: 'right' });
+        
+        // Fecha y Hora (Derecha)
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Fecha: ${new Date().toLocaleString()}`, pageWidth - 14, 25, { align: 'right' });
+        
+        // Línea divisoria elegante
+        doc.setDrawColor(226, 232, 240); // Slate 200
+        doc.setLineWidth(0.5);
+        doc.line(14, 30, pageWidth - 14, 30);
     }
 
     escapeHtml(str) {
-        return String(str || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
     }
 }

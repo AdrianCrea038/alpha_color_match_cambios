@@ -1,4 +1,4 @@
-// js/views/epsView.js
+import { getGroupIdForColor } from '../core/constants.js';
 import { escapeHtml } from '../core/utils.js';
 
 export class EPSView {
@@ -38,15 +38,61 @@ export class EPSView {
     
     getPendingColorsSorted() {
         const pendingColors = this.getPendingColorsFromCreator();
-        return [...pendingColors].sort((a, b) => a.lab.l - b.lab.l);
+        return this.sortColorsByGroup(pendingColors);
+    }
+
+    sortColorsByGroup(colors) {
+        return [...colors].sort((a, b) => {
+            const groupA = getGroupIdForColor(a.name) || 'ZZZ_' + a.name;
+            const groupB = getGroupIdForColor(b.name) || 'ZZZ_' + b.name;
+            
+            if (groupA !== groupB) {
+                return groupA.localeCompare(groupB);
+            }
+            return a.lab.l - b.lab.l;
+        });
     }
     
     // Nuevo método para exportar EPS desde PaletteValidatorView
-    exportEPSFromColors(colors, plotterValue) {
-        if (!colors || colors.length === 0) {
+    exportEPSFromColors(rawColors, plotterValue) {
+        if (!rawColors || rawColors.length === 0) {
             alert('⚠️ No hay colores pendientes para exportar a EPS.');
             return;
         }
+
+        const { getAllEquivalentNames } = import('../core/constants.js');
+        
+        // --- EXPANSIÓN DE FAMILIAS ---
+        // Queremos que aparezcan TODOS los equivalentes aunque solo venga uno en el archivo
+        const expandedColors = [];
+        const processedNames = new Set();
+        const processedGroups = new Set();
+
+        for (const color of rawColors) {
+            const equivalents = this.app?.constants?.getAllEquivalentNames 
+                ? this.app.constants.getAllEquivalentNames(color.name)
+                : (typeof window.getAllEquivalentNames === 'function' ? window.getAllEquivalentNames(color.name) : [color.name]);
+            
+            // Si el color pertenece a un grupo, procesamos el grupo completo una sola vez
+            const groupKey = equivalents.sort().join('|');
+            if (processedGroups.has(groupKey)) continue;
+            processedGroups.add(groupKey);
+
+            // Añadimos todos los nombres de la familia al reporte con la misma fórmula
+            for (const eqName of equivalents) {
+                if (!processedNames.has(eqName.toUpperCase())) {
+                    processedNames.add(eqName.toUpperCase());
+                    expandedColors.push({
+                        ...color,
+                        name: eqName, // Usamos el nombre de la familia
+                        isExpanded: true
+                    });
+                }
+            }
+        }
+
+        // Ordenar por grupo antes de exportar
+        const colors = this.sortColorsByGroup(expandedColors);
         
         const cmToPoints = 28.3464566929;
         const boxSize = 10 * cmToPoints;
@@ -79,7 +125,7 @@ export class EPSView {
         }
         
         eps += `%%EndComments
-
+        
 %%BeginProlog
 /boxSize ${boxSize} def
 /margin ${margin} def
@@ -149,12 +195,12 @@ ${textX} ${nameY} moveto (${this.escapePS(spotName)}) show
 `;
         }
         
-        eps += `grestore
+        eps += `gsave
 showpage
 %%EOF`;
         
         const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-        const fileName = `palette_${timestamp}.eps`;
+        const fileName = `palette_family_${timestamp}.eps`;
         const blob = new Blob([eps], { type: 'application/postscript' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -163,7 +209,7 @@ showpage
         a.click();
         URL.revokeObjectURL(url);
         
-        alert(`✅ Archivo EPS exportado con ${colors.length} colores.`);
+        alert(`✅ Archivo EPS exportado con familias completas (${colors.length} colores).`);
     }
     
     exportEPS() {

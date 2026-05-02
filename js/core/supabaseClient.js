@@ -58,6 +58,7 @@ export async function createUserInDB(username, password, permissions, isMaster =
 
 export async function updateUserInDB(userId, updates) {
     const updateData = {};
+    if (updates.username !== undefined) updateData.username = updates.username;
     if (updates.password !== undefined) updateData.password = updates.password;
     if (updates.permissions !== undefined) updateData.permisos = updates.permissions;
     if (updates.isMaster !== undefined) updateData.is_master = updates.isMaster;
@@ -128,6 +129,20 @@ export async function getTxtVersions(nk, plotter) {
         return [];
     }
     return data;
+}
+
+// Obtener TODOS los TXTs activos del sistema (para catálogo maestro global)
+export async function getAllActiveLibraryTxts() {
+    const { data, error } = await supabase
+        .from('library_txt')
+        .select('*')
+        .eq('activo', true);
+    
+    if (error) {
+        console.error('Error en getAllActiveLibraryTxts:', error);
+        return [];
+    }
+    return data || [];
 }
 
 // Obtener la versión activa de un NK + Plotter
@@ -357,5 +372,105 @@ export async function addMasterNk(nkCode, user = 'sistema') {
         console.error('Error en addMasterNk:', error);
         return { success: false, error: error.message };
     }
+}
+
+// ============================================
+// FUNCIONES PARA GRUPOS DE EQUIVALENCIA
+// ============================================
+
+export async function getEquivalencyGroupsFromDB() {
+    try {
+        console.log('📡 Consultando tabla maestra: equivalencias...');
+        // Simplificamos la consulta para evitar problemas de formato
+        const { data, error, status } = await supabase
+            .from('equivalencias')
+            .select();
+        
+        if (error) {
+            console.error(`❌ Error en Supabase (Status ${status}):`, error);
+            console.error('Mensaje:', error.message);
+            console.error('Detalle:', error.details);
+            console.error('Pista:', error.hint);
+            return [];
+        }
+        
+        if (!data) {
+            console.warn('⚠️ La consulta devolvió "null" para la tabla equivalencias.');
+            return [];
+        }
+
+        return await processGroupData(data);
+    } catch (error) {
+        console.error('❌ Error de red o ejecución:', error);
+        return [];
+    }
+}
+
+async function processGroupData(data) {
+    if (!data || data.length === 0) return [];
+    
+    const result = [];
+    data.forEach(item => {
+        // Priorizar nk_code o nk (según la estructura de Supabase)
+        const code = item.nk_code || item.nk || item.grupo_id || item.grupo || item.group_code || item.group_id || item.code || 'UNKNOWN';
+        
+        // Manejar el array 'colores'
+        let names = [];
+        if (item.colores) {
+            if (Array.isArray(item.colores)) {
+                names = item.colores.map(n => n.toString().trim().toUpperCase());
+            } else if (typeof item.colores === 'string') {
+                try {
+                    // Si viene como string JSON '["A", "B"]'
+                    const parsed = JSON.parse(item.colores);
+                    if (Array.isArray(parsed)) {
+                        names = parsed.map(n => n.toString().trim().toUpperCase());
+                    } else {
+                        names = [item.colores.trim().toUpperCase()];
+                    }
+                } catch (e) {
+                    // Si viene como string separado por comas 'A, B'
+                    names = item.colores.split(',').map(n => n.trim().toUpperCase());
+                }
+            }
+        }
+        
+        // Si no se encontraron en 'colores', buscar en campos individuales
+        if (names.length === 0) {
+            const singleName = item.nombre || item.color_name || item.name || item.color || '';
+            if (singleName) names = [singleName.toString().trim().toUpperCase()];
+        }
+        
+        if (names.length > 0 && code !== 'UNKNOWN') {
+            const cleanCode = code.toString().trim().toUpperCase();
+            result.push([cleanCode, ...names]);
+        }
+    });
+
+    // NUEVO: Cargar master_nks con sus respectivos IDs de grupo para validación cruzada
+    try {
+        const { data: nks } = await supabase.from('master_nks').select('nk_code');
+        if (nks && nks.length > 0) {
+            window.ALL_MASTER_NKS = nks.map(n => n.nk_code.toUpperCase());
+            window.NK_TO_GROUP_MAP = new Map();
+            const aggressiveNormalizeNK = (v) => String(v || '').replace(/^NK/i, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+            
+            nks.forEach(n => {
+                const rawNk = String(n.nk_code || '').trim().toUpperCase();
+                const rawGroup = String(n.group_id || n.grupo_id || '').trim().toUpperCase();
+                
+                if (rawNk && rawGroup) {
+                    const cleanKey = aggressiveNormalizeNK(rawNk);
+                    window.NK_TO_GROUP_MAP.set(cleanKey, rawGroup);
+                }
+            });
+            console.log(`✅ Sincronizados ${nks.length} NKs maestros y sus mapeos de grupo.`);
+        }
+    } catch (e) {
+        console.warn('No se pudo cargar mapeo de master_nks:', e);
+    }
+
+    console.log(`✅ Sincronizados ${result.length} grupos desde la base de datos.`);
+    return result;
 }
 

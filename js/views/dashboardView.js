@@ -395,10 +395,39 @@ export class DashboardView {
         }
     }
 
+    renderKpis(summary) {
+        const container = document.getElementById('dashboardKpis');
+        if (!container) return;
+        const cards = [
+            ['Sin coincidencia', summary.mismatches || 0, '📌', '#00ff88'],
+            ['CMYK fuera regla', summary.invalidCmyk || 0, '🎯', '#00e5ff'],
+            ['Duplicados', summary.duplicates || 0, '👥', '#ff8c00'],
+            ['Colores Evaluados', summary.total || 0, '🎨', '#7f00ff'],
+            ['Archivos Auditados', summary.count || 0, '📄', '#00ff88']
+        ];
+        container.innerHTML = `<div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;">` + 
+            cards.map(([title, value, icon, color]) => `
+            <div class="neon-card" style="flex: 1; min-width: 150px; padding: 1rem;">
+                <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">${icon}</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: ${color};">${value}</div>
+                <div style="font-size: 0.8rem; color: #9ca3af;">${title}</div>
+            </div>
+        `).join('') + `</div>`;
+    }
+
     async renderCharts() {
         const period = document.getElementById('dashboardPeriod')?.value || 'month';
-        this.reportEngine.period = period;
-        const rawRows = await this.reportEngine.buildReportRows();
+        await this.reportEngine.buildReportData();
+        
+        const rawRows = this.reportEngine.comparisonLogs.map(log => ({
+            periodo: new Date(log.created_at || log.createdAt).toLocaleDateString(),
+            date: log.created_at || log.createdAt,
+            value: log.total_colors || 0,
+            unmatched: log.unmatched || 0,
+            duplicates: log.duplicates || 0,
+            invalid_cmyk: log.invalid_cmyk || 0,
+            usuario: log.user
+        }));
 
         const from = document.getElementById('dashboardDateFrom')?.value;
         const to = document.getElementById('dashboardDateTo')?.value;
@@ -412,9 +441,14 @@ export class DashboardView {
             return true;
         });
 
-        const selectedMetrics = this.getSelectedMetrics();
-        const filteredRows = rows.filter(r => selectedMetrics.has(r.metric));
-        const summary = this.reportEngine.summarize(filteredRows);
+        const summary = {
+            total: rows.reduce((s, r) => s + r.value, 0),
+            mismatches: rows.reduce((s, r) => s + r.unmatched, 0),
+            duplicates: rows.reduce((s, r) => s + r.duplicates, 0),
+            invalidCmyk: rows.reduce((s, r) => s + r.invalid_cmyk, 0),
+            count: rows.length
+        };
+        
         this.renderKpis(summary);
 
         const mainCtx = document.getElementById('dashboardMainChart');
@@ -422,31 +456,28 @@ export class DashboardView {
         const distCtx = document.getElementById('dashboardUserDistChart');
         if (!mainCtx || !secCtx || !distCtx) return;
 
-        const series = this.buildSeries(filteredRows, selectedMetrics);
-        
-        // Optimización: Si los gráficos ya existen, actualizamos sus datos en lugar de destruirlos
+        // Generar series para la gráfica de líneas (Errores por tiempo)
+        const labels = [...new Set(rows.map(r => r.periodo))].sort();
+        const datasets = [
+            { label: 'Sin Coincidencia', data: labels.map(l => rows.filter(r => r.periodo === l).reduce((s,r) => s + r.unmatched, 0)), borderColor: '#00ff88', tension: 0.4 },
+            { label: 'CMYK fuera regla', data: labels.map(l => rows.filter(r => r.periodo === l).reduce((s,r) => s + r.invalid_cmyk, 0)), borderColor: '#00e5ff', tension: 0.4 },
+            { label: 'Duplicados', data: labels.map(l => rows.filter(r => r.periodo === l).reduce((s,r) => s + r.duplicates, 0)), borderColor: '#ff8c00', tension: 0.4 }
+        ];
+
         if (this.mainChart && this.mainChart.ctx) {
-            this.mainChart.data = series;
-            this.mainChart.update('none'); // Update sin animación pesada o 'active' para suave
+            this.mainChart.data = { labels, datasets };
+            this.mainChart.update();
         } else {
             if (this.mainChart) this.mainChart.destroy();
             this.mainChart = new window.Chart(mainCtx, {
                 type: 'line',
-                data: series,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#e2e8f0', font: { size: 10 } } } },
-                    scales: {
-                        x: { ticks: { color: '#9ca3af', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                        y: { ticks: { color: '#9ca3af', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
-                    }
-                }
+                data: { labels, datasets },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e2e8f0' } } } }
             });
         }
 
         const byUser = new Map();
-        filteredRows.forEach(r => {
+        rows.forEach(r => {
             byUser.set(r.usuario, (byUser.get(r.usuario) || 0) + Number(r.value || 0));
         });
         

@@ -34,7 +34,7 @@ export function clearAllCache() {
     console.log('✅ Caché completamente limpiada');
 }
 
-export function saveComparatorState(primaryData, secondaryData, results, selectedPending, deletedPending, groupSelections, manualGroupSelections) {
+export function saveComparatorState(primaryData, secondaryData, results, selectedPending, deletedPending, groupSelections, manualGroupSelections, primaryFileName, secondaryFileName) {
     const state = {
         primaryData,
         secondaryData,
@@ -43,6 +43,8 @@ export function saveComparatorState(primaryData, secondaryData, results, selecte
         deletedPending: Array.from(deletedPending),
         groupSelections: Array.from(groupSelections.entries()),
         manualGroupSelections: Array.from(manualGroupSelections),
+        primaryFileName,
+        secondaryFileName,
         lastUpdated: new Date().toISOString()
     };
     saveState('alphaColorMatchData', state);
@@ -58,7 +60,9 @@ export function loadComparatorState() {
             selectedPending: new Set(state.selectedPending || []),
             deletedPending: new Set(state.deletedPending || []),
             groupSelections: new Map(state.groupSelections || []),
-            manualGroupSelections: new Set(state.manualGroupSelections || [])
+            manualGroupSelections: new Set(state.manualGroupSelections || []),
+            primaryFileName: state.primaryFileName || '',
+            secondaryFileName: state.secondaryFileName || ''
         };
     }
     return null;

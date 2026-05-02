@@ -27,43 +27,23 @@ export class DevelopmentView {
     
     async loadEquivalencyGroups() {
         try {
-            console.log('📡 Intentando cargar grupos desde Supabase (tabla: equivalency_groups)...');
-            const { data, error } = await supabase
-                .from('equivalency_groups')
-                .select('*')
-                .order('group_id');
+            const { getEquivalencyGroupsFromDB } = await import('../core/supabaseClient.js');
+            const { updateConstantsFromDB } = await import('../core/constants.js');
             
-            if (!error && data && data.length > 0) {
-                // Verificar estructura: ¿es un array de colores o una fila por color?
-                if (data[0].colors && Array.isArray(data[0].colors)) {
-                    // Formato: group_id, colors[]
-                    window.EQUIVALENCY_ROWS = data.map(row => {
-                        // Asegurar que el ID del grupo esté en la primera posición si no lo está
-                        const colors = [...row.colors];
-                        if (colors[0] !== row.group_id) {
-                            return [row.group_id, ...colors];
-                        }
-                        return colors;
-                    });
-                } else {
-                    // Formato: group_id, color_name (agrupar en JS)
-                    const grouped = {};
-                    data.forEach(row => {
-                        const gid = row.group_id || 'SIN_GRUPO';
-                        const cname = row.color_name || row.color || row.name;
-                        if (!grouped[gid]) grouped[gid] = [gid];
-                        if (cname && !grouped[gid].includes(cname)) grouped[gid].push(cname);
-                    });
-                    window.EQUIVALENCY_ROWS = Object.values(grouped);
-                }
-                console.log(`✅ ${window.EQUIVALENCY_ROWS.length} grupos cargados correctamente de Supabase.`);
+            console.log('📡 Sincronizando DevelopmentView con el Catálogo Maestro (Supabase)...');
+            const dbGroups = await getEquivalencyGroupsFromDB();
+            
+            if (dbGroups && dbGroups.length > 0) {
+                // Actualizar constantes globales y window
+                updateConstantsFromDB(dbGroups);
+                window.EQUIVALENCY_ROWS = dbGroups;
+                console.log(`✅ ${dbGroups.length} grupos maestros sincronizados en DevelopmentView.`);
             } else {
-                if (error) console.error('❌ Error de Supabase:', error);
+                console.warn('⚠️ No se recibieron datos de Supabase, usando constantes locales.');
                 window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
-                console.log('⚠️ Usando constants.js como fallback.');
             }
         } catch (error) {
-            console.error('❌ Error crítico cargando grupos:', error);
+            console.error('❌ Error crítico sincronizando grupos en DevelopmentView:', error);
             window.EQUIVALENCY_ROWS = [...CONST_EQUIVALENCY_ROWS];
         }
         
