@@ -12,8 +12,8 @@ export function renderResults(results, groupSelections, selectedPending, deleted
     const counts = {
         exact: results.filter(r => r.matchType === 'exact').length,
         equivalent: results.filter(r => r.matchType === 'equivalent').length,
-        pendingPrimary: results.filter(r => r.matchType === 'pending_primary').length,
-        pendingSecondary: results.filter(r => r.matchType === 'pending_secondary').length,
+        pendingPrimary: results.filter(r => r.matchType === 'pending_primary' && !selectedPending.has(r.id) && !deletedPending.has(r.id)).length,
+        pendingSecondary: results.filter(r => r.matchType === 'pending_secondary' && !selectedPending.has(r.id) && !deletedPending.has(r.id)).length,
         added: selectedPending.size,
         deleted: deletedPending.size
     };
@@ -31,25 +31,31 @@ export function renderResults(results, groupSelections, selectedPending, deleted
                 <span style="font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 2px; font-weight: 800;">FILTRAR RESULTADOS:</span>
             </div>
             <div style="display: flex; gap: 0.8rem; flex-wrap: wrap;">
-                <div class="badge premium-filter ${showExact ? 'active' : ''}" data-filter="exact">
+                <div class="badge premium-filter filter-exact ${showExact ? 'active' : ''}" data-filter="exact" 
+                     style="border-color: #10b981; color: ${showExact ? 'white' : '#10b981'}; background: ${showExact ? '#10b981' : 'transparent'};">
                     <i class="fas fa-check-double"></i> Exactas: <strong>${counts.exact}</strong>
                 </div>
-                <div class="badge premium-filter ${showEquivalent ? 'active' : ''}" data-filter="equivalent">
+                <div class="badge premium-filter filter-equivalent ${showEquivalent ? 'active' : ''}" data-filter="equivalent"
+                     style="border-color: #f59e0b; color: ${showEquivalent ? 'white' : '#f59e0b'}; background: ${showEquivalent ? '#f59e0b' : 'transparent'};">
                     <i class="fas fa-sync-alt"></i> Equivalentes: <strong>${counts.equivalent}</strong>
                 </div>
-                <div class="badge premium-filter ${showPendingPrimary ? 'active' : ''}" data-filter="pendingPrimary">
+                <div class="badge premium-filter filter-master ${showPendingPrimary ? 'active' : ''}" data-filter="pendingPrimary"
+                     style="border-color: #fb923c; color: ${showPendingPrimary ? 'white' : '#fb923c'}; background: ${showPendingPrimary ? '#fb923c' : 'transparent'};">
                     <i class="fas fa-database"></i> Solo Master: <strong>${counts.pendingPrimary}</strong>
                 </div>
-                <div class="badge premium-filter ${showPendingSecondary ? 'active' : ''}" data-filter="pendingSecondary">
+                <div class="badge premium-filter filter-sec ${showPendingSecondary ? 'active' : ''}" data-filter="pendingSecondary"
+                     style="border-color: #f87171; color: ${showPendingSecondary ? 'white' : '#f87171'}; background: ${showPendingSecondary ? '#f87171' : 'transparent'};">
                     <i class="fas fa-file-import"></i> Solo Sec: <strong>${counts.pendingSecondary}</strong>
                 </div>
-                <div class="badge premium-filter ${showAdded ? 'active' : ''}" data-filter="added">
+                <div class="badge premium-filter filter-added ${showAdded ? 'active' : ''}" data-filter="added"
+                     style="border-color: #00e5ff; color: ${showAdded ? '#0a0a0a' : '#00e5ff'}; background: ${showAdded ? '#00e5ff' : 'transparent'};">
                     <i class="fas fa-plus-circle"></i> Agregados: <strong>${counts.added}</strong>
                 </div>
-                <div class="badge premium-filter ${showDeleted ? 'active' : ''}" data-filter="deleted">
+                <div class="badge premium-filter filter-deleted ${showDeleted ? 'active' : ''}" data-filter="deleted"
+                     style="border-color: #64748b; color: ${showDeleted ? 'white' : '#64748b'}; background: ${showDeleted ? '#64748b' : 'transparent'};">
                     <i class="fas fa-trash-alt"></i> Quitados: <strong>${counts.deleted}</strong>
                 </div>
-                <div class="badge premium-filter" data-filter="reset" style="margin-left: auto; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none;">
+                <div class="badge premium-filter" data-filter="reset" style="margin-left: auto; background: #3b82f6; color: white; border: 2px solid #3b82f6;">
                     <i class="fas fa-eye"></i> Ver Todo
                 </div>
             </div>
@@ -140,18 +146,22 @@ function renderNormalRow(item, groupSelections, selectedPending, deletedPending)
         const selection = groupSelections.get(groupId) || 'primary';
         actions = `
             <div class="selection-buttons premium">
-                <button class="selection-btn p-btn ${selection === 'primary' ? 'active' : ''}" onclick="window.app.selectGroup('${groupId}', 'primary')">Usar Principal</button>
-                <button class="selection-btn s-btn ${selection === 'secondary' ? 'active' : ''}" onclick="window.app.selectGroup('${groupId}', 'secondary')">Usar Secundario</button>
+                <button class="selection-btn p-btn ${selection === 'primary' ? 'active-primary' : ''}" onclick="window.app.selectGroup('${groupId}', 'primary')">
+                    ${selection === 'primary' ? '<i class="fas fa-check"></i> USANDO' : 'Usar Principal'}
+                </button>
+                <button class="selection-btn s-btn ${selection === 'secondary' ? 'active-secondary' : ''}" onclick="window.app.selectGroup('${groupId}', 'secondary')">
+                    ${selection === 'secondary' ? '<i class="fas fa-check"></i> USANDO' : 'Usar Secundario'}
+                </button>
             </div>
         `;
     } else {
         actions = `
             <div class="pending-buttons premium">
-                <button class="action-btn add ${isAdded ? 'active' : ''}" onclick="window.app.togglePendingAdd('${item.id}')">
-                    <i class="fas fa-plus"></i> ${isAdded ? 'Agregado' : 'Agregar'}
+                <button class="action-btn add ${isAdded ? 'active-green' : ''}" onclick="window.app.togglePendingAdd('${item.id}')">
+                    <i class="fas fa-${isAdded ? 'check-circle' : 'plus'}"></i> ${isAdded ? '✓ AGREGADO' : 'Agregar'}
                 </button>
-                <button class="action-btn remove ${isDeleted ? 'active' : ''}" onclick="window.app.togglePendingDelete('${item.id}')">
-                    <i class="fas fa-times"></i> ${isDeleted ? 'Quitado' : 'Quitar'}
+                <button class="action-btn remove ${isDeleted ? 'active-red' : ''}" onclick="window.app.togglePendingDelete('${item.id}')">
+                    <i class="fas fa-${isDeleted ? 'check-circle' : 'times'}"></i> ${isDeleted ? '✓ QUITADO' : 'Quitar'}
                 </button>
             </div>
         `;

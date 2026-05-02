@@ -1,0 +1,55 @@
+/* css/components/prettyTable.css */
+/* RESTAURACIÓN DE ESTILOS PREMIUM PARA LA TABLA DE AUDITORÍA */
+
+.row-match-exact { background: rgba(16, 185, 129, 0.08) !important; border-left: 4px solid #10b981; }
+.row-match-equivalent { background: rgba(59, 130, 246, 0.08) !important; border-left: 4px solid #3b82f6; }
+.row-pending { background: rgba(245, 158, 11, 0.08) !important; border-left: 4px solid #f59e0b; }
+.row-added { background: rgba(16, 185, 129, 0.15) !important; border-left: 4px solid #10b981; }
+.row-deleted { background: rgba(239, 68, 68, 0.15) !important; border-left: 4px solid #ef4444; opacity: 0.6; }
+
+.selection-btn {
+    border: 2px solid transparent !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    font-weight: 800 !important;
+    text-transform: uppercase;
+    font-size: 0.7rem !important;
+    border-radius: 8px !important;
+    letter-spacing: 0.5px;
+}
+
+.selection-btn.p-btn { background: rgba(59, 130, 246, 0.1) !important; color: #3b82f6 !important; border-color: rgba(59, 130, 246, 0.2) !important; }
+.selection-btn.p-btn.active { background: #3b82f6 !important; color: white !important; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important; }
+
+.selection-btn.s-btn { background: rgba(245, 158, 11, 0.1) !important; color: #f59e0b !important; border-color: rgba(245, 158, 11, 0.2) !important; }
+.selection-btn.s-btn.active { background: #f59e0b !important; color: white !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4) !important; }
+
+.status-premium {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+.status-ok-premium { background: #065f46; color: #34d399; }
+.status-warn-premium { background: #78350f; color: #fbbf24; }
+.status-info-premium { background: #1e3a8a; color: #93c5fd; }
+.status-err-premium { background: #7f1d1d; color: #f87171; }
+
+.color-cell { padding: 10px; }
+.nk-tag { background: #1e293b; color: #3b82f6; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 900; display: inline-block; margin-bottom: 6px; border: 1px solid rgba(59, 130, 246, 0.3); }
+.name-text { font-size: 0.9rem; font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+.cmyk-row { font-size: 0.75rem; color: #94a3b8; font-family: monospace; display: flex; align-items: center; gap: 10px; }
+
+/* Estilo para el botón de Agregar Todo que mantenga la consistencia */
+#addAllSecondaryBtn {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+    border: none;
+    transition: all 0.3s;
+}
+#addAllSecondaryBtn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+}

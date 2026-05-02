@@ -644,23 +644,30 @@ body {
 /* Premium Filter Buttons */
 .badge.premium-filter {
     cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(30, 30, 44, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    background: rgba(30, 30, 44, 0.6);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #94a3b8;
 }
 
-.badge.premium-filter:hover {
-    background: rgba(0, 229, 255, 0.1);
-    border-color: rgba(0, 229, 255, 0.3);
-    transform: translateY(-2px);
-}
+/* Colores específicos y forzados para filtros */
+.filter-exact.active { background: #10b981 !important; color: white !important; border-color: #10b981 !important; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4) !important; }
+.filter-exact { border-color: #10b981; color: #10b981; }
 
-.badge.premium-filter.active {
-    background: #00e5ff !important;
-    color: #0a0a0a !important;
-    border-color: #00e5ff !important;
-    box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
-}
+.filter-equivalent.active { background: #f59e0b !important; color: white !important; border-color: #f59e0b !important; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4) !important; }
+.filter-equivalent { border-color: #f59e0b; color: #f59e0b; }
+
+.filter-master.active { background: #fb923c !important; color: white !important; border-color: #fb923c !important; box-shadow: 0 0 15px rgba(251, 146, 60, 0.4) !important; }
+.filter-master { border-color: #fb923c; color: #fb923c; }
+
+.filter-sec.active { background: #f87171 !important; color: white !important; border-color: #f87171 !important; box-shadow: 0 0 15px rgba(248, 113, 113, 0.4) !important; }
+.filter-sec { border-color: #f87171; color: #f87171; }
+
+.filter-added.active { background: #00e5ff !important; color: #0a0a0a !important; border-color: #00e5ff !important; box-shadow: 0 0 15px rgba(0, 229, 255, 0.4) !important; }
+.filter-added { border-color: #00e5ff; color: #00e5ff; }
+
+.filter-deleted.active { background: #64748b !important; color: white !important; border-color: #64748b !important; box-shadow: 0 0 15px rgba(100, 116, 139, 0.4) !important; }
+.filter-deleted { border-color: #64748b; color: #64748b; }
 
 .manual-badge {
     display: inline-block;

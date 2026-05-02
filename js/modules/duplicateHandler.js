@@ -7,7 +7,7 @@ import { escapeHtml } from '../core/utils.js';
 export function findDuplicateGroups(records) {
     const groups = new Map();
     records.forEach((record, index) => {
-        const key = `${(record.baseName || '').toUpperCase().trim()}||${(record.nk || '').toUpperCase().trim()}`;
+        const key = (record.baseName || '').toUpperCase().trim().replace(/\s+/g, ' ');
         if (!groups.has(key)) {
             groups.set(key, []);
         }

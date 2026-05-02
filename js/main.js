@@ -228,7 +228,7 @@ class AlphaColorMatch {
 
         
         if (addAllSecBtn) {
-            addAllSecBtn.onclick = () => this.addAllSecondaryItems();
+            addAllSecBtn.onclick = () => this.addAllPendingItems();
         }
 
         // Eventos de Colapso Unificado (Triángulo)
@@ -269,15 +269,14 @@ class AlphaColorMatch {
         window.showNotification('Acción Masiva', `Se conservarán ${count} colores del archivo Master.`, 'success');
     }
     
-    addAllSecondaryItems() {
+    addAllPendingItems() {
         if (!this.results || this.results.length === 0) return;
         
         const btn = document.getElementById('addAllSecondaryBtn');
-        const originalContent = btn.innerHTML;
-        
         let count = 0;
+
         for (const item of this.results) {
-            if (item.matchType === 'pending_secondary') {
+            if (item.matchType === 'pending_primary' || item.matchType === 'pending_secondary') {
                 if (!this.selectedPending.has(item.id)) {
                     this.selectedPending.add(item.id);
                     this.deletedPending.delete(item.id);
@@ -286,23 +285,22 @@ class AlphaColorMatch {
             }
         }
         
-        // Feedback visual en el botón
+        // Feedback visual
         if (btn) {
-            btn.innerHTML = '<i class="fas fa-check-circle"></i> ¡LISTO! ' + count + ' Agregados';
-            btn.style.background = '#059669'; // Verde más oscuro/intenso
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> ¡TODO AGREGADO! (' + count + ')';
+            btn.style.background = '#059669';
             btn.style.transform = 'scale(1.05)';
             
             setTimeout(() => {
                 btn.style.transform = '';
-                // El renderResults se encargará de deshabilitarlo si ya no hay pendientes
-                renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+                this.renderResults();
             }, 600);
         } else {
-            renderResults(this.results, this.groupSelections, this.selectedPending, this.deletedPending);
+            this.renderResults();
         }
         
         this.validateExportReady();
-        window.showNotification('Acción Masiva', `Se agregaron ${count} colores nuevos satisfactoriamente.`, 'success');
+        window.showNotification('Acción Masiva', `Se agregaron ${count} colores (Master + Secundario) satisfactoriamente.`, 'success');
     }
 
     async loadPrimaryFile(event) {
@@ -411,14 +409,20 @@ class AlphaColorMatch {
             return;
         }
 
-        // 5. RE-VALIDACIÓN DE DUPLICADOS (Crucial después de correcciones)
-        const finalDuplicateGroups = findDuplicateGroups(currentRecords);
-        if (finalDuplicateGroups.length > 0) {
-            window.showNotification('Duplicados Detectados', 'Las correcciones de nombre generaron duplicados. Por favor, resuélvalos.', 'warning');
+        // 5. RE-VALIDACIÓN DE DUPLICADOS (Crucial después de las correcciones de nombres)
+        let finalDuplicateGroups = findDuplicateGroups(currentRecords);
+        while (finalDuplicateGroups.length > 0) {
+            window.showNotification('Duplicados Detectados', 'Las correcciones de nombre generaron duplicados o ya existían en el archivo. Por favor, resuélvalos para continuar.', 'warning');
             const indicesToRemove = await showDuplicateModal(finalDuplicateGroups);
+            
             if (indicesToRemove.length > 0) {
                 currentRecords = currentRecords.filter((_, idx) => !indicesToRemove.includes(idx));
                 duplicatesResolved += indicesToRemove.length;
+                // Volver a buscar por si quedaron más (el usuario pudo elegir mal)
+                finalDuplicateGroups = findDuplicateGroups(currentRecords);
+            } else {
+                // Si el usuario cierra sin elegir, rompemos el bucle pero ya se le avisó
+                break;
             }
         }
 
