@@ -28,7 +28,7 @@ import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
 import { DashboardView } from './views/dashboardView.js';
 import { CyclicHubView } from './views/cyclicHubView.js';
-import { supabase, getAllMasterNks, getCustomValidColorNames } from './core/supabaseClient.js';
+import { supabase, getAllMasterNks } from './core/supabaseClient.js';
 
 class AlphaColorMatch {
     constructor() {

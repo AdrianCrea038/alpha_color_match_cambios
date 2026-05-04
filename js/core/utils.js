@@ -8,24 +8,23 @@ export function extractNK(fullName) {
     if (!fullName) return null;
     const normalized = normalizeSpaces(fullName).toUpperCase();
     
-    // 1. Prioridad ABSOLUTA: Buscar NKs conocidos de la base de datos
-    // Ordenamos por longitud descendente para no confundir NK675 con NK675426
+    // 1. ÚNICO CRITERIO: Buscar NKs que existen físicamente en la tabla maestra
+    // Se ordena por longitud para evitar que un NK corto "robe" parte de uno largo
     const masterNks = (window.ALL_MASTER_NKS || []).map(n => n.toUpperCase()).sort((a, b) => b.length - a.length);
+    
     for (const master of masterNks) {
-        if (normalized.includes(master)) {
+        // Buscamos el NK como palabra completa o al final del string
+        const regex = new RegExp(`\\b${master}\\b|${master}$`, 'i');
+        if (regex.test(normalized)) {
             return master;
         }
     }
 
-    // 2. Fallback: Buscar patrón NK...
-    const nkMatch = normalized.match(/NK[A-Z0-9\-]+/i);
-    if (nkMatch) return nkMatch[0].toUpperCase();
-    
-    // 3. Fallback Agresivo: Última palabra con números
+    // 2. Si no está en la tabla, buscamos si hay algo que parezca un NK al final (para marcar error)
     const words = normalized.split(/\s+/);
-    for (let i = words.length - 1; i >= 0; i--) {
-        const word = words[i];
-        if (/[0-9]/.test(word) && word.length >= 4) return word.toUpperCase();
+    const lastWord = words[words.length - 1];
+    if (lastWord && (lastWord.startsWith('NK') || lastWord.startsWith('T') || /[0-9]/.test(lastWord))) {
+        return lastWord; // Se devuelve para que isValidNK(lastWord) sea false y aparezca el error
     }
     
     return null;

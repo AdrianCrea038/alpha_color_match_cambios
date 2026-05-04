@@ -89,33 +89,7 @@ export class LinearizationValidatorView {
         
         this.container.innerHTML = `
             <style>
-                .row-success { background: rgba(16, 185, 129, 0.03); }
-                .row-error-red { background: rgba(244, 63, 94, 0.15); border-left: 8px solid #f43f5e; }
-                .row-error-pink { background: rgba(236, 72, 153, 0.15); border-left: 8px solid #ec4899; }
-                .row-error-purple { background: rgba(139, 92, 246, 0.15); border-left: 8px solid #8b5cf6; }
-                .row-error-orange { background: rgba(245, 158, 11, 0.15); border-left: 8px solid #f59e0b; }
-                .row-error-yellow { background: rgba(234, 179, 8, 0.15); border-left: 8px solid #eab308; }
-                .row-error-blue { background: rgba(59, 130, 246, 0.15); border-left: 8px solid #3b82f6; }
-                
-                .status-badge-solid {
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                    font-size: 0.7rem;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                }
-                .status-badge-solid.valid { background: #10b981; color: #fff; }
-                .status-badge-solid.red { background: #f43f5e; color: #fff; }
-                .status-badge-solid.pink { background: #ec4899; color: #fff; }
-                .status-badge-solid.purple { background: #8b5cf6; color: #fff; }
-                .status-badge-solid.orange { background: #f59e0b; color: #000; }
-                .status-badge-solid.yellow { background: #eab308; color: #000; }
-                .status-badge-solid.blue { background: #3b82f6; color: #fff; }
-
+                /* Estilos mínimos necesarios que no están en el CSS global */
                 .mismatch-val {
                     color: #f43f5e;
                     font-weight: 900;
@@ -125,29 +99,6 @@ export class LinearizationValidatorView {
                     padding: 0 2px;
                     border-radius: 2px;
                 }
-                
-                .stat-badge-mini {
-                    padding: 4px 10px;
-                    border-radius: 6px;
-                    font-size: 0.7rem;
-                    font-weight: 600;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    border: 1px solid transparent;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    user-select: none;
-                }
-                .stat-badge-mini:hover { transform: translateY(-2px); filter: brightness(1.2); }
-                .stat-badge-mini.active { border-width: 2px; box-shadow: 0 0 10px currentColor; }
-                
-                .stat-badge-mini.red { background: rgba(244, 63, 94, 0.1); border-color: #f43f5e; color: #f43f5e; }
-                .stat-badge-mini.pink { background: rgba(236, 72, 153, 0.1); border-color: #ec4899; color: #ec4899; }
-                .stat-badge-mini.purple { background: rgba(139, 92, 246, 0.1); border-color: #8b5cf6; color: #8b5cf6; }
-                .stat-badge-mini.orange { background: rgba(245, 158, 11, 0.1); border-color: #f59e0b; color: #f59e0b; }
-                .stat-badge-mini.yellow { background: rgba(234, 179, 8, 0.1); border-color: #eab308; color: #eab308; }
-                .stat-badge-mini.blue { background: rgba(59, 130, 246, 0.1); border-color: #3b82f6; color: #3b82f6; }
             </style>
             <!-- SECCIÓN 1: AUDITORÍA CÍCLICA (COMPARACIÓN) -->
             <div id="cyclicalAuditSection" class="lin-card audit-card" style="border: 1px solid rgba(59, 130, 246, 0.2); background: rgba(15, 23, 42, 0.3);">
@@ -673,15 +624,20 @@ export class LinearizationValidatorView {
                 r.expectedNk = '';
 
                 // 3. REGLA 45 (DIAGNÓSTICO)
-                r.isMissingNk = !nk; // 🔵 Azul (Regla 45.6)
-                r.isInvalidNkCode = nk && !r.isValidNkInSystem; // 🔴 Rojo (No existe en master_nks)
+                // EXCEPCIÓN TONAL: No validar NK si el color empieza con TN, TNL o Tonal
+                const isTonal = baseName.toUpperCase().startsWith('TONAL') ||
+                                baseName.toUpperCase().startsWith('TNL') ||
+                                baseName.toUpperCase().startsWith('TN');
+                r.isMissingNk = !nk && !isTonal;        // 🔵 Azul (Exento si es Tonal)
+                r.isInvalidNkCode = !isTonal && nk && !r.isValidNkInSystem; // 🔴 Rojo (Exento si es Tonal)
                 r.hasCmykRangeError = r.cmyk.some(v => isNaN(v) || v > 100); // 🔴 Rojo (Regla 45.1)
                 
-                // DUPLICADOS (Regla 45.1)
-                r.isDuplicate = list.filter(other => 
-                    other !== r && 
-                    normalizeNK(other.nk) === normalizeNK(nk) && 
-                    (other.name || '').trim().toUpperCase() === (r.name || '').trim().toUpperCase()
+                // DUPLICADOS (Regla 45.1): Requiere mismo baseName + mismo NK
+                const cleanBaseName = (r.baseName || '').trim().toUpperCase();
+                r.isDuplicate = list.filter(other =>
+                    other !== r &&
+                    normalizeNK(other.nk) === normalizeNK(nk) &&
+                    (other.baseName || '').trim().toUpperCase() === cleanBaseName
                 ).length > 0;
 
                 // 4. REGLA 45.5 (AMARILLO): Error de Nomenclatura
@@ -696,7 +652,8 @@ export class LinearizationValidatorView {
                 // CÁLCULO FINAL DE ESTADO (Válido / Error)
                 // ============================================================
                 const isCritical = r.isCorrupted || r.isDuplicate || r.isInvalidName || 
-                                   r.isNkMismatch || r.isMissingNk || r.hasCmykRangeError || r.isInvalidNkCode;
+                                   r.isNkMismatch || r.isMissingNk || r.hasCmykRangeError || r.isInvalidNkCode ||
+                                   r.hasNumberedParentheses;
 
                 if (this.mode === 'direct') {
                     // En Auditoría Directa solo bloquean los errores críticos definidos en el manual
@@ -772,23 +729,27 @@ export class LinearizationValidatorView {
             nkMismatch: activeRecords.filter(r => r.isNkMismatch && r.hasError).length,
             nameInconsistent: activeRecords.filter(r => r.isNameInconsistent && r.hasError).length,
             nk: activeRecords.filter(r => r.isMissingNk).length,
-            invalidNk: activeRecords.filter(r => r.isInvalidNkCode).length
+            invalidNk: activeRecords.filter(r => r.isInvalidNkCode).length,
+            parentheses: activeRecords.filter(r => r.hasNumberedParentheses).length
         };
         const errorCount = activeRecords.filter(r => r.hasError).length;
 
-        // 2. Renderizar Badges de Estadísticas / Filtros
+        // 2. Renderizar Badges de Estadísticas / Filtros (CON INTENSIDAD NEÓN SI HAY ERRORES)
         if (statsBadges) {
             statsBadges.innerHTML = `
-                <div class="stat-badge-mini ${!this.activeFilter ? 'active' : ''}" data-filter="all" style="background: rgba(255,255,255,0.05); border-color: #64748b; color: #e2e8f0;"><i class="fas fa-eye"></i> Ver Todos (${this.records.length})</div>
-                ${counts.corrupted > 0 ? `<div class="stat-badge-mini red ${this.activeFilter === 'corrupted' ? 'active' : ''}" data-filter="corrupted"><i class="fas fa-bug"></i> ${counts.corrupted} Corruptos</div>` : ''}
-                ${counts.range > 0 ? `<div class="stat-badge-mini red ${this.activeFilter === 'range' ? 'active' : ''}" data-filter="range"><i class="fas fa-exclamation-circle"></i> ${counts.range} CMYK > 100</div>` : ''}
-                ${counts.dup > 0 ? `<div class="stat-badge-mini red ${this.activeFilter === 'dup' ? 'active' : ''}" data-filter="dup"><i class="fas fa-copy"></i> ${counts.dup} Duplicados</div>` : ''}
-                ${counts.nkMismatch > 0 ? `<div class="stat-badge-mini orange ${this.activeFilter === 'nkMismatch' ? 'active' : ''}" data-filter="nkMismatch"><i class="fas fa-fingerprint"></i> ${counts.nkMismatch} NK Mismatch</div>` : ''}
-                ${counts.invalidNk > 0 ? `<div class="stat-badge-mini red ${this.activeFilter === 'invalidNk' ? 'active' : ''}" data-filter="invalidNk"><i class="fas fa-id-card-alt"></i> ${counts.invalidNk} NK No Existe</div>` : ''}
-                ${counts.nameInconsistent > 0 ? `<div class="stat-badge-mini orange ${this.activeFilter === 'nameInconsistent' ? 'active' : ''}" data-filter="nameInconsistent"><i class="fas fa-font"></i> ${counts.nameInconsistent} Nom. Diferente</div>` : ''}
-                ${counts.nom > 0 ? `<div class="stat-badge-mini orange ${this.activeFilter === 'nom' ? 'active' : ''}" data-filter="nom"><i class="fas fa-book-dead"></i> ${counts.nom} Catálogo</div>` : ''}
-                ${counts.nk > 0 ? `<div class="stat-badge-mini blue ${this.activeFilter === 'nk' ? 'active' : ''}" data-filter="nk"><i class="fas fa-fingerprint"></i> ${counts.nk} Sin NK</div>` : ''}
-                ${errorCount === 0 ? '<div class="stat-badge-mini" style="background: rgba(16, 185, 129, 0.1); border-color: #10b981; color: #10b981;"><i class="fas fa-check-circle"></i> Todo Correcto</div>' : ''}
+                <div class="stat-badge-mini ${!this.activeFilter ? 'active' : ''}" data-filter="all" style="background: rgba(255,255,255,0.05); border-color: #64748b; color: #e2e8f0;">
+                    <i class="fas fa-eye"></i> Todos (${this.records.length})
+                </div>
+                ${counts.corrupted > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'corrupted' ? 'active' : ''}" data-filter="corrupted"><i class="fas fa-bug"></i> ${counts.corrupted} Corruptos</div>` : ''}
+                ${counts.range > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'range' ? 'active' : ''}" data-filter="range"><i class="fas fa-exclamation-circle"></i> ${counts.range} CMYK > 100</div>` : ''}
+                ${counts.dup > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'dup' ? 'active' : ''}" data-filter="dup"><i class="fas fa-copy"></i> ${counts.dup} Duplicados</div>` : ''}
+                ${counts.nkMismatch > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'nkMismatch' ? 'active' : ''}" data-filter="nkMismatch"><i class="fas fa-fingerprint"></i> ${counts.nkMismatch} NK Mismatch</div>` : ''}
+                ${counts.invalidNk > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'invalidNk' ? 'active' : ''}" data-filter="invalidNk"><i class="fas fa-id-card-alt"></i> ${counts.invalidNk} NK Inválido</div>` : ''}
+                ${counts.nameInconsistent > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'nameInconsistent' ? 'active' : ''}" data-filter="nameInconsistent"><i class="fas fa-font"></i> ${counts.nameInconsistent} Nom. Diferente</div>` : ''}
+                ${counts.nom > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'nom' ? 'active' : ''}" data-filter="nom"><i class="fas fa-book-dead"></i> Catálogo (${counts.nom})</div>` : ''}
+                ${counts.nk > 0 ? `<div class="stat-badge-mini blue has-count ${this.activeFilter === 'nk' ? 'active' : ''}" data-filter="nk"><i class="fas fa-fingerprint"></i> Sin NK (${counts.nk})</div>` : ''}
+                ${counts.parentheses > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'parentheses' ? 'active' : ''}" data-filter="parentheses"><i class="fas fa-brackets-curly"></i> Paréntesis (${counts.parentheses})</div>` : ''}
+                ${errorCount === 0 && this.records.length > 0 ? '<div class="stat-badge-mini" style="background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981; color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);"><i class="fas fa-check-circle"></i> TODO CORRECTO</div>' : ''}
             `;
 
             // Vincular eventos de filtrado
@@ -815,6 +776,7 @@ export class LinearizationValidatorView {
                 if (this.activeFilter === 'nameInconsistent') return r.isNameInconsistent;
                 if (this.activeFilter === 'nom') return r.isInvalidName;
                 if (this.activeFilter === 'nk') return r.isMissingNk;
+                if (this.activeFilter === 'parentheses') return r.hasNumberedParentheses;
                 return true;
             });
         }
@@ -890,6 +852,9 @@ export class LinearizationValidatorView {
                 } else if (record.isMissingNk) { 
                     statusHtml = '<div class="status-badge-solid blue"><i class="fas fa-fingerprint"></i> Sin NK</div>'; 
                     rowColorClass = 'row-error-blue';
+                } else if (record.hasNumberedParentheses) {
+                    statusHtml = '<div class="status-badge-solid orange"><i class="fas fa-exclamation"></i> Paréntesis</div>';
+                    rowColorClass = 'row-error-orange';
                 }
 
                 tr.className = rowColorClass;

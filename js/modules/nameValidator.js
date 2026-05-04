@@ -1,5 +1,5 @@
 import { normalizeSpaces, escapeHtml, extractBaseName } from '../core/utils.js';
-import { addCustomValidColorName, getCustomValidColorNames, getAllMasterNks, addMasterNk, getEquivalencyGroupsFromDB, supabase } from '../core/supabaseClient.js';
+import { getAllMasterNks, addMasterNk, getEquivalencyGroupsFromDB, supabase, addColorNameToGroup, createNewEquivalencyGroup } from '../core/supabaseClient.js';
 import { updateConstantsFromDB, getAllEquivalentNames, getGroupIdForColor, EQUIVALENCE_MAP } from '../core/constants.js';
 
 // Hacer las funciones disponibles globalmente para otros módulos
@@ -38,11 +38,14 @@ export async function ensureValidColorCatalogLoaded(forceReload = false) {
     
     if (validColorNamesLoaded) return;
     
-    const customNames = await getCustomValidColorNames();
-    for (const name of customNames) addNameToLocalCatalog(name);
+    /* 
+    Se eliminó la carga desde valid_color_names por instrucción de unificación.
+    Solo se usará la tabla 'equivalencias'.
+    */
     
     const dbGroups = await getEquivalencyGroupsFromDB();
     if (dbGroups && dbGroups.length > 0) {
+        window.EQUIVALENCY_ROWS = dbGroups; // Guardar para sugerencias del modal
         updateConstantsFromDB(dbGroups);
         for (const group of dbGroups) {
             for (let i = 1; i < group.length; i++) {
@@ -63,55 +66,39 @@ export function isValidColorName(fullName, ignoreCatalog = false) {
     if (!fullName || typeof fullName !== 'string') return false;
     if (ignoreCatalog) return true;
     
-    // Normalización AGRESIVA (Manual V3.1 + Tolerancia de espacios)
-    const aggressiveNormalize = (n) => String(n || '').toUpperCase().replace(/[^A-Z0-9]/gi, '');
-    const cleanFull = aggressiveNormalize(fullName);
+    const map = window.EQUIVALENCE_MAP || EQUIVALENCE_MAP;
+    if (!map) return false;
+
+    // Normalización AGRESIVA (Remover todo excepto letras y números)
+    const aggNorm = (n) => String(n || '').toUpperCase().replace(/[^A-Z0-9]/gi, '');
     
-    // 1. Encontrar la familia usando normalización agresiva (para saber qué color intentaban escribir)
-    let equivGroup = null;
-    if (window.EQUIVALENCE_MAP && window.EQUIVALENCE_MAP.has(cleanFull)) {
-        equivGroup = window.EQUIVALENCE_MAP.get(cleanFull);
-    } else {
-        // Intentar buscar sin el NK
-        let cleanBase = cleanFull;
-        if (typeof extractBaseName === 'function') {
-            cleanBase = aggressiveNormalize(extractBaseName(fullName));
-        } else {
-            cleanBase = cleanFull.replace(/NK[A-Z0-9\-]+/gi, '').trim();
-        }
-        if (window.EQUIVALENCE_MAP && window.EQUIVALENCE_MAP.has(cleanBase)) {
-            equivGroup = window.EQUIVALENCE_MAP.get(cleanBase);
-        }
-    }
+    const cleanFull = aggNorm(fullName);
+    const cleanBase = aggNorm(extractBaseName(fullName));
+    
+    if (!cleanFull && !cleanBase) return false;
+    
+    // 1. INTENTO DIRECTO
+    if (map.has(cleanFull) || map.has(cleanBase)) return true;
 
-    // 2. VALIDACIÓN ESTRICTA: El nombre debe coincidir EXACTAMENTE con uno de los registrados
-    if (equivGroup && equivGroup.names) {
-        const strictName = String(fullName).trim().toUpperCase();
-        // Revisar si la escritura exacta coincide con alguno de los nombres de la familia
-        const isExactMatch = equivGroup.names.some(n => String(n).trim().toUpperCase() === strictName);
-        if (isExactMatch) return true;
-        
-        // Si no es un match exacto con el nombre completo, verificar si coincide omitiendo el NK
-        // (ya que a veces el TXT trae el nombre sin el NK pegado)
-        let strictBase = strictName;
-        if (typeof extractBaseName === 'function') {
-            strictBase = String(extractBaseName(fullName)).trim().toUpperCase();
-        } else {
-            strictBase = strictName.replace(/\s+NK[A-Z0-9\-]+/gi, '').trim();
-        }
-        
-        const isExactBaseMatch = equivGroup.names.some(n => String(n).trim().toUpperCase() === strictBase);
-        if (isExactBaseMatch) return true;
-        
-        // Si lo encontró pero está mal escrito, es inválido (ESTRICTO)
-        return false;
-    }
+    // 2. INTENTO TOLERANTE (Quitar prefijos/sufijos comunes como TM, TEAM, R)
+    // Ej: "69W TM CRIMSON R" -> "69WCRIMSON"
+    const stripTechnical = (s) => s
+        .replace(/^TM|TEAM|TEAMM/g, '') // Quitar prefijos al inicio
+        .replace(/R$/g, '')             // Quitar R al final
+        .replace(/REFILL$/g, '');       // Quitar REFILL al final
 
-    // 3. Fallback: buscar en el array simple si no hay grupos (para compatibilidad)
-    if (window.ALL_VALID_COLOR_NAMES) {
-        const strictName = String(fullName).trim().toUpperCase();
-        const isExact = window.ALL_VALID_COLOR_NAMES.some(n => String(n).trim().toUpperCase() === strictName);
-        if (isExact) return true;
+    const strippedFull = stripTechnical(cleanFull);
+    const strippedBase = stripTechnical(cleanBase);
+
+    if (strippedFull && map.has(strippedFull)) return true;
+    if (strippedBase && map.has(strippedBase)) return true;
+
+    // 3. FALLBACK: Verificar si alguna de las llaves en el mapa contiene nuestro nombre limpio
+    // (Útil para casos donde el catálogo tiene el nombre más largo)
+    if (cleanBase.length > 3) {
+        for (let key of map.keys()) {
+            if (key.includes(cleanBase) || cleanBase.includes(key)) return true;
+        }
     }
     
     return false;
@@ -133,10 +120,8 @@ export function isValidNK(nk) {
 }
 
 export async function addValidColorName(name) {
-    const user = appInstance?.auth?.getCurrentUser()?.username || 'sistema';
-    const result = await addCustomValidColorName(name, user);
-    if (result.success) addNameToLocalCatalog(name);
-    return result;
+    console.warn('⚠️ La adición directa a valid_color_names está desactivada. Use el módulo de equivalencias.');
+    return { success: false, error: 'Función desactivada. Use equivalencias.' };
 }
 
 export async function addMasterNK(nkCode) {
@@ -178,9 +163,20 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
         const cleanNk = record.nk || '';
         const originalFullName = record.name || '';
         
-        const isNameValid = isValidColorName(cleanBase);
-        const isNkValid = isValidNK(cleanNk);
-        const hasParentheses = /\(|\)/.test(originalFullName);
+        // REGLA: Ignorar todo lo que contenga "WHITE"
+        if (originalFullName.toUpperCase().includes('WHITE') || cleanBase.toUpperCase().includes('WHITE')) {
+            continue;
+        }
+
+        // VALIDACIÓN UNIFICADA: Un nombre es válido si el nombre completo O el baseName están en catálogo
+        const isNameValid = isValidColorName(originalFullName) || isValidColorName(cleanBase);
+        
+        // EXCEPCIÓN TONAL: Los colores TN, TNL o Tonal no requieren NK válido
+        const isTonal = cleanBase.toUpperCase().startsWith('TONAL') ||
+                        cleanBase.toUpperCase().startsWith('TNL') ||
+                        cleanBase.toUpperCase().startsWith('TN');
+        const isNkValid = isTonal ? true : isValidNK(cleanNk);
+        const hasParentheses = /\(\d+\)/.test(originalFullName); // Solo paréntesis con número
         
         const signature = `${cleanBase}|${cleanNk}`;
         const isDuplicate = seenRecords.has(signature);
@@ -189,12 +185,15 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
         const cmyk = record.cmyk || [];
         const hasCmykError = cmyk.length < 4 || cmyk.some(v => isNaN(Number(v)) || Number(v) < 0 || Number(v) > 100);
 
-        const hasAnyError = !isNameValid || !isNkValid || hasParentheses || isDuplicate || hasCmykError;
+        // Si el nombre es válido y no tiene paréntesis, nameError es false
+        const nameError = !isNameValid;
+
+        const hasAnyError = nameError || !isNkValid || hasParentheses || isDuplicate || hasCmykError;
         
         if (hasAnyError) {
             allAuditRecords.push({ 
                 ...record, 
-                nameError: !isNameValid,
+                nameError,
                 nkError: !isNkValid,
                 hasParentheses,
                 hasCmykError
@@ -209,7 +208,7 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
     
     records.forEach(r => {
         const nk = (r.nk || '').trim().toUpperCase();
-        if (nk && nk.startsWith('NK')) {
+        if (nk) { // Acepta cualquier NK, no solo los que empiezan con 'NK'
             nkCounts[nk] = (nkCounts[nk] || 0) + 1;
             if (nkCounts[nk] > maxCount) {
                 maxCount = nkCounts[nk];
@@ -230,17 +229,29 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
         return { records: records, correctionsApplied: 0 };
     }
 
-    // PASO 1: CORREGIR NOMBRES
+    // PASO 1: CORREGIR NOMBRES (Solo los que fallan validación o tienen paréntesis)
     const nameAudit = allAuditRecords.filter(r => r.nameError || r.hasParentheses);
     let currentRecords = allAuditRecords;
 
     if (nameAudit.length > 0) {
-        const correctedNames = await new Promise(resolve => createCorrectionModal(nameAudit, 'names', resolve));
-        if (!correctedNames) return { records: [], cancelled: true };
-        currentRecords = allAuditRecords.map(orig => {
-            const corr = correctedNames.find(c => c.id === orig.id);
-            return corr ? { ...orig, ...corr, nameError: false, hasParentheses: false } : orig;
+        // Doble check para no mostrar los que ya se marcaron como LISTO accidentalmente
+        const realNameAudit = nameAudit.filter(r => {
+            const isNowValid = isValidColorName(r.name) || isValidColorName(r.baseName);
+            return !isNowValid || r.hasParentheses;
         });
+
+        if (realNameAudit.length > 0) {
+            const correctedNames = await new Promise(resolve => createCorrectionModal(realNameAudit, 'names', resolve));
+            if (!correctedNames) return { records: [], cancelled: true };
+            
+            // Actualizar records con las correcciones
+            currentRecords = allAuditRecords.map(orig => {
+                const corr = correctedNames.find(c => c.id === orig.id);
+                // Si se corrigió, actualizamos. Si no estaba en el audit, se queda igual.
+                // Si estaba en el audit pero NO se devolvió (se eliminó), se marcará para filtrado después.
+                return corr ? { ...orig, ...corr, nameError: false, hasParentheses: false } : orig;
+            });
+        }
     }
 
     // PASO 2: CORREGIR NKs
@@ -267,19 +278,32 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
         correctedCmyks.forEach(c => cmykCorrectedMap.set(c.id, c.cmyk));
     }
 
-    const finalRecords = records.map(original => {
-        const corrected = currentRecords.find(c => c.id === original.id);
-        const cmykFixed = cmykCorrectedMap.get(original.id);
-        return {
-            ...original,
-            ...(corrected ? {
-                name: `${corrected.baseName} ${corrected.nk}`.trim(),
-                baseName: corrected.baseName,
-                nk: corrected.nk
-            } : {}),
-            ...(cmykFixed ? { cmyk: cmykFixed } : {})
-        };
-    });
+    // Identificar IDs que fueron eliminados en los modales
+    const nameAuditIds = nameAudit.map(r => r.id);
+    const nkAuditIds = nkAudit.map(r => r.id);
+    const correctedNameIds = new Set(currentRecords.map(r => r.id));
+    
+    // Un registro se considera eliminado si estaba en el audit pero ya no está en el resultado
+    const deletedIds = new Set([
+        ...nameAuditIds.filter(id => !correctedNameIds.has(id)),
+        ...nkAuditIds.filter(id => !correctedNameIds.has(id))
+    ]);
+
+    const finalRecords = records
+        .filter(original => !deletedIds.has(original.id)) // <--- FILTRAR ELIMINADOS
+        .map(original => {
+            const corrected = currentRecords.find(c => c.id === original.id);
+            const cmykFixed = cmykCorrectedMap.get(original.id);
+            return {
+                ...original,
+                ...(corrected ? {
+                    name: `${corrected.baseName} ${corrected.nk}`.trim(),
+                    baseName: corrected.baseName,
+                    nk: corrected.nk
+                } : {}),
+                ...(cmykFixed ? { cmyk: cmykFixed } : {})
+            };
+        });
 
     return { records: finalRecords, correctionsApplied: currentRecords.length };
 }
@@ -291,10 +315,10 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
     
     const isNameStep = stepType === 'names';
     const title = isNameStep ? 'PASO 1: VALIDAR NOMBRES DE COLOR' : 'PASO 2: VALIDAR CÓDIGOS NK';
-    const subtitle = isNameStep ? 'Escribe el nombre y elige la sugerencia del catálogo.' : 'Escribe y selecciona el código NK oficial.';
+    const subtitle = isNameStep ? 'Escribe el nombre o agrega el nuevo color al catálogo.' : 'Escribe y selecciona el código NK oficial.';
     
     modal.innerHTML = `
-        <div class="modal-content" style="max-width: 900px; width: 95%; background: #0f172a; border: 2px solid #334155; border-radius: 12px;">
+        <div class="modal-content" style="max-width: 1000px; width: 95%; background: #0f172a; border: 2px solid #334155; border-radius: 12px;">
             <div class="modal-header" style="background: #1e1e2e; border-bottom: 3px solid ${isNameStep ? '#f59e0b' : '#3b82f6'}; padding: 1.5rem 2rem; border-radius: 12px 12px 0 0;">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                     <div>
@@ -310,7 +334,7 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
                             <th style="padding: 0 15px; width: 60px;">ID</th>
                             <th style="padding: 0 15px;">Dato Original</th>
                             <th style="padding: 0 15px;">${isNameStep ? 'Nombre del Color' : 'Código NK'}</th>
-                            <th style="padding: 0 15px; text-align: center; width: 150px;">Estado</th>
+                            <th style="padding: 0 15px; text-align: center; width: 180px;">Acciones / Estado</th>
                         </tr>
                     </thead>
                     <tbody id="correctionTableBody">
@@ -323,6 +347,22 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
                                         <input type="text" class="name-input" placeholder="🔍 Escribe nombre..." value="${rec.name}" 
                                                style="width: 100%; background: #0b0f1a; color: white; border: 2px solid #ef4444; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold;">
                                         <div class="suggestion-box" style="display:none; position:absolute; left:0; right:0; background:#1e293b; border:2px solid #f59e0b; z-index:1000; max-height:200px; overflow-y:auto; border-radius: 0 0 8px 8px;"></div>
+                                        
+                                        <!-- UI para agregar a BD (inicialmente oculta) -->
+                                        <div class="add-to-db-container" style="display:none; margin-top:10px; padding:10px; background:rgba(245, 158, 11, 0.1); border:1px dashed #f59e0b; border-radius:8px;">
+                                            <p style="color:#f59e0b; font-size:0.75rem; margin:0 0 5px 0; font-weight:bold;">ESTE COLOR NO EXISTE. ¿AGREGAR A UN GRUPO?</p>
+                                            <div style="position:relative;">
+                                                <input type="text" class="group-search-input" placeholder="🔍 Buscar grupo por nombre o ID..." 
+                                                       style="width:100%; background:#0f172a; border:1px solid #475569; color:white; padding:8px; border-radius:6px; font-size:0.85rem;">
+                                                <div class="group-suggestion-box" style="display:none; position:absolute; left:0; right:0; background:#1e293b; border:1px solid #f59e0b; z-index:1001; max-height:150px; overflow-y:auto; border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></div>
+                                            </div>
+                                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                                <button class="btn-save-to-db" style="background:#f59e0b; color:white; border:none; padding:5px 12px; border-radius:4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">
+                                                    <i class="fas fa-plus"></i> AGREGAR A BD
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <input type="hidden" class="selected-family-id" value="">
                                         <input type="hidden" class="nk-row-input" value="${rec.nk}">
                                     ` : `
@@ -333,9 +373,15 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
                                     `}
                                 </td>
                                 <td style="padding: 15px; text-align: center;">
-                                    <div class="status-indicator">
-                                        <i class="fas fa-times-circle" style="color: #ef4444; font-size: 1.8rem;"></i>
-                                        <span style="display:block; font-size: 0.7rem; font-weight: 900; color: #ef4444;">BLOQUEADO</span>
+                                    <div style="display:flex; align-items:center; justify-content:center; gap:15px;">
+                                        <div class="status-indicator">
+                                            <i class="fas fa-times-circle" style="color: #ef4444; font-size: 1.8rem;"></i>
+                                            <span style="display:block; font-size: 0.7rem; font-weight: 900; color: #ef4444;">BLOQUEADO</span>
+                                        </div>
+                                        <button class="delete-row-btn" title="Eliminar de la carga" 
+                                                style="background:rgba(239, 68, 68, 0.1); border:1px solid #ef4444; color:#ef4444; width:35px; height:35px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s;">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -355,8 +401,11 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
     document.body.appendChild(modal);
 
     const rows = Array.from(modal.querySelectorAll('#correctionTableBody tr'));
+    const deletedIds = new Set();
     
     const validateRow = (row) => {
+        if (deletedIds.has(row.dataset.id)) return;
+
         const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
         const val = input.value.trim().toUpperCase();
         const isValid = isNameStep ? isValidColorName(val) : isValidNK(val);
@@ -364,20 +413,123 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
         const icon = row.querySelector('.status-indicator i');
         const text = row.querySelector('.status-indicator span');
         
+        const addContainer = row.querySelector('.add-to-db-container');
+
         if (isValid) {
             icon.className = 'fas fa-check-circle'; icon.style.color = '#10b981';
             text.textContent = 'LISTO'; text.style.color = '#10b981';
             input.style.borderColor = '#10b981';
+            if (addContainer) addContainer.style.display = 'none';
         } else {
             icon.className = 'fas fa-times-circle'; icon.style.color = '#ef4444';
             text.textContent = 'BLOQUEADO'; text.style.color = '#ef4444';
             input.style.borderColor = isNameStep ? '#ef4444' : '#3b82f6';
+            if (addContainer && val.length > 2) addContainer.style.display = 'block';
+            else if (addContainer) addContainer.style.display = 'none';
         }
     };
 
     rows.forEach(row => {
         const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
         const sugBox = row.querySelector('.suggestion-box');
+        
+        // Botón eliminar
+        row.querySelector('.delete-row-btn').onclick = () => {
+            if (confirm('¿Eliminar este color de la carga? No se comparará ni se guardará.')) {
+                deletedIds.add(row.dataset.id);
+                row.style.opacity = '0.4';
+                row.style.pointerEvents = 'none';
+                row.querySelector('.status-indicator span').textContent = 'ELIMINADO';
+                row.querySelector('.status-indicator span').style.color = '#64748b';
+                row.querySelector('.status-indicator i').style.color = '#64748b';
+            }
+        };
+
+        if (isNameStep) {
+            const addContainer = row.querySelector('.add-to-db-container');
+            const groupInput = row.querySelector('.group-search-input');
+            const groupSugBox = row.querySelector('.group-suggestion-box');
+            const btnSave = row.querySelector('.btn-save-to-db');
+
+            groupInput.oninput = () => {
+                const query = groupInput.value.trim().toUpperCase();
+                if (query.length < 2) { groupSugBox.style.display = 'none'; return; }
+
+                const families = Array.isArray(window.EQUIVALENCY_ROWS) ? window.EQUIVALENCY_ROWS : [];
+                // families es [ [nk_code, color1, color2...], [...] ]
+                const matches = families.filter(f => {
+                    const groupId = f[0].toUpperCase();
+                    const colors = f.slice(1).filter(c => c).map(c => c.toUpperCase());
+                    return groupId.includes(query) || colors.some(c => c.includes(query));
+                }).slice(0, 10);
+
+                if (matches.length > 0) {
+                    groupSugBox.innerHTML = matches.map(f => {
+                        const groupId = f[0];
+                        const colorNames = f.slice(1).filter(c => c).join(', ');
+                        return `
+                            <div class="group-sug-item" data-id="${groupId}" style="padding:8px; cursor:pointer; color:white; border-bottom:1px solid #334155; font-size:0.8rem;">
+                                <div style="font-weight:bold; color:#f59e0b;">Grupo: ${groupId}</div>
+                                <div style="font-size:0.7rem; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${colorNames}</div>
+                            </div>
+                        `;
+                    }).join('');
+                    groupSugBox.style.display = 'block';
+                    groupSugBox.querySelectorAll('.group-sug-item').forEach(item => {
+                        item.onclick = () => {
+                            groupInput.value = item.dataset.id;
+                            groupSugBox.style.display = 'none';
+                        };
+                    });
+                } else {
+                    groupSugBox.style.display = 'none';
+                }
+            };
+
+            const user = window.app?.auth?.getCurrentUser();
+            const canEdit = user?.isMaster || user?.permissions?.includes('editCatalog');
+
+            if (canEdit) {
+                btnSave.onclick = async () => {
+                    const groupToUse = groupInput.value.trim().toUpperCase();
+                    const colorToRegister = input.value.trim().toUpperCase();
+                    
+                    if (!groupToUse) { alert('Selecciona o escribe un Grupo ID.'); return; }
+                    
+                    btnSave.disabled = true; btnSave.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PROCESANDO...';
+                    
+                    // Intentar agregar a grupo existente
+                    let result = await addColorNameToGroup(groupToUse, colorToRegister);
+                    
+                    // Si el grupo no existe, preguntar si desea crearlo
+                    if (!result.success && result.error.includes('no encontrado')) {
+                        if (confirm(`El grupo "${groupToUse}" no existe. ¿Deseas crear este NUEVO grupo con el color "${colorToRegister}"?`)) {
+                            result = await createNewEquivalencyGroup(groupToUse, colorToRegister);
+                        }
+                    }
+
+                    if (result.success) {
+                        // Actualizar catálogo local
+                        addNameToLocalCatalog(colorToRegister);
+                        if (window.EQUIVALENCE_MAP) {
+                            const cleanName = colorToRegister.replace(/[^A-Z0-9]/gi, '');
+                            window.EQUIVALENCE_MAP.set(cleanName, groupToUse);
+                        }
+                        // Reflejar cambio en la UI
+                        validateRow(row);
+                        alert('✅ Operación exitosa. El catálogo ha sido actualizado.');
+                    } else if (result) {
+                        alert('❌ Error: ' + result.error);
+                    }
+                    
+                    btnSave.disabled = false; btnSave.innerHTML = '<i class="fas fa-plus"></i> AGREGAR A BD';
+                };
+            } else {
+                btnSave.style.display = 'none';
+                groupInput.disabled = true;
+                groupInput.placeholder = '🔒 Sin permiso para editar BD';
+            }
+        }
 
         input.oninput = () => {
             const val = input.value.trim().toUpperCase();
@@ -422,27 +574,24 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
     });
 
     modal.querySelector('#btnApplyCorrections').onclick = async () => {
-        if (!rows.every(r => r.querySelector('.status-indicator span').textContent.trim() === 'LISTO')) {
-            alert('Debes corregir todos los registros antes de continuar.');
+        const remainingRows = rows.filter(r => !deletedIds.has(r.dataset.id));
+        
+        if (!remainingRows.every(r => r.querySelector('.status-indicator span').textContent.trim() === 'LISTO')) {
+            alert('Debes corregir o eliminar todos los registros bloqueados antes de continuar.');
             return;
         }
 
         const btn = modal.querySelector('#btnApplyCorrections');
         btn.disabled = true; btn.innerHTML = 'PROCESANDO...';
 
-        if (!isNameStep) {
-            const newNks = [...new Set(rows.map(r => r.querySelector('.nk-row-input').value.trim().toUpperCase()).filter(nk => !isValidNK(nk)))];
-            if (newNks.length > 0 && confirm(`¿Registrar estos NKs como nuevos?\n${newNks.join(', ')}`)) {
-                for (const nk of newNks) await addMasterNK(nk);
-            }
-        }
-
-        const corrected = rows.map(row => ({
+        const corrected = remainingRows.map(row => ({
             id: row.dataset.id,
             baseName: row.querySelector('.name-input').value.trim().toUpperCase(),
             nk: row.querySelector('.nk-row-input').value.trim().toUpperCase()
         }));
 
+        // NOTA: Los registros eliminados simplemente no se incluyen en 'corrected'.
+        // La lógica en validateAndCorrectRecords debe filtrar los originales.
         modal.remove();
         onComplete(corrected);
     };
@@ -451,6 +600,7 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
         if (confirm('¿Cancelar carga de archivo?')) { modal.remove(); onComplete(null); }
     };
 }
+
 
 export function revalidateRecord(name, nk) {
     const cleanName = (name || '').trim();

@@ -1,5 +1,5 @@
 ================================================================================
-          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V4.2)
+          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V4.3)
 ================================================================================
 
 Este documento describe la arquitectura, lógica y flujo de datos del sistema
@@ -13,71 +13,63 @@ en planta a través de un Dashboard Ejecutivo de alto rendimiento.
 
 2. ARQUITECTURA TÉCNICA
 -----------------------
-- Frontend: HTML5, CSS3 (Efectos Neón/RGB) y JavaScript Vanilla (ES Modules).
-- Backend/Base de Datos: Supabase (PostgreSQL).
-- Persistencia: Sistema híbrido Supabase + LocalStorage (caché).
-- Estilos: Sistema modular en css/components/ y css/views/.
+- Frontend: HTML5, CSS3 (Premium Dark Mode / Glassmorphism) y JS Vanilla (ES Modules).
+- Backend: Supabase (PostgreSQL) con conexión atómica vía API.
+- Paleta de Colores CSS (Identidad Visual):
+  * Primario (Acción): Azul Eléctrico (#3b82f6) - Sombras: 0 4px 15px rgba(59, 130, 246, 0.3)
+  * Éxito (Válido): Verde Esmeralda (#10b981)
+  * Error Crítico: Rojo Neón (#ef4444)
+  * Alerta/Catálogo: Ámbar (#fbbf24) y Naranja Vivo (#f97316)
+  * Informativo: Azul Cielo (#60a5fa)
+  * Fondo: Slate Dark (#0f172a / #1e293b) con bordes de 1px solid rgba(255,255,255,0.05).
 
-3. MOTOR GLOBAL DE VALIDACIÓN (CRÍTICO)
+3. MOTOR DE VALIDACIÓN Y AUDITORÍA (V4.3)
 ---------------------------------------
-Archivo: js/modules/nameValidator.js
-- window.isValidColorName(nombre): Valida contra catálogo oficial en Supabase.
-- window.isValidNK(nk): Valida contra tabla 'master_nks' en Supabase.
-- Detección de Duplicados (js/modules/duplicateHandler.js): Filtra registros por 
-  'baseName' normalizado. Impide que nombres idénticos con diferentes NKs o 
-  valores CMYK entren al sistema sin ser resueltos manualmente.
+Archivo: js/modules/nameValidator.js (El Corazón del Sistema)
 
-4. MÓDULOS PRINCIPALES (DETALLE DE ÚLTIMAS MEJORAS V4.2)
----------------------------------------------------
+A. REGLAS DE FILTRADO (IGNORAR):
+   - Todo registro que contenga la palabra "WHITE" en su nombre es ignorado por el 
+     motor de auditoría (se considera válido por defecto).
+   - Formatos Tonal: Colores que inician con "TN", "TNL" o "TONAL" no requieren NK.
 
-   A. COMPARADOR DE AUDITORÍA PRINCIPAL (js/main.js & js/modules/resultsRenderer.js)
-      - Acción Masiva Unificada: Botón "AGREGAR TODO (MASTER + SEC)". Procesa 
-        simultáneamente los colores nuevos del Secundario y los faltantes del 
-        Master en un solo ciclo de reconciliación.
-      - Sistema de Filtros Color-Coded:
-        * VERDE: Coincidencias Exactas.
-        * AMARILLO: Equivalentes (Nombre igual, CMYK diferente).
-        * NARANJA: Solo en el archivo Master.
-        * ROJO: Solo en el archivo Secundario (Nuevos).
-        * AZUL: Registros marcados para ser AGREGADOS.
-        * GRIS: Registros marcados para ser QUITADOS.
-      - Interfaz de Acción Persistente: Los botones "Agregar" y "Quitar" 
-        permanecen siempre visibles. El estado seleccionado se resalta con 
-        clases '.active-green' o '.active-red' y texto de confirmación (✓).
+B. VALIDACIÓN UNIFICADA DE NOMBRES:
+   - Un color es válido si existe en el catálogo de Equivalencias bajo su 
+     Nombre Base (ej: "002 BLACK") O bajo su Nombre Completo (ej: "002 BLACK NK711075").
 
-   B. AUDITORÍA CÍCLICO 2 (js/views/cyclicAuditView.js)
-      - Comparación Estricta: Maestro vs Target (Empareja por Nombre+NK).
-      - Validación CMYK > 100: Bloqueo de seguridad si algún valor supera 100.
-      - Modal de Edición Dual: Permite editar simultáneamente el Maestro y el 
-        Target en dos columnas separadas.
-      - Sincronización: Botón para igualar el Target al Maestro instantáneamente.
+C. GESTIÓN DE BASE DE DATOS DESDE AUDITORÍA:
+   - Agregar a Grupo: Inserta el nombre en la columna 'colores' (text[]) de la tabla 
+     'equivalencias' en Supabase.
+   - Crear Nuevo Grupo: Permite crear una fila nueva en 'equivalencias' con un ID 
+     de grupo personalizado (ej: un nuevo NK).
+   - Detección Dinámica: El sistema detecta automáticamente si la columna de ID se 
+     llama 'nk', 'grupo_id', 'nk_code', etc., para evitar errores de esquema.
 
-5. REGLAS DE ORO (ESTRICTAS)
+4. MÓDULOS ESPECÍFICOS Y SU PROGRAMACIÓN
+----------------------------------------
+
+   A. AUDITORÍA DIRECTA (js/views/directAuditView.js)
+      - Sincronización Fresh: Al cargar un archivo, ejecuta ensureValidColorCatalogLoaded(true) 
+        para bajar los últimos cambios de Supabase (ignora el caché).
+      - Visualización: Filtra por 7 estados: Catálogo, CMYK Diferente, CMYK > 100, 
+        Sin NK, NK Inválido, Duplicados y Paréntesis.
+
+   B. COMPARADOR PRINCIPAL (js/main.js & js/modules/resultsRenderer.js)
+      - Reconciliación: Compara Master vs Secundario y asigna estados de color (Verde/Rojo/Naranja).
+      - Bulk Actions: addAllPendingItems() agrega todos los cambios propuestos de una sola vez.
+
+   C. MANEJO DE DUPLICADOS (js/modules/duplicateHandler.js)
+      - Firma Única: La clave de duplicado es stricta: "NombreBase | NK".
+
+5. REGLAS DE ORO PARA LA IA
 ----------------------------
-1. CMYK > 100: Es un error CORRUPTO. Bloquea exportación y se marca en ROJO NEÓN.
-2. Normalización: Siempre usar .toUpperCase().replace(/[^A-Z0-9]/gi, '') para Mapas.
-3. Validación de Duplicados: Antes de comparar, el sistema DEBE obligar a resolver
-   nombres duplicados mediante el modal de corrección (processFileWithValidation).
-4. Feedback Visual: Las acciones de usuario deben tener respuesta inmediata (neon).
-
-6. SECCIÓN TÉCNICA PARA LA IA (INSTRUCCIONES DE CÓDIGO)
--------------------------------------------------------
-A. MÉTODOS CRÍTICOS:
-   - addAllPendingItems(): En main.js, recorre los resultados y agrega TODO lo que
-     sea 'pending_primary' o 'pending_secondary' al Set de seleccionados.
-   - renderResults(): Dibuja la tabla usando el motor de 'resultsRenderer.js'. 
-     Usa estilos inyectados e importantes para garantizar los colores de los filtros.
-
-B. VARIABLES GLOBALES DE REFERENCIA:
-   - window.app.selectedPending: Set() con los IDs de los colores a AGREGAR.
-   - window.app.deletedPending: Set() con los IDs de los colores a QUITAR.
-   - window.ALL_MASTER_RECORDS: Memoria completa del catálogo CMYK de Supabase.
-
-C. LÓGICA DE SEGURIDAD:
-   const isCorrupted = cmyk.some(v => v > 100.000001 || v < -0.000001 || isNaN(v));
-   - Este check debe aplicarse en CUALQUIER proceso de carga o edición.
+1. NUNCA modificar la tabla 'master_nks' durante una auditoría de colores (Nombres).
+2. CMYK > 100: Es un error CORRUPTO. Bloquea exportación y se marca en ROJO NEÓN.
+3. FORMATO ARRAY: Al escribir en la columna 'colores' de Supabase, usar siempre el 
+   formato de Postgres Array: {"NOMBRE"}.
+4. NORMALIZACIÓN: Antes de comparar con mapas de constantes, limpiar el nombre 
+   quitando espacios y caracteres especiales.
 
 ================================================================================
 Desarrollado por: Antigravity (AI Coding Assistant)
-Última actualización: 02 de Mayo, 2026 (V4.2 - Unified Bulk Action & Color Filters)
+Última actualización: 04 de Mayo, 2026 (V4.3 - Dynamic Group Creation & White Filter)
 ================================================================================

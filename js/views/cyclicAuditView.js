@@ -236,11 +236,11 @@ export class CyclicAuditView {
         };
 
         badges.innerHTML = `
-            <div class="badge ${!this.activeFilter ? 'active' : ''}" data-filter=""><i class="fas fa-eye"></i> Todos (${counts.total})</div>
-            <div class="badge orange ${this.activeFilter === 'diff' ? 'active' : ''}" data-filter="diff"><i class="fas fa-exclamation-triangle"></i> Diferentes (${counts.diff})</div>
-            <div class="badge red ${this.activeFilter === 'corrupted' ? 'active' : ''}" data-filter="corrupted"><i class="fas fa-flask"></i> CMYK > 100 (${counts.corrupted})</div>
-            <div class="badge red ${this.activeFilter === 'missing' ? 'active' : ''}" data-filter="missing"><i class="fas fa-minus-circle"></i> Faltantes (${counts.missing})</div>
-            <div class="badge blue ${this.activeFilter === 'new' ? 'active' : ''}" data-filter="new"><i class="fas fa-plus-circle"></i> Nuevos (${counts.new})</div>
+            <div class="stat-badge-mini ${!this.activeFilter ? 'active' : ''}" data-filter=""><i class="fas fa-eye"></i> Todos (${counts.total})</div>
+            ${counts.diff > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'diff' ? 'active' : ''}" onclick="window.cyclicView.setFilter('diff')"><i class="fas fa-exclamation-triangle"></i> Diferentes (${counts.diff})</div>` : ''}
+            ${counts.corrupted > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'corrupted' ? 'active' : ''}" onclick="window.cyclicView.setFilter('corrupted')"><i class="fas fa-flask"></i> CMYK > 100 (${counts.corrupted})</div>` : ''}
+            ${counts.missing > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'missing' ? 'active' : ''}" onclick="window.cyclicView.setFilter('missing')"><i class="fas fa-minus-circle"></i> Faltantes (${counts.missing})</div>` : ''}
+            ${counts.new > 0 ? `<div class="stat-badge-mini blue has-count ${this.activeFilter === 'new' ? 'active' : ''}" onclick="window.cyclicView.setFilter('new')"><i class="fas fa-plus-circle"></i> Nuevos (${counts.new})</div>` : ''}
         `;
         badges.querySelectorAll('.badge').forEach(b => b.onclick = () => this.setFilter(b.getAttribute('data-filter') || null));
 

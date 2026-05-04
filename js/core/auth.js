@@ -11,7 +11,8 @@ export const PERMISSIONS = {
     DASHBOARD: 'dashboard',
     BACKUP: 'backup',
     ADMIN: 'admin',
-    LINEARIZATION: 'linearization'
+    LINEARIZATION: 'linearization',
+    EDIT_CATALOG: 'editCatalog'
 };
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS);

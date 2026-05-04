@@ -93,11 +93,9 @@ export class DirectAuditView {
             const records = window.FileLoader.parseTxt(content);
             this.records = records;
             
-            // Forzar actualización del catálogo maestro desde Supabase antes de validar
-            if (window.app && typeof window.app.loadMasterData === 'function') {
-                const { ensureValidColorCatalogLoaded } = await import('../modules/nameValidator.js');
-                await ensureValidColorCatalogLoaded(true);
-            }
+            // FORZAR RECARGA SIEMPRE desde Supabase (garantiza colores recién agregados)
+            const { ensureValidColorCatalogLoaded } = await import('../modules/nameValidator.js');
+            await ensureValidColorCatalogLoaded(true);
             
             await this.performValidation();
             window.hideLoading?.();
@@ -130,10 +128,31 @@ export class DirectAuditView {
         // 1. PRIMERA PASADA: Identificar propiedades básicas de cada registro
         for (const r of this.records) {
             const cleanNk = (r.nk || '').trim().toUpperCase();
-            r.isValidName = window.isValidColorName?.(r.baseName || r.name) ?? true;
+            const baseName = (r.baseName || '').trim().toUpperCase();
+            const fullName = (r.name || '').trim().toUpperCase();
+
+            // REGLA: Ignorar todo lo que contenga "WHITE"
+            if (fullName.includes('WHITE') || baseName.includes('WHITE')) {
+                r.isValidName = true;
+                r.isValidNk = true;
+                r.hasNumberedParentheses = false;
+                r.isDuplicate = false;
+                r.hasError = false;
+                continue;
+            }
+
+            // EXCEPCIÓN TONAL: Los colores TN, TNL o Tonal no requieren NK
+            const isTonal = baseName.startsWith('TONAL') || baseName.startsWith('TNL') || baseName.startsWith('TN');
+            r.isTonal = isTonal;
+            
+            // VALIDACIÓN UNIFICADA: Válido si está el nombre completo O el nombre base en catálogo
+            const isValidName = (window.isValidColorName?.(fullName) || window.isValidColorName?.(baseName));
+            r.isValidName = isValidName;
+
             r.hasParentheses = /\(|\)/.test(r.name);
-            r.isValidNk = cleanNk ? (window.isValidNK?.(cleanNk) ?? true) : false;
-            r.isMissingNk = !cleanNk;
+            r.hasNumberedParentheses = /\(\d+\)/.test(r.name);
+            r.isValidNk = isTonal ? true : (cleanNk ? (window.isValidNK?.(cleanNk) === true) : false);
+            r.isMissingNk = isTonal ? false : !cleanNk;
             r.isCorrupted = (r.cmyk || []).some(v => v > 100.000001 || v < -0.000001 || isNaN(v));
         }
 
@@ -156,10 +175,12 @@ export class DirectAuditView {
             const colorNameOnly = fullName.replace(/^[0-9][0-9][A-Z]\s+/, '').replace(/^TM\s+/, '').trim();
             const groupKey = `${colorNameOnly}|${cleanNk}`;
             
-            // Duplicados: Basados en Nombre Exacto + NK
-            r.isDuplicate = this.records.filter(x => 
-                (x.baseName || x.name).toUpperCase() === fullName && 
-                (x.nk || '').trim().toUpperCase() === cleanNk
+            // Duplicados: Requiere mismo baseName + mismo NK (no solo nombre)
+            const baseNameForDup = (r.baseName || '').trim().toUpperCase();
+            r.isDuplicate = this.records.filter(x =>
+                (x.baseName || '').trim().toUpperCase() === baseNameForDup &&
+                (x.nk || '').trim().toUpperCase() === cleanNk &&
+                baseNameForDup !== '' // No marcar como dup si baseName está vacío
             ).length > 1;
 
             // Inconsistencia de CMYK: Basada en el Nombre Real del Color + NK
@@ -177,7 +198,10 @@ export class DirectAuditView {
             }
 
             // 3. ESTADO GLOBAL DE ERROR
-            r.hasError = !r.isValidName || !r.isValidNk || r.isMissingNk || r.isDuplicate || r.isCorrupted || r.hasParentheses || r.isCmykInconsistent;
+            const baseError = !r.isValidName || !r.isValidNk || r.isMissingNk || r.isDuplicate || r.isCorrupted || r.hasNumberedParentheses || r.isCmykInconsistent;
+            
+            // Si el usuario lo aprobó manualmente, el error se ignora para permitir la exportación
+            r.hasError = baseError && !r.isManuallyApproved;
         }
 
         this.renderResults();
@@ -194,12 +218,13 @@ export class DirectAuditView {
 
         // Filtrado
         let displayRecords = this.activeFilter ? this.records.filter(r => {
-            if (this.activeFilter === 'err_name') return !r.isValidName || r.hasParentheses;
+            if (this.activeFilter === 'err_name') return !r.isValidName && r.isValidNk; // SOLO nombres si el NK es correcto
             if (this.activeFilter === 'err_nk') return !r.isValidNk && !r.isMissingNk;
             if (this.activeFilter === 'err_cmyk') return r.isCorrupted;
             if (this.activeFilter === 'missing_nk') return r.isMissingNk;
             if (this.activeFilter === 'dup') return r.isDuplicate;
             if (this.activeFilter === 'inc') return r.isCmykInconsistent;
+            if (this.activeFilter === 'parentheses') return r.hasNumberedParentheses;
             return true;
         }) : this.records;
 
@@ -223,36 +248,27 @@ export class DirectAuditView {
 
         // Estadísticas
         const counts = {
-            name: this.records.filter(r => !r.isValidName || r.hasParentheses).length,
             nk: this.records.filter(r => !r.isValidNk && !r.isMissingNk).length,
+            name: this.records.filter(r => !r.isValidName && r.isValidNk).length, // Solo contar nombre si NK está bien
             missing: this.records.filter(r => r.isMissingNk).length,
             dup: this.records.filter(r => r.isDuplicate).length,
             cmyk: this.records.filter(r => r.isCorrupted).length,
-            inc: this.records.filter(r => r.isCmykInconsistent).length
+            inc: this.records.filter(r => r.isCmykInconsistent).length,
+            parentheses: this.records.filter(r => r.hasNumberedParentheses).length
         };
 
         badges.innerHTML = `
-            <div class="badge ${!this.activeFilter ? 'active' : ''}" onclick="window.directView.setFilter(null)">
+            <div class="stat-badge-mini ${!this.activeFilter ? 'active' : ''}" onclick="window.directView.setFilter(null)">
                 <i class="fas fa-eye"></i> Todos (${this.records.length})
             </div>
-            <div class="badge orange ${this.activeFilter === 'err_name' ? 'active' : ''}" onclick="window.directView.setFilter('err_name')">
-                <i class="fas fa-exclamation-triangle"></i> Catálogo (${counts.name})
-            </div>
-            <div class="badge orange ${this.activeFilter === 'inc' ? 'active' : ''}" onclick="window.directView.setFilter('inc')">
-                <i class="fas fa-layer-group"></i> CMYK Diferente (${counts.inc})
-            </div>
-            <div class="badge red ${this.activeFilter === 'err_nk' ? 'active' : ''}" onclick="window.directView.setFilter('err_nk')">
-                <i class="fas fa-times-circle"></i> NK Inválido (${counts.nk})
-            </div>
-            <div class="badge red ${this.activeFilter === 'err_cmyk' ? 'active' : ''}" onclick="window.directView.setFilter('err_cmyk')">
-                <i class="fas fa-flask"></i> CMYK > 100 (${counts.cmyk})
-            </div>
-            <div class="badge blue ${this.activeFilter === 'missing_nk' ? 'active' : ''}" onclick="window.directView.setFilter('missing_nk')">
-                <i class="fas fa-info-circle"></i> Sin NK (${counts.missing})
-            </div>
-            <div class="badge red ${this.activeFilter === 'dup' ? 'active' : ''}" onclick="window.directView.setFilter('dup')">
-                <i class="fas fa-copy"></i> Duplicados (${counts.dup})
-            </div>
+            ${counts.nk > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'err_nk' ? 'active' : ''}" onclick="window.directView.setFilter('err_nk')"><i class="fas fa-times-circle"></i> NK No Disponible (${counts.nk})</div>` : ''}
+            ${counts.name > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'err_name' ? 'active' : ''}" onclick="window.directView.setFilter('err_name')"><i class="fas fa-exclamation-triangle"></i> Mal Escrito (${counts.name})</div>` : ''}
+            ${counts.inc > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'inc' ? 'active' : ''}" onclick="window.directView.setFilter('inc')"><i class="fas fa-layer-group"></i> CMYK Diferente (${counts.inc})</div>` : ''}
+            ${counts.cmyk > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'err_cmyk' ? 'active' : ''}" onclick="window.directView.setFilter('err_cmyk')"><i class="fas fa-flask"></i> CMYK > 100 (${counts.cmyk})</div>` : ''}
+            ${counts.missing > 0 ? `<div class="stat-badge-mini blue has-count ${this.activeFilter === 'missing_nk' ? 'active' : ''}" onclick="window.directView.setFilter('missing_nk')"><i class="fas fa-info-circle"></i> Sin NK (${counts.missing})</div>` : ''}
+            ${counts.dup > 0 ? `<div class="stat-badge-mini red has-count ${this.activeFilter === 'dup' ? 'active' : ''}" onclick="window.directView.setFilter('dup')"><i class="fas fa-copy"></i> Duplicados (${counts.dup})</div>` : ''}
+            ${counts.parentheses > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'parentheses' ? 'active' : ''}" onclick="window.directView.setFilter('parentheses')"><i class="fas fa-exclamation"></i> Paréntesis (${counts.parentheses})</div>` : ''}
+            ${Object.values(counts).every(c => c === 0) && this.records.length > 0 ? '<div class="stat-badge-mini" style="background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981; color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);"><i class="fas fa-check-circle"></i> TODO CORRECTO</div>' : ''}
         `;
 
         displayRecords.forEach((r, idx) => {
@@ -260,11 +276,14 @@ export class DirectAuditView {
             let statusHtml = '<div class="status-badge valid">Válido</div>';
             let rowClass = 'row-success';
 
-            if (r.isCorrupted) {
+            if (r.isManuallyApproved) {
+                statusHtml = '<div class="status-badge valid" style="background: #059669; color: white;"><i class="fas fa-check-double"></i> Aprobado</div>';
+                rowClass = 'row-success';
+            } else if (r.isCorrupted) {
                 statusHtml = '<div class="status-badge red">CMYK > 100</div>';
                 rowClass = 'row-error-red';
             } else if (!r.isValidNk && !r.isMissingNk) {
-                statusHtml = '<div class="status-badge red">NK Inválido</div>';
+                statusHtml = '<div class="status-badge red">NK No Disponible</div>';
                 rowClass = 'row-error-red';
             } else if (r.isDuplicate) {
                 statusHtml = '<div class="status-badge red">Duplicado</div>';
@@ -272,26 +291,35 @@ export class DirectAuditView {
             } else if (r.isCmykInconsistent) {
                 statusHtml = '<div class="status-badge orange">CMYK Dif.</div>';
                 rowClass = 'row-error-orange';
-            } else if (!r.isValidName || r.hasParentheses) {
-                statusHtml = '<div class="status-badge amber">Catálogo</div>';
+            } else if (!r.isValidName) {
+                statusHtml = '<div class="status-badge amber">Mal Escrito</div>';
                 rowClass = 'row-error-amber';
+            } else if (r.hasNumberedParentheses) {
+                statusHtml = '<div class="status-badge orange">Paréntesis</div>';
+                rowClass = 'row-error-orange';
             } else if (r.isMissingNk) {
                 statusHtml = '<div class="status-badge blue">Sin NK</div>';
                 rowClass = 'row-error-blue';
             }
 
             tr.className = rowClass;
+            
+            // Siempre mostramos solo el nombre base (limpio de NK) en todas las vistas
+            // ya que el NK tiene su propia columna dedicada.
+            const displayName = r.baseName || r.name;
+
             tr.innerHTML = `
                 <td>${idx + 1}</td>
-                <td style="font-weight: 700;">${r.name}</td>
+                <td style="font-weight: 700;">${displayName}</td>
                 <td class="text-center" style="font-family: monospace;">${r.nk || '---'}</td>
                 <td class="text-center" style="font-family: monospace; font-size: 0.8rem;">
                     ${(r.cmyk || []).map(v => Number(v).toFixed(6)).join(' / ')}
                 </td>
                 <td class="text-center">${statusHtml}</td>
-                <td class="text-center">
-                    <button class="btn-icon-action edit" onclick="window.directView.editRecord('${r._uid}')" title="Editar"><i class="fas fa-pencil-alt"></i></button>
-                    <button class="btn-icon-action delete" onclick="window.directView.deleteRecord('${r._uid}')" title="Eliminar" style="color:#ef4444; margin-left:8px;"><i class="fas fa-trash-alt"></i></button>
+                <td class="actions">
+                    ${r.hasError ? `<button class="btn-icon approve-btn" onclick="window.directView.approveRecord('${r._uid}')" title="Aprobar Manualmente"><i class="fas fa-check-circle" style="color: #10b981;"></i></button>` : ''}
+                    <button class="btn-icon" onclick="window.directView.editRecord('${r._uid}')" title="Editar"><i class="fas fa-pencil-alt" style="color: #3b82f6;"></i></button>
+                    <button class="btn-icon" onclick="window.directView.deleteRecord('${r._uid}')" title="Eliminar"><i class="fas fa-trash" style="color: #ef4444;"></i></button>
                 </td>
             `;
             body.appendChild(tr);
@@ -332,7 +360,17 @@ export class DirectAuditView {
         document.getElementById('editC').dispatchEvent(event);
     }
 
-    async editRecord(uid) {
+    async approveRecord(uid) {
+        const record = this.records.find(r => r._uid === uid);
+        if (record) {
+            record.isManuallyApproved = true;
+            // Re-validamos globalmente para actualizar el botón de exportación
+            this.performValidation();
+            window.showNotification('Registro Aprobado', 'El color se ha marcado como válido para exportar.', 'success');
+        }
+    }
+
+    editRecord(uid) {
         const record = this.records.find(r => r._uid === uid);
         if (!record) return;
 

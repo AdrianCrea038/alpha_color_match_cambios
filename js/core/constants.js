@@ -21,24 +21,28 @@ export function updateConstantsFromDB(dbGroups) {
     // Reconstruir ALL_VALID_COLOR_NAMES
     const names = [];
     for (const row of EQUIVALENCY_ROWS) {
-        for (let i = 1; i < row.length; i++) {
-            names.push(row[i].toUpperCase());
+        // row puede ser un objeto o un array según de donde venga
+        const colorList = Array.isArray(row) ? row.slice(1) : (row.colores || []);
+        for (const name of colorList) {
+            if (name) names.push(name.toUpperCase());
         }
     }
     ALL_VALID_COLOR_NAMES = [...new Set(names)].sort();
 
-    // Reconstruir EQUIVALENCE_MAP
-    EQUIVALENCE_MAP = new Map();
+    // Reconstruir EQUIVALENCE_MAP - Limpiar y rellenar para mantener referencia
+    EQUIVALENCE_MAP.clear();
     for (const row of EQUIVALENCY_ROWS) {
-        const groupId = row[0];
-        const namesInGroup = row.slice(1).filter(n => n && n.trim() !== '');
+        const groupId = Array.isArray(row) ? row[0] : (row.nk_code || row.nk);
+        const namesInGroup = Array.isArray(row) ? row.slice(1).filter(n => n) : (row.colores || []);
+        
         for (const name of namesInGroup) {
+            if (!name) continue;
             // Normalización agresiva: remover todo excepto letras y números para match total
-            const key = name.toUpperCase().replace(/[^A-Z0-9]/gi, '');
+            const key = name.toString().toUpperCase().replace(/[^A-Z0-9]/gi, '');
             if (!EQUIVALENCE_MAP.has(key)) {
                 EQUIVALENCE_MAP.set(key, { 
                     groupId, 
-                    masterName: namesInGroup[0], // El primero es el oficial
+                    masterName: namesInGroup[0], 
                     names: [...namesInGroup] 
                 });
             }
@@ -48,28 +52,26 @@ export function updateConstantsFromDB(dbGroups) {
     // Reconstruir MAIN_COLOR_NAMES
     const mainNames = [];
     for (const row of EQUIVALENCY_ROWS) {
-        if (row.length > 1) {
-            mainNames.push(row[1]);
-        }
+        const firstColor = Array.isArray(row) ? row[1] : (row.colores ? row.colores[0] : null);
+        if (firstColor) mainNames.push(firstColor);
     }
     MAIN_COLOR_NAMES = mainNames.sort();
     
-    // Hacer disponible globalmente para todos los módulos (Evita problemas de caché de módulos)
     window.EQUIVALENCE_MAP = EQUIVALENCE_MAP;
     window.EQUIVALENCY_ROWS = EQUIVALENCY_ROWS;
+    window.ALL_VALID_COLOR_NAMES = ALL_VALID_COLOR_NAMES;
     
-    console.log('💎 Constantes del sistema actualizadas dinámicamente desde la base de datos.');
+    console.log(`💎 Catálogo sincronizado: ${EQUIVALENCE_MAP.size} nombres indexados.`);
 }
 
 export function getAllEquivalentNames(baseName) {
-    // Normalización idéntica a la usada al construir el EQUIVALENCE_MAP
-    const key = (baseName || '').toUpperCase().replace(/[^A-Z0-9]/gi, '');
+    const key = (baseName || '').toString().toUpperCase().replace(/[^A-Z0-9]/gi, '');
     const equiv = EQUIVALENCE_MAP.get(key);
     return equiv ? [...equiv.names] : [baseName];
 }
 
 export function getGroupIdForColor(baseName) {
-    const key = (baseName || '').toUpperCase();
+    const key = (baseName || '').toString().toUpperCase().replace(/[^A-Z0-9]/gi, '');
     const equiv = EQUIVALENCE_MAP.get(key);
     return equiv ? equiv.groupId : '';
 }

@@ -7,6 +7,7 @@ export class AdminView {
         this.app = app;
         this.auth = auth;
         this.currentUser = null;
+        window.adminView = this;
         this.init();
     }
     
@@ -21,7 +22,198 @@ export class AdminView {
     }
     
     async render() {
+        const adminHeader = document.querySelector('.admin-container .admin-header');
+        if (adminHeader && !document.getElementById('adminExportTools')) {
+            const tools = document.createElement('div');
+            tools.id = 'adminExportTools';
+            tools.style.cssText = 'display:flex; flex-direction:column; gap:15px; margin-top:20px; background:rgba(30,41,59,0.4); padding:20px; border-radius:16px; border:1px solid rgba(255,255,255,0.05); width:100%; box-sizing:border-box;';
+            
+            // FILA 1: RESPALDOS
+            tools.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <div style="color:#94a3b8; font-size:0.75rem; font-weight:900; margin-right:10px; text-transform:uppercase; letter-spacing:1px;">
+                        <i class="fas fa-save" style="margin-right:5px; color:#3b82f6;"></i> Respaldos:
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="admin-btn-mini" onclick="window.adminView.downloadTable('equivalencias')" title="Descargar JSON">EQ (JSON)</button>
+                        <button class="admin-btn-mini" onclick="window.adminView.downloadTable('master_nks')" title="Descargar JSON">NKs (JSON)</button>
+                        <button class="admin-btn-mini excel" onclick="window.adminView.downloadExcel('equivalencias')" title="Descargar Excel"><i class="fas fa-file-excel"></i> EQ (EXCEL)</button>
+                        <button class="admin-btn-mini excel" onclick="window.adminView.downloadExcel('master_nks')" title="Descargar Excel"><i class="fas fa-file-excel"></i> NKs (EXCEL)</button>
+                    </div>
+                </div>
+                
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; padding-top:15px; border-top:1px solid rgba(255,255,255,0.05);">
+                    <!-- AGREGAR COLOR MANUAL -->
+                    <div style="background:rgba(15,23,42,0.4); padding:15px; border-radius:10px; border:1px solid rgba(59,130,246,0.2);">
+                        <h4 style="color:#3b82f6; font-size:0.8rem; margin:0 0 10px 0; display:flex; align-items:center; gap:8px;">
+                            <i class="fas fa-plus-circle"></i> AGREGAR NOMBRE A GRUPO
+                        </h4>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="manualGroupInput" list="groupSuggestions" placeholder="ID Grupo (NK...)" style="flex:1; background:#1e293b; border:1px solid #334155; color:white; padding:6px 10px; border-radius:6px; font-size:0.8rem;">
+                            <datalist id="groupSuggestions">
+                                ${(window.EQUIVALENCY_ROWS || []).map(row => {
+                                    const id = Array.isArray(row) ? row[0] : (row.nk_code || row.nk);
+                                    const names = Array.isArray(row) ? row.slice(1, 4).join(', ') : (row.colores ? row.colores.slice(0, 3).join(', ') : '');
+                                    return `<option value="${id}">${id} | ${names}</option>`;
+                                }).join('')}
+                            </datalist>
+                            <input type="text" id="manualColorInput" placeholder="Nombre Color" style="flex:1; background:#1e293b; border:1px solid #334155; color:white; padding:6px 10px; border-radius:6px; font-size:0.8rem;">
+                            <button onclick="window.adminView.handleManualAddColor()" style="background:#3b82f6; border:none; color:white; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:bold;">AÑADIR</button>
+                        </div>
+                    </div>
+
+                    <!-- REGISTRAR NK MAESTRO -->
+                    <div style="background:rgba(15,23,42,0.4); padding:15px; border-radius:10px; border:1px solid rgba(16,185,129,0.2);">
+                        <h4 style="color:#10b981; font-size:0.8rem; margin:0 0 10px 0; display:flex; align-items:center; gap:8px;">
+                            <i class="fas fa-gem"></i> REGISTRAR NUEVO NK MAESTRO
+                        </h4>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="manualNkMasterInput" list="nkMasterSuggestions" placeholder="Código NK (ej: NK711000)" style="flex:2; background:#1e293b; border:1px solid #334155; color:white; padding:6px 10px; border-radius:6px; font-size:0.8rem;">
+                            <datalist id="nkMasterSuggestions">
+                                ${(window.ALL_MASTER_NKS || []).map(nk => `<option value="${nk}">`).join('')}
+                            </datalist>
+                            <button onclick="window.adminView.handleManualAddNkMaster()" style="background:#10b981; border:none; color:white; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight:bold; flex:1;">REGISTRAR</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Añadir estilos para los mini botones
+            const style = document.createElement('style');
+            style.textContent = `
+                .admin-btn-mini {
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: #94a3b8;
+                    padding: 4px 10px;
+                    border-radius: 4px;
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .admin-btn-mini:hover { background: rgba(59,130,246,0.2); color: #3b82f6; border-color: #3b82f6; }
+                .admin-btn-mini.excel:hover { background: rgba(16,185,129,0.2); color: #10b981; border-color: #10b981; }
+            `;
+            document.head.appendChild(style);
+            adminHeader.appendChild(tools);
+        }
         await this.renderUsers();
+    }
+
+    async downloadExcel(tableName) {
+        try {
+            const { data, error } = await supabase.from(tableName).select('*');
+            if (error) throw error;
+            if (!data || data.length === 0) { alert('No hay datos.'); return; }
+
+            // Generar contenido XLS (HTML Table format)
+            const headers = Object.keys(data[0]);
+            let html = '<table border="1"><thead><tr>';
+            headers.forEach(h => html += `<th style="background:#3b82f6;color:white;">${h}</th>`);
+            html += '</tr></thead><tbody>';
+            
+            data.forEach(row => {
+                html += '<tr>';
+                headers.forEach(h => {
+                    let val = row[h];
+                    if (Array.isArray(val)) val = val.join(', ');
+                    html += `<td>${val}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+
+            const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${tableName}_${new Date().toISOString().split('T')[0]}.xls`;
+            a.click();
+            URL.revokeObjectURL(url);
+            window.showNotification?.('Excel Generado', `Tabla ${tableName} exportada.`, 'success');
+        } catch (err) {
+            alert('❌ Error al exportar Excel: ' + err.message);
+        }
+    }
+
+    async handleManualAddColor() {
+        const group = document.getElementById('manualGroupInput').value.trim();
+        const color = document.getElementById('manualColorInput').value.trim();
+        if (!group || !color) { alert('Por favor llena ambos campos.'); return; }
+        
+        const { addColorNameToGroup, createNewEquivalencyGroup } = await import('../core/supabaseClient.js');
+        window.showLoading?.('Verificando grupo...');
+        
+        const res = await addColorNameToGroup(group, color);
+        window.hideLoading?.();
+
+        if (res.success) {
+            window.showNotification?.('Éxito', `"${color}" añadido al grupo "${group}".`, 'success');
+            document.getElementById('manualColorInput').value = '';
+            // Actualizar sugerencias del datalist sin recargar página
+            this.render(); 
+        } else if (res.error.includes('no encontrado')) {
+            // El grupo no existe, ofrecer crearlo
+            if (confirm(`El grupo "${group}" no existe en la base de datos de equivalencias.\n\n¿Deseas crear el grupo "${group}" y agregar "${color}" como su primer color?`)) {
+                window.showLoading?.('Creando nuevo grupo...');
+                const createRes = await createNewEquivalencyGroup(group, color);
+                window.hideLoading?.();
+                
+                if (createRes.success) {
+                    alert(`✅ Grupo "${group}" creado exitosamente con el color "${color}".`);
+                    document.getElementById('manualColorInput').value = '';
+                    document.getElementById('manualGroupInput').value = '';
+                    this.render(); // Refrescar para ver el nuevo grupo en sugerencias
+                } else {
+                    alert('❌ Error al crear grupo: ' + createRes.error);
+                }
+            }
+        } else {
+            alert('❌ Error: ' + res.error);
+        }
+    }
+
+    async handleManualAddNkMaster() {
+        const nk = document.getElementById('manualNkMasterInput').value.trim();
+        if (!nk) { alert('Ingresa un código NK.'); return; }
+        
+        const { addMasterNk } = await import('../core/supabaseClient.js');
+        window.showLoading?.('Registrando NK...');
+        const res = await addMasterNk(nk, this.currentUser?.username || 'admin');
+        window.hideLoading?.();
+
+        if (res.success) {
+            alert(`✅ NK "${nk}" registrado exitosamente en el catálogo maestro.`);
+            document.getElementById('manualNkMasterInput').value = '';
+        } else {
+            alert('❌ Error: ' + res.error);
+        }
+    }
+
+    async downloadTable(tableName) {
+        window.showLoading?.(`Descargando tabla ${tableName}...`);
+        try {
+            const { data, error } = await supabase.from(tableName).select('*');
+            if (error) throw error;
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${tableName}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            window.showNotification?.('Éxito', `Tabla ${tableName} descargada correctamente.`, 'success');
+        } catch (err) {
+            console.error('Error descargando tabla:', err);
+            alert('❌ Error al descargar base de datos: ' + err.message);
+        } finally {
+            window.hideLoading?.();
+        }
     }
     
     async renderUsers() {
@@ -48,7 +240,8 @@ export class AdminView {
                 dashboard:       'Dashboard',
                 backup:          'Backup Automático',
                 admin:           'Admin',
-                linearization:   'Auditoría'
+                linearization:   'Auditoría',
+                editCatalog:     'Editar Catálogo'
             };
             
             tableBody.innerHTML = users.map(user => {
@@ -163,7 +356,8 @@ export class AdminView {
             dashboard:        { label: 'Dashboard',          icon: '📈' },
             backup:           { label: 'Backup Automático',  icon: '💾' },
             admin:            { label: 'Admin',              icon: '⚙️' },
-            linearization:    { label: 'Auditoría',          icon: '🔍' }
+            linearization:    { label: 'Auditoría',          icon: '🔍' },
+            editCatalog:      { label: 'Editar Catálogo',    icon: '📝' }
         };
 
         const checkboxesHtml = Object.entries(allPerms).map(([key, info]) => {
