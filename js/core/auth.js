@@ -2,17 +2,15 @@
 import { supabase, getUserByUsername, getAllUsers, createUserInDB, updateUserInDB, deleteUserFromDB } from './supabaseClient.js';
 
 export const PERMISSIONS = {
+    CYCLIC_HUB: 'cyclicHub',
     COMPARATOR: 'comparator',
     HISTORY: 'history',
     PALETTE_VALIDATOR: 'paletteValidator',
-    DEVELOPMENT: 'development',
     ASSIGNMENT: 'assignment',
     REPORTS: 'reports',
     DASHBOARD: 'dashboard',
-    BACKUP: 'backup',
-    ADMIN: 'admin',
-    LINEARIZATION: 'linearization',
-    EDIT_CATALOG: 'editCatalog'
+    EDIT_CATALOG: 'editCatalog',
+    ADMIN: 'admin'
 };
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS);

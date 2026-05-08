@@ -44,10 +44,8 @@ export function parseTxtContent(content, keepDuplicates = false) {
                 lab = [parseFloat(parts[6]), parseFloat(parts[7]), parseFloat(parts[8])];
             }
 
-            const nameWithSpace = nk ? `${baseName} ${nk}` : baseName;
-
             records.push({
-                tempId, id, name: nameWithSpace, nk, baseName, cmyk, lab, originalLine: line
+                tempId, id, name: baseName, nk, baseName, cmyk, lab, originalLine: line
             });
             continue;
         }
@@ -127,7 +125,7 @@ export function parseTxtContent(content, keepDuplicates = false) {
             records.push({
                 id: id,
                 _uid: `file_${tempId}`,
-                name: normalizedName,
+                name: baseName, // <--- CAMBIO CRÍTICO: Usar siempre baseName
                 baseName: baseName,
                 nk: nk,
                 cmyk: cmyk.map(v => isStrictNumber(String(v)) ? parseFloat(v) : NaN),

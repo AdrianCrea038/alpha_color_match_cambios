@@ -140,26 +140,36 @@ function compareValues(p, s) {
 export function compareStrict(masterData, secondaryData) {
     const results = [];
     const masterMap = new Map();
+    const eqMap = window.EQUIVALENCE_MAP || new Map();
 
+    // 1. Mapear Maestro por GrupoID | NK
     masterData.forEach(r => {
-        const key = `${r.name.trim().toUpperCase()}|${(r.nk || '').trim().toUpperCase()}`;
+        const cleanName = (r.baseName || r.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/gi, '');
+        const gid = r.groupId || eqMap.get(cleanName)?.groupId || cleanName;
+        const key = `${gid}|${(r.nk || '').trim().toUpperCase()}`;
         masterMap.set(key, r);
     });
 
     const matchedMasterKeys = new Set();
 
-    // Comparar Secundario contra Maestro
+    // 2. Comparar Secundario contra Maestro por GrupoID | NK
     secondaryData.forEach(r => {
-        const key = `${r.name.trim().toUpperCase()}|${(r.nk || '').trim().toUpperCase()}`;
+        const cleanName = (r.baseName || r.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/gi, '');
+        const gid = r.groupId || eqMap.get(cleanName)?.groupId || cleanName;
+        const key = `${gid}|${(r.nk || '').trim().toUpperCase()}`;
+        
         const masterItem = masterMap.get(key);
 
         if (masterItem) {
             const diff = compareValues(masterItem, r);
+            const nameMismatch = masterItem.name.trim().toUpperCase() !== r.name.trim().toUpperCase();
+            
             results.push({
-                matchType: diff ? 'different' : 'exact',
+                matchType: diff ? 'different' : (nameMismatch ? 'name_mismatch' : 'exact'),
                 primaryData: masterItem,
                 secondaryData: r,
-                diff
+                diff,
+                diffName: nameMismatch
             });
             matchedMasterKeys.add(key);
         } else {
@@ -171,9 +181,12 @@ export function compareStrict(masterData, secondaryData) {
         }
     });
 
-    // Identificar lo que falta del Maestro
+    // 3. Identificar lo que falta en el secundario
     masterData.forEach(r => {
-        const key = `${r.name.trim().toUpperCase()}|${(r.nk || '').trim().toUpperCase()}`;
+        const cleanName = (r.baseName || r.name || '').trim().toUpperCase().replace(/[^A-Z0-9]/gi, '');
+        const gid = r.groupId || eqMap.get(cleanName)?.groupId || cleanName;
+        const key = `${gid}|${(r.nk || '').trim().toUpperCase()}`;
+        
         if (!matchedMasterKeys.has(key)) {
             results.push({
                 matchType: 'missing_in_secondary',

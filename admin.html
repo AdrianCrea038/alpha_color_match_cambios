@@ -11,48 +11,63 @@
 </head>
 <body>
     <div class="admin-container">
-        <div class="admin-header">
-            <h1><i class="fas fa-cog"></i> Administración de Usuarios</h1>
+        <header class="admin-header">
+            <h1><i class="fas fa-user-shield"></i> Seguridad Master</h1>
             <div class="user-info">
                 <span id="currentUserDisplay"></span>
-                <button id="backBtn" class="back-btn"><i class="fas fa-arrow-left"></i> Volver</button>
-                <button id="logoutBtn" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar sesión</button>
+                <button id="backBtn" class="back-btn"><i class="fas fa-chevron-left"></i> Panel Principal</button>
+                <button id="logoutBtn" class="logout-btn"><i class="fas fa-power-off"></i></button>
             </div>
-        </div>
+        </header>
 
-        <div class="admin-section">
-            <div class="admin-section-header">
-                <h3><i class="fas fa-users"></i> Gestión de Usuarios</h3>
-                <button id="addUserBtn" class="btn-primary"><i class="fas fa-plus"></i> Crear Usuario</button>
-                <button id="migrateMasterBtn" style="display:none; align-items:center; gap:8px; background:linear-gradient(135deg,#7c3aed,#4c1d95); border:none; color:white; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:700; font-size:0.85rem;">
-                    <i class="fas fa-layer-group"></i> Establecer Jerarquía MASTER/COMPLETO
-                </button>
-            </div>
-
-            <!-- NUEVA SECCIÓN: RESPALDO MANUAL -->
-            <div id="adminExportTools" style="display:flex; gap:12px; margin: 15px 0; background:rgba(30,41,59,0.5); padding:1.2rem; border-radius:12px; border:1px solid rgba(255,255,255,0.05); align-items:center;">
-                <div style="color:#94a3b8; font-size:0.85rem; font-weight:900; margin-right:10px;">
-                    <i class="fas fa-database" style="margin-right:8px; color:#3b82f6;"></i> RESPALDO MANUAL:
+        <main class="admin-main">
+            <div class="premium-card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(59, 130, 246, 0.03);">
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <div style="width: 50px; height: 50px; background: rgba(59, 130, 246, 0.1); border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #3b82f6; box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);">
+                            <i class="fas fa-users-gear" style="font-size: 1.5rem;"></i>
+                        </div>
+                        <div>
+                            <h2 style="margin: 0; font-size: 1.4rem; letter-spacing: -0.5px;">Control de Operadores</h2>
+                            <p style="font-size: 0.8rem; color: #94a3b8; margin: 4px 0 0 0; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Gestión de privilegios y accesos</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button id="migrateMasterBtn" style="display:none; align-items:center; gap:10px; background:linear-gradient(135deg,#6366f1,#4f46e5); border:none; color:white; padding:12px 24px; border-radius:14px; cursor:pointer; font-weight:700; font-size:0.85rem; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3); transition: all 0.3s;">
+                            <i class="fas fa-crown"></i> ESTABLECER JERARQUÍA
+                        </button>
+                        <button id="addUserBtn" style="background: #3b82f6; color: white; border: none; padding: 12px 28px; border-radius: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 10px; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3); transition: all 0.3s;">
+                            <i class="fas fa-plus"></i> NUEVO USUARIO
+                        </button>
+                    </div>
                 </div>
-                <button class="btn-primary" onclick="window.downloadTable('equivalencias')" style="background:#3b82f6; font-size:0.8rem; padding:8px 16px;">
-                    <i class="fas fa-download"></i> EQUIVALENCIAS (JSON)
-                </button>
-                <button class="btn-primary" onclick="window.downloadTable('master_nks')" style="background:#3b82f6; font-size:0.8rem; padding:8px 16px;">
-                    <i class="fas fa-download"></i> MASTER NKs (JSON)
-                </button>
-                <button class="btn-secondary" onclick="window.downloadTable('usuarios')" style="background:transparent; border:1px solid #475569; color:#94a3b8; font-size:0.8rem; padding:8px 16px;">
-                    <i class="fas fa-users"></i> USUARIOS (JSON)
-                </button>
+
+                <div class="card-body" style="padding: 2rem;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <div id="adminExportTools" style="display:flex; gap:12px; align-items:center;">
+                            <span style="color:#64748b; font-size:0.75rem; font-weight:800; text-transform: uppercase; letter-spacing: 1px;">Backup de Seguridad:</span>
+                            <button onclick="window.downloadTable('usuarios')" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); color:#94a3b8; font-size:0.75rem; padding:8px 16px; border-radius:10px; cursor:pointer; transition: all 0.2s;">
+                                <i class="fas fa-file-export"></i> Descargar JSON
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="admin-table-wrapper">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Identidad del Usuario</th>
+                                    <th>Credenciales</th>
+                                    <th>Nivel de Acceso</th>
+                                    <th style="text-align: right;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            <div class="admin-table-wrapper">
-                <table class="admin-table">
-                    <thead>
-                        <tr><th>Usuario</th><th>Contraseña</th><th>Permisos</th><th>Acciones</th>
-                    </thead>
-                    <tbody id="adminTableBody"></tbody>
-                </table>
-            </div>
-        </div>
+        </main>
     </div>
 
     <script type="module">
@@ -81,30 +96,60 @@
             const users = await auth.getAllUsers();
             
             if (users.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="4" class="empty-state">No hay usuarios registrados<\/td><\/tr>';
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:4rem; color:#64748b;">No hay usuarios registrados</td></tr>';
                 return;
             }
             
             tableBody.innerHTML = users.map(user => {
                 const isCurrentUser = user.id === currentUser.id;
                 const permissionBadges = renderPermissionBadges(user);
-                
-                return `
+                      return `
                     <tr data-id="${user.id}">
-                        <td><strong>${escapeHtml(user.username)}</strong>${user.is_master ? ' <span class="permission-badge master">👑 MASTER</span>' : ''}${isCurrentUser ? ' <span class="permission-badge allowed">(tú)</span>' : ''}<\/td>
-                        <td><input type="password" class="password-placeholder" value="********" disabled style="background:transparent; border:none; color:#9ca3af; width:100px;"><button class="admin-btn show-password" data-username="${escapeHtml(user.username)}" data-password="${user.password || ''}" style="font-size:0.7rem;"><i class="fas fa-eye"></i><\/button><\/td>
-                        <td class="user-permissions">${permissionBadges}<\/td>
-                        <td class="admin-actions-cell">
-                            <button class="admin-btn edit-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-permissions='${JSON.stringify(user.permisos || [])}' data-ismaster="${user.is_master}" data-password="${user.password || ''}"><i class="fas fa-edit"><\/i><\/button>
-                            ${!user.is_master ? `<button class="admin-btn delete delete-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}"><i class="fas fa-trash"><\/i><\/button>` : ''}
-                        <\/td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="width:38px; height:38px; border-radius:50%; background:${user.is_master ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'rgba(255,255,255,0.05)'}; display:flex; align-items:center; justify-content:center; color:white; font-weight:800; font-size:0.9rem; border:2px solid rgba(255,255,255,0.05);">
+                                    ${user.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style="font-weight:700; color:#fff; font-size:0.95rem;">${escapeHtml(user.username)}</div>
+                                    <div style="font-size:0.7rem; color:#64748b; margin-top:2px;">UID: ${user.id}</div>
+                                </div>
+                                ${user.is_master ? ' <span class="permission-badge master" style="margin-left:5px;">👑 MASTER</span>' : ''}
+                                ${isCurrentUser ? ' <span style="font-size:0.65rem; color:#3b82f6; font-weight:bold; background:rgba(59,130,246,0.1); padding:2px 6px; border-radius:4px;">(SESIÓN ACTUAL)</span>' : ''}
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <input type="password" class="password-placeholder" value="********" disabled style="background:transparent; border:none; color:#475569; width:70px; font-size:0.9rem; letter-spacing:2px;">
+                                <button class="admin-btn show-password" data-username="${escapeHtml(user.username)}" data-password="${user.password || ''}" style="width:32px; height:32px; font-size:0.8rem; border-radius:8px;">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td class="user-permissions">
+                            <div style="display:flex; flex-wrap:wrap; gap:4px; max-width:400px;">
+                                ${permissionBadges}
+                            </div>
+                        </td>
+                        <td style="text-align: right;">
+                            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                                <button class="admin-btn edit-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}" data-permissions='${JSON.stringify(user.permisos || [])}' data-ismaster="${user.is_master}" data-password="${user.password || ''}">
+                                    <i class="fas fa-pen-to-square"></i>
+                                </button>
+                                ${!user.is_master ? `
+                                    <button class="admin-btn delete delete-user" data-id="${user.id}" data-username="${escapeHtml(user.username)}">
+                                        <i class="fas fa-trash-can"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </td>
                     </tr>
                 `;
             }).join('');
             
             document.querySelectorAll('.edit-user').forEach(btn => {
                 btn.onclick = () => showUserModal({
-                    id: parseInt(btn.dataset.id),
+                    id: btn.dataset.id,
                     username: btn.dataset.username,
                     permissions: JSON.parse(btn.dataset.permissions),
                     isMaster: btn.dataset.ismaster === 'true',
@@ -113,7 +158,7 @@
             });
             
             document.querySelectorAll('.delete-user').forEach(btn => {
-                btn.onclick = () => deleteUser(parseInt(btn.dataset.id), btn.dataset.username);
+                btn.onclick = () => deleteUser(btn.dataset.id, btn.dataset.username);
             });
             
             document.querySelectorAll('.show-password').forEach(btn => {
@@ -131,84 +176,106 @@
         
         function renderPermissionBadges(user) {
             if (user.is_master) {
-                return '<span class="permission-badge master">✅ Acceso total</span>';
+                return '<span class="permission-badge master" style="background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.05)); border:1px solid rgba(245,158,11,0.2); color:#f59e0b;"><i class="fas fa-crown"></i> PRIVILEGIOS TOTALES</span>';
             }
             
-            const badges = [];
             const permissionNames = {
-                comparator: 'Comparar',
+                cyclicHub: 'Auditoría Cíclica',
+                comparator: 'Auditoría Directa',
                 history: 'Bandeja',
                 paletteValidator: 'Validar Paleta',
-                development: 'Desarrollo',
                 assignment: 'Asignación',
-                backup: 'Backup Automático',
+                reports: 'Reportes',
                 admin: 'Admin',
-                editCatalog: 'Editar Catálogo'
+                editCatalog: 'Editar Catálogo',
+                dashboard: 'Dashboard'
             };
             
-            for (const perm of ALL_PERMISSIONS) {
-                const hasPerm = user.permisos?.includes(perm);
-                badges.push(`<span class="permission-badge ${hasPerm ? 'allowed' : 'denied'}">${hasPerm ? '✅' : '❌'} ${permissionNames[perm]}</span>`);
-            }
+            const badges = (user.permisos || [])
+                .filter(p => permissionNames[p])
+                .map(perm => `<span class="permission-badge">${permissionNames[perm]}</span>`);
             
-            return badges.join('');
+            return badges.length > 0 ? badges.join('') : '<span style="color:#475569; font-size:0.75rem; font-style:italic;">Acceso Restringido</span>';
         }
         
         function showUserModal(userToEdit = null) {
             const isEditing = !!userToEdit;
-            const isEditingMaster = isEditing && userToEdit.isMaster;
+            const isMaster = userToEdit?.isMaster;
             
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
             modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header" style="background: ${isEditingMaster ? '#b45309' : '#2d4ed6'};">
-                        <h3 style="color: white;">${isEditing ? (isEditingMaster ? '👑 Editar Usuario MASTER' : '✏️ Editar Usuario') : '➕ Crear Nuevo Usuario'}</h3>
-                        <button class="modal-close" style="color: white;">&times;</button>
+                <div class="modal-content" style="width:95%; max-width:600px;">
+                    <div class="modal-header" style="background: ${isMaster ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#3b82f6,#1d4ed8)'}; padding:2rem; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h3 style="color: white; margin:0; font-size:1.5rem; font-weight:900; letter-spacing:-0.5px; display:flex; align-items:center; gap:12px;">
+                                ${isEditing ? (isMaster ? '<i class="fas fa-crown"></i> PERFIL MASTER' : '<i class="fas fa-user-gear"></i> EDITAR OPERADOR') : '<i class="fas fa-user-plus"></i> NUEVO OPERADOR'}
+                            </h3>
+                            <p style="color:rgba(255,255,255,0.7); font-size:0.8rem; margin:5px 0 0 0; font-weight:500;">Configuración de identidad y permisos de sistema</p>
+                        </div>
+                        <button class="modal-close" style="background:rgba(255,255,255,0.1); border:none; color: white; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.2s;">&times;</button>
                     </div>
-                    <div class="modal-body">
-                        ${isEditingMaster ? '<div style="background: rgba(180, 83, 9, 0.2); border: 1px solid #b45309; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem;"><p style="color: #fbbf24; margin: 0; font-size: 0.8rem;">⚠️ El usuario MASTER tiene acceso total. No se pueden modificar sus permisos.</p></div>' : ''}
-                        
-                        <div class="form-group">
-                            <label>👤 Usuario:</label>
-                            <input type="text" id="modalUsername" value="${userToEdit ? escapeHtml(userToEdit.username) : ''}" ${isEditing ? 'disabled' : ''} placeholder="Ej: juan_perez">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>🔒 Contraseña:</label>
-                            <div class="password-group">
-                                <input type="password" id="modalPassword" value="${userToEdit ? '********' : ''}" placeholder="${isEditing ? 'Dejar vacío para mantener' : 'Ingrese contraseña'}">
-                                <i class="fas fa-eye-slash toggle-password"></i>
+                    
+                    <div class="modal-body" style="padding:2.5rem;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem; margin-bottom:2.5rem;">
+                            <div class="form-group">
+                                <label style="display:block; color:#64748b; font-size:0.7rem; font-weight:800; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Nombre de Usuario</label>
+                                <div style="position:relative;">
+                                    <i class="fas fa-user" style="position:absolute; left:15px; top:15px; color:#3b82f6; font-size:0.9rem;"></i>
+                                    <input type="text" id="modalUsername" value="${userToEdit ? escapeHtml(userToEdit.username) : ''}" ${isEditing ? 'disabled' : ''} 
+                                           style="width:100%; background:rgba(15,23,42,0.4); border:1px solid rgba(255,255,255,0.08); color:white; padding:14px 14px 14px 45px; border-radius:14px; font-weight:700; box-sizing:border-box; ${isEditing ? 'opacity:0.6;' : ''}">
+                                </div>
                             </div>
-                            <small style="color: #6b7280;">${isEditing ? 'Dejar vacío para mantener la misma contraseña' : 'Mínimo 6 caracteres'}</small>
-                        </div>
-                        
-                        ${!isEditingMaster ? `
-                        <div class="permissions-group">
-                            <h4 style="color: #eab308; font-size: 0.85rem; margin-bottom: 0.5rem;">📋 Permisos de acceso:</h4>
-                            <div class="permissions-checkboxes">
-                                <label><input type="checkbox" value="comparator" ${userToEdit?.permissions?.includes('comparator') ? 'checked' : ''}> Comparar</label>
-                                <label><input type="checkbox" value="history" ${userToEdit?.permissions?.includes('history') ? 'checked' : ''}> Bandeja</label>
-                                <label><input type="checkbox" value="paletteValidator" ${userToEdit?.permissions?.includes('paletteValidator') ? 'checked' : ''}> Validar Paleta</label>
-                                <label><input type="checkbox" value="development" ${userToEdit?.permissions?.includes('development') ? 'checked' : ''}> Desarrollo</label>
-                                <label><input type="checkbox" value="assignment" ${userToEdit?.permissions?.includes('assignment') ? 'checked' : ''}> Asignación</label>
-                                <label><input type="checkbox" value="reports" ${userToEdit?.permissions?.includes('reports') ? 'checked' : ''}> Reportes</label>
-                                <label><input type="checkbox" value="admin" ${userToEdit?.permissions?.includes('admin') ? 'checked' : ''}> Admin</label>
-                                <label><input type="checkbox" value="editCatalog" ${userToEdit?.permissions?.includes('editCatalog') ? 'checked' : ''}> ✅ Editar Catálogo</label>
+                            
+                            <div class="form-group">
+                                <label style="display:block; color:#64748b; font-size:0.7rem; font-weight:800; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Contraseña Segura</label>
+                                <div style="position:relative;">
+                                    <i class="fas fa-lock" style="position:absolute; left:15px; top:15px; color:#3b82f6; font-size:0.9rem;"></i>
+                                    <input type="password" id="modalPassword" value="${userToEdit?.password || ''}" placeholder="${isEditing ? '••••••••' : 'Mínimo 6 caracteres'}"
+                                           style="width:100%; background:rgba(15,23,42,0.4); border:1px solid rgba(255,255,255,0.08); color:white; padding:14px 45px 14px 45px; border-radius:14px; box-sizing:border-box;">
+                                    <i class="fas fa-eye-slash toggle-password" style="position:absolute; right:15px; top:15px; color:#475569; cursor:pointer; font-size:1.1rem; transition:0.2s;"></i>
+                                </div>
                             </div>
                         </div>
-                        <div class="master-checkbox">
-                            <label><input type="checkbox" id="isMasterCheckbox" ${userToEdit?.isMaster ? 'checked' : ''}> 👑 Es usuario MASTER (acceso total)</label>
+
+                        <div style="margin-top:2rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.05);">
+                                <h4 style="color:#3b82f6; font-size:0.8rem; font-weight:900; margin:0; display:flex; align-items:center; gap:10px; text-transform:uppercase; letter-spacing:1px;">
+                                    <i class="fas fa-shield-halved"></i> Módulos Autorizados
+                                </h4>
+                                <span style="font-size:0.7rem; color:#64748b; font-weight:600;">Seleccione los accesos permitidos</span>
+                            </div>
+                            <div class="permissions-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:rgba(15,23,42,0.2); padding:1.5rem; border-radius:20px; border:1px solid rgba(255,255,255,0.03);">
+                                ${[
+                                    {v:'cyclicHub', l:'Auditoría Cíclica', i:'fa-sync'},
+                                    {v:'comparator', l:'Auditoría Directa', i:'fa-shield-check'},
+                                    {v:'history', l:'Bandeja de Entrada', i:'fa-inbox'},
+                                    {v:'paletteValidator', l:'Validar Paletas', i:'fa-palette'},
+                                    {v:'assignment', l:'Asignación Órdenes', i:'fa-tasks'},
+                                    {v:'reports', l:'Reportes de Prod.', i:'fa-chart-line'},
+                                    {v:'dashboard', l:'Dashboard General', i:'fa-gauge-high'},
+                                    {v:'editCatalog', l:'Editar Catálogos', i:'fa-database'},
+                                    {v:'admin', l:'Panel Administrador', i:'fa-user-lock'}
+                                ].map(p => `
+                                    <label style="display:flex; align-items:center; gap:12px; color:#cbd5e1; font-size:0.85rem; cursor:pointer; padding:10px 15px; border-radius:12px; transition:all 0.2s; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.02);">
+                                        <input type="checkbox" value="${p.v}" ${userToEdit?.permissions?.includes(p.v) ? 'checked' : ''} 
+                                               style="width:18px; height:18px; accent-color:#3b82f6; cursor:pointer;">
+                                        <i class="fas ${p.i}" style="width:20px; text-align:center; color:#64748b; font-size:0.8rem;"></i>
+                                        <span style="font-weight:500;">${p.l}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
                         </div>
-                        ` : ''}
                     </div>
-                    <div class="modal-buttons">
-                        <button class="btn-secondary cancel-modal" style="background: transparent; border: 1.5px solid #9ca3af; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer;">Cancelar</button>
-                        <button class="btn-primary confirm-modal" style="background: ${isEditingMaster ? '#b45309' : '#2d4ed6'}; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; color: white;">${isEditing ? 'Guardar cambios' : 'Crear Usuario'}</button>
+                    
+                    <div class="modal-footer" style="padding:2rem 2.5rem; background:rgba(15,23,42,0.4); display:flex; gap:1.5rem; justify-content:flex-end; border-top:1px solid rgba(255,255,255,0.05);">
+                        <button class="cancel-modal" style="background:transparent; border:1.5px solid rgba(255,255,255,0.1); color:#94a3b8; padding:14px 30px; border-radius:14px; cursor:pointer; font-weight:700; transition:0.2s;">Cerrar Ventana</button>
+                        <button class="confirm-modal" style="background:${isMaster ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#3b82f6,#1d4ed8)'}; border:none; padding:14px 40px; border-radius:14px; cursor:pointer; color:white; font-weight:800; box-shadow:0 10px 20px rgba(59, 130, 246, 0.3); transition:all 0.3s;">
+                            ${isEditing ? 'ACTUALIZAR DATOS' : 'CREAR OPERADOR'}
+                        </button>
                     </div>
                 </div>
-            `;
-            
+            `;            
             document.body.appendChild(modal);
             setTimeout(() => modal.classList.add('active'), 10);
             
@@ -225,6 +292,7 @@
                     passwordInput.setAttribute('type', type);
                     togglePassword.classList.toggle('fa-eye');
                     togglePassword.classList.toggle('fa-eye-slash');
+                    togglePassword.style.color = type === 'text' ? '#3b82f6' : '#475569';
                 };
             }
             
@@ -235,17 +303,10 @@
                 const username = modal.querySelector('#modalUsername').value.trim();
                 let password = modal.querySelector('#modalPassword').value;
                 let permissions = [];
-                let isMaster = false;
+                let isMaster = userToEdit ? userToEdit.isMaster : false;
                 
-                if (!isEditingMaster) {
-                    const checkboxes = modal.querySelectorAll('.permissions-checkboxes input:checked');
-                    permissions = Array.from(checkboxes).map(cb => cb.value);
-                    const masterCheckbox = modal.querySelector('#isMasterCheckbox');
-                    if (masterCheckbox) isMaster = masterCheckbox.checked;
-                } else {
-                    permissions = ALL_PERMISSIONS;
-                    isMaster = true;
-                }
+                const checkboxes = modal.querySelectorAll('.permissions-grid input:checked');
+                permissions = Array.from(checkboxes).map(cb => cb.value);
                 
                 if (!username) {
                     alert('⚠️ Debe ingresar un nombre de usuario.');
@@ -257,45 +318,32 @@
                     return;
                 }
                 
-                if (!isEditing && password.length < 6) {
-                    alert('⚠️ La contraseña debe tener al menos 6 caracteres.');
-                    return;
-                }
-                
                 if (isEditing && password === '********') {
                     password = null;
                 }
                 
                 const confirmBtn = modal.querySelector('.confirm-modal');
                 const originalText = confirmBtn.innerHTML;
-                confirmBtn.innerHTML = '⏳ Procesando...';
+                confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PROCESANDO...';
                 confirmBtn.disabled = true;
                 
                 try {
                     if (isEditing && userToEdit) {
                         const updates = {};
                         if (password) updates.password = password;
-                        if (!isEditingMaster) {
-                            updates.permissions = permissions;
-                            updates.isMaster = isMaster;
-                        }
+                        updates.permissions = permissions;
+                        updates.isMaster = isMaster;
                         
                         const result = await auth.updateUser(userToEdit.id, updates);
                         if (result.success) {
-                            alert(`✅ Usuario "${username}" actualizado correctamente.`);
                             closeModal();
                             await renderUsers();
-                            if (currentUser.id === userToEdit.id && password) {
-                                alert('⚠️ Tu contraseña ha sido cambiada. Por favor inicia sesión nuevamente.');
-                                auth.logout();
-                            }
                         } else {
                             alert(`❌ Error: ${result.error}`);
                         }
                     } else {
                         const result = await auth.createUser(username, password, permissions, isMaster);
                         if (result.success) {
-                            alert(`✅ Usuario "${username}" creado correctamente.\n🔑 Contraseña: ${password}`);
                             closeModal();
                             await renderUsers();
                         } else {
@@ -319,7 +367,6 @@
             try {
                 const result = await auth.deleteUser(id);
                 if (result.success) {
-                    alert(`✅ Usuario "${username}" eliminado.`);
                     await renderUsers();
                 } else {
                     alert(`❌ Error: ${result.error}`);
@@ -341,7 +388,6 @@
             window.location.href = 'login.html';
         };
 
-        // FUNCIÓN GLOBAL DE DESCARGA
         window.downloadTable = async (tableName) => {
             const { supabase } = await import('./js/core/supabaseClient.js');
             try {
@@ -356,13 +402,11 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                alert(`✅ Tabla "${tableName}" descargada correctamente.`);
             } catch (err) {
                 alert('❌ Error al descargar: ' + err.message);
             }
         };
 
-        // Botón de migración MASTER → COMPLETO (solo visible para el MASTER real)
         const migrateBtn = document.getElementById('migrateMasterBtn');
         if (currentUser.isMaster) {
             migrateBtn.style.display = 'inline-flex';
@@ -382,24 +426,20 @@
                 migrateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
                 migrateBtn.disabled = true;
 
-                let ok = 0, fail = 0;
+                let ok = 0;
                 for (const user of otherMasters) {
                     const { error } = await supabase
                         .from('usuarios')
                         .update({ is_master: false, permisos: ALL_PERMISSIONS })
                         .eq('id', user.id);
-                    if (error) { console.error('Error:', user.username, error); fail++; }
-                    else ok++;
+                    if (!error) ok++;
                 }
 
-                migrateBtn.innerHTML = '<i class="fas fa-layer-group"></i> Establecer Jerarquía MASTER/COMPLETO';
+                migrateBtn.innerHTML = '<i class="fas fa-crown"></i> ESTABLECER JERARQUÍA';
                 migrateBtn.disabled = false;
 
                 if (ok > 0) {
-                    alert(`✅ ${ok} usuario(s) convertidos a COMPLETO correctamente.${fail > 0 ? `\n⚠️ ${fail} fallaron, revisa la consola.` : ''}`);
                     await renderUsers();
-                } else {
-                    alert('❌ No se completó la migración. Revisa la consola.');
                 }
             };
         }

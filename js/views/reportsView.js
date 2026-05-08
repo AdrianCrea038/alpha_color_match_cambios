@@ -223,7 +223,16 @@ export class ReportsView {
         const ctx = document.getElementById('reportsMainChart')?.getContext('2d');
         if (!ctx) return;
 
-        if (this.chart) this.chart.destroy();
+        if (this.chart) {
+            this.chart.destroy();
+            this.chart = null;
+        }
+        
+        // Verificación adicional de seguridad para Chart.js
+        const existingChart = Chart.getChart(ctx.canvas);
+        if (existingChart) {
+            existingChart.destroy();
+        }
 
         this.chart = new Chart(ctx, {
             type: 'doughnut',

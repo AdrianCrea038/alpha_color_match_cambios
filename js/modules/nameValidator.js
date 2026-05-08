@@ -1,4 +1,4 @@
-import { normalizeSpaces, escapeHtml, extractBaseName } from '../core/utils.js';
+import { normalizeSpaces, escapeHtml, extractBaseName, extractNK } from '../core/utils.js';
 import { getAllMasterNks, addMasterNk, getEquivalencyGroupsFromDB, supabase, addColorNameToGroup, createNewEquivalencyGroup } from '../core/supabaseClient.js';
 import { updateConstantsFromDB, getAllEquivalentNames, getGroupIdForColor, EQUIVALENCE_MAP } from '../core/constants.js';
 
@@ -11,6 +11,11 @@ window.isValidNK = isValidNK;
 let appInstance = null;
 let validColorNamesLoaded = false;
 let masterNksSet = new Set();
+
+export function isTonalColor(name) {
+    const n = (name || '').toUpperCase().trim();
+    return n.startsWith('TONAL') || n.startsWith('TNL') || n.startsWith('TN');
+}
 
 export function setAppInstance(app) {
     appInstance = app;
@@ -55,59 +60,47 @@ export async function ensureValidColorCatalogLoaded(forceReload = false) {
         }
     }
     const masterNks = await getAllMasterNks();
-    // Normalización estándar: Solo trim y mayúsculas, MANTENER EL "NK"
-    const standardNormalizeNK = (v) => String(v || '').trim().toUpperCase();
-    masterNksSet = new Set(masterNks.map(nk => standardNormalizeNK(nk)));
-    window.MASTER_NKS_SET = masterNksSet; // Exponer globalmente
+    window.ALL_MASTER_NKS = masterNks; // Sincronizar con utils.js
+    masterNksSet = new Set(masterNks.map(nk => String(nk || '').trim().toUpperCase()));
+    window.MASTER_NKS_SET = masterNksSet;
     validColorNamesLoaded = true;
 }
 
-export function isValidColorName(fullName, ignoreCatalog = false) {
-    if (!fullName || typeof fullName !== 'string') return false;
-    if (ignoreCatalog) return true;
+export function isValidColorName(name) {
+    if (!name || typeof name !== 'string') return false;
     
     const map = window.EQUIVALENCE_MAP || EQUIVALENCE_MAP;
-    if (!map) return false;
+    if (!map || map.size === 0) return false;
 
-    // Normalización AGRESIVA (Remover todo excepto letras y números)
-    const aggNorm = (n) => String(n || '').toUpperCase().replace(/[^A-Z0-9]/gi, '');
+    // Normalización agresiva: solo letras y números
+    let clean = name.trim().toUpperCase().replace(/[^A-Z0-9]/gi, '');
     
-    const cleanFull = aggNorm(fullName);
-    const cleanBase = aggNorm(extractBaseName(fullName));
-    
-    if (!cleanFull && !cleanBase) return false;
-    
-    // 1. INTENTO DIRECTO
-    if (map.has(cleanFull) || map.has(cleanBase)) return true;
+    // 1. Verificación directa en el mapa de equivalencias
+    if (map.has(clean)) return true;
 
-    // 2. INTENTO TOLERANTE (Quitar prefijos/sufijos comunes como TM, TEAM, R)
-    // Ej: "69W TM CRIMSON R" -> "69WCRIMSON"
-    const stripTechnical = (s) => s
-        .replace(/^TM|TEAM|TEAMM/g, '') // Quitar prefijos al inicio
-        .replace(/R$/g, '')             // Quitar R al final
-        .replace(/REFILL$/g, '');       // Quitar REFILL al final
-
-    const strippedFull = stripTechnical(cleanFull);
-    const strippedBase = stripTechnical(cleanBase);
-
-    if (strippedFull && map.has(strippedFull)) return true;
-    if (strippedBase && map.has(strippedBase)) return true;
-
-    // 3. FALLBACK: Verificar si alguna de las llaves en el mapa contiene nuestro nombre limpio
-    // (Útil para casos donde el catálogo tiene el nombre más largo)
-    if (cleanBase.length > 3) {
-        for (let key of map.keys()) {
-            if (key.includes(cleanBase) || cleanBase.includes(key)) return true;
+    // 2. Tolerancia Técnica: Quitar prefijos y sufijos comunes
+    const technicalNoise = ['TM', 'TEAM', 'PMS', 'REFILL', 'NEW', 'R'];
+    for (const noise of technicalNoise) {
+        if (clean.startsWith(noise)) {
+            const potential = clean.substring(noise.length);
+            if (map.has(potential)) return true;
+        }
+        if (clean.endsWith(noise)) {
+            const potential = clean.substring(0, clean.length - noise.length);
+            if (map.has(potential)) return true;
         }
     }
-    
+
+    // 3. Verificación en la lista global de nombres válidos
+    if (window.ALL_VALID_COLOR_NAMES && window.ALL_VALID_COLOR_NAMES.includes(name.trim().toUpperCase())) return true;
+
     return false;
 }
 
 export async function ensureValidNksLoaded() {
     const masterNks = await getAllMasterNks();
-    const standardNormalizeNK = (v) => String(v || '').trim().toUpperCase();
-    masterNksSet = new Set(masterNks.map(nk => standardNormalizeNK(nk)));
+    window.ALL_MASTER_NKS = masterNks;
+    masterNksSet = new Set(masterNks.map(nk => String(nk || '').trim().toUpperCase()));
     window.MASTER_NKS_SET = masterNksSet;
     return masterNksSet;
 }
@@ -156,156 +149,105 @@ export async function validateAndCorrectRecords(records, type = 'secondary', opt
     validColorNamesLoaded = window.ALL_VALID_COLOR_NAMES.length > 0;
 
     const allAuditRecords = [];
-    const seenRecords = new Map();
-
+    
+    // 1. ANÁLISIS INICIAL DE ERRORES CON LIMPIEZA AGRESIVA
     for (const record of records) {
-        const cleanBase = record.baseName || '';
-        const cleanNk = record.nk || '';
-        const originalFullName = record.name || '';
+        // RE-EXTRACCIÓN: Forzar limpieza total para separar códigos como RW47WK
+        const originalFullName = (record.originalLine ? record.originalLine.split('\t')[1] : record.name) || '';
+        const cleanName = extractBaseName(originalFullName) || record.baseName || '';
+        const cleanNk = extractNK(originalFullName) || record.nk || '';
         
-        // REGLA: Ignorar todo lo que contenga "WHITE"
-        if (originalFullName.toUpperCase().includes('WHITE') || cleanBase.toUpperCase().includes('WHITE')) {
-            continue;
-        }
-
-        // VALIDACIÓN UNIFICADA: Un nombre es válido si el nombre completo O el baseName están en catálogo
-        const isNameValid = isValidColorName(originalFullName) || isValidColorName(cleanBase);
+        // Actualizar el record en memoria para que el resto del sistema use los datos limpios
+        record.baseName = cleanName;
+        record.name = cleanName;
+        record.nk = cleanNk;
         
-        // EXCEPCIÓN TONAL: Los colores TN, TNL o Tonal no requieren NK válido
-        const isTonal = cleanBase.toUpperCase().startsWith('TONAL') ||
-                        cleanBase.toUpperCase().startsWith('TNL') ||
-                        cleanBase.toUpperCase().startsWith('TN');
-        const isNkValid = isTonal ? true : isValidNK(cleanNk);
-        const hasParentheses = /\(\d+\)/.test(originalFullName); // Solo paréntesis con número
-        
-        const signature = `${cleanBase}|${cleanNk}`;
-        const isDuplicate = seenRecords.has(signature);
-        seenRecords.set(signature, true);
+        if (cleanName.toUpperCase().includes('WHITE')) continue;
 
-        const cmyk = record.cmyk || [];
-        const hasCmykError = cmyk.length < 4 || cmyk.some(v => isNaN(Number(v)) || Number(v) < 0 || Number(v) > 100);
+        const isNameValid = isValidColorName(cleanName) || isTonalColor(cleanName);
+        const isNkValid = isValidNK(cleanNk) || isTonalColor(cleanName);
+        const hasParentheses = /\(\d+\)/.test(record.name || '');
+        const hasCmykError = (record.cmyk || []).some(v => isNaN(v) || v < 0 || v > 100);
 
-        // Si el nombre es válido y no tiene paréntesis, nameError es false
-        const nameError = !isNameValid;
-
-        const hasAnyError = nameError || !isNkValid || hasParentheses || isDuplicate || hasCmykError;
-        
-        if (hasAnyError) {
-            allAuditRecords.push({ 
-                ...record, 
-                nameError,
+        if (!isNameValid || !isNkValid || hasParentheses || hasCmykError) {
+            allAuditRecords.push({
+                ...record,
+                nameError: !isNameValid,
                 nkError: !isNkValid,
                 hasParentheses,
-                hasCmykError
+                hasCmykError,
+                isForced: false,
+                forceReason: ''
             });
         }
     }
-    
+
     // Calcular NK dominante del archivo para sugerencias
     const nkCounts = {};
     let dominantNk = '';
     let maxCount = 0;
-    
     records.forEach(r => {
         const nk = (r.nk || '').trim().toUpperCase();
-        if (nk) { // Acepta cualquier NK, no solo los que empiezan con 'NK'
+        if (nk) {
             nkCounts[nk] = (nkCounts[nk] || 0) + 1;
-            if (nkCounts[nk] > maxCount) {
-                maxCount = nkCounts[nk];
-                dominantNk = nk;
-            }
+            if (nkCounts[nk] > maxCount) { maxCount = nkCounts[nk]; dominantNk = nk; }
         }
     });
 
-    // Aplicar NK dominante como sugerencia si el registro no tiene uno
-    allAuditRecords.forEach(r => {
-        if (!r.nk && dominantNk) {
-            r.nk = dominantNk;
-        }
-    });
-    
-    if (allAuditRecords.length === 0) {
-        console.log('✅ Archivo impecable. Cargando...');
-        return { records: records, correctionsApplied: 0 };
-    }
+    let currentRecords = [...records];
 
-    // PASO 1: CORREGIR NOMBRES (Solo los que fallan validación o tienen paréntesis)
+    // --- PASO 1: VALIDAR NOMBRES ---
     const nameAudit = allAuditRecords.filter(r => r.nameError || r.hasParentheses);
-    let currentRecords = allAuditRecords;
-
     if (nameAudit.length > 0) {
-        // Doble check para no mostrar los que ya se marcaron como LISTO accidentalmente
-        const realNameAudit = nameAudit.filter(r => {
-            const isNowValid = isValidColorName(r.name) || isValidColorName(r.baseName);
-            return !isNowValid || r.hasParentheses;
-        });
-
-        if (realNameAudit.length > 0) {
-            const correctedNames = await new Promise(resolve => createCorrectionModal(realNameAudit, 'names', resolve));
-            if (!correctedNames) return { records: [], cancelled: true };
-            
-            // Actualizar records con las correcciones
-            currentRecords = allAuditRecords.map(orig => {
-                const corr = correctedNames.find(c => c.id === orig.id);
-                // Si se corrigió, actualizamos. Si no estaba en el audit, se queda igual.
-                // Si estaba en el audit pero NO se devolvió (se eliminó), se marcará para filtrado después.
-                return corr ? { ...orig, ...corr, nameError: false, hasParentheses: false } : orig;
-            });
-        }
+        const correctedNames = await new Promise(resolve => createCorrectionModal(nameAudit, 'names', resolve));
+        if (!correctedNames) return { records: [], cancelled: true };
+        
+        const correctedMap = new Map(correctedNames.map(c => [c.id, c]));
+        currentRecords = currentRecords.map(r => {
+            const corr = correctedMap.get(r.id);
+            return corr ? { ...r, name: corr.baseName, baseName: corr.baseName, nk: corr.nk, isForced: corr.isForced, forceReason: corr.forceReason } : r;
+        }).filter(r => !nameAudit.some(a => a.id === r.id) || correctedMap.has(r.id));
     }
 
-    // PASO 2: CORREGIR NKs
-    const nkAudit = currentRecords.filter(r => r.nkError);
+    // --- PASO 2: VALIDAR NKs ---
+    const nkAudit = currentRecords.filter(r => !isValidNK(r.nk) && !isTonalColor(r.name));
     if (nkAudit.length > 0) {
         const correctedNks = await new Promise(resolve => createCorrectionModal(nkAudit, 'nks', resolve, dominantNk));
         if (!correctedNks) return { records: [], cancelled: true };
-        currentRecords = currentRecords.map(orig => {
-            const corr = correctedNks.find(c => c.id === orig.id);
-            return corr ? { ...orig, ...corr, nkError: false } : orig;
-        });
+        
+        const nkMap = new Map(correctedNks.map(c => [c.id, c]));
+        currentRecords = currentRecords.map(r => {
+            const corr = nkMap.get(r.id);
+            return corr ? { ...r, nk: corr.nk, isForced: corr.isForced || r.isForced, forceReason: corr.forceReason || r.forceReason } : r;
+        }).filter(r => !nkAudit.some(a => a.id === r.id) || nkMap.has(r.id));
     }
 
-    // PASO 3: CORREGIR CMYK (valores fuera del rango 0-100)
-    // Recalcular sobre TODOS los records para incluir los que solo tienen error CMYK
-    const cmykAudit = records.filter(r => {
+    // --- PASO 3: CORREGIR CMYK ---
+    const cmykAudit = currentRecords.filter(r => {
         const cmyk = r.cmyk || [];
         return cmyk.length < 4 || cmyk.some(v => isNaN(Number(v)) || Number(v) < 0 || Number(v) > 100);
     });
-    let cmykCorrectedMap = new Map();
+    
     if (cmykAudit.length > 0) {
         const correctedCmyks = await new Promise(resolve => createCmykCorrectionModal(cmykAudit, resolve));
         if (!correctedCmyks) return { records: [], cancelled: true };
-        correctedCmyks.forEach(c => cmykCorrectedMap.set(c.id, c.cmyk));
+        
+        const cmykMap = new Map(correctedCmyks.map(c => [c.id, c.cmyk]));
+        currentRecords = currentRecords.map(r => {
+            const fixedCmyk = cmykMap.get(r.id);
+            return fixedCmyk ? { ...r, cmyk: fixedCmyk } : r;
+        });
     }
 
-    // Identificar IDs que fueron eliminados en los modales
-    const nameAuditIds = nameAudit.map(r => r.id);
-    const nkAuditIds = nkAudit.map(r => r.id);
-    const correctedNameIds = new Set(currentRecords.map(r => r.id));
-    
-    // Un registro se considera eliminado si estaba en el audit pero ya no está en el resultado
-    const deletedIds = new Set([
-        ...nameAuditIds.filter(id => !correctedNameIds.has(id)),
-        ...nkAuditIds.filter(id => !correctedNameIds.has(id))
-    ]);
+    // --- FINALIZAR: Asegurar Unicidad y Retornar ---
+    const finalMap = new Map();
+    currentRecords.forEach(r => {
+        if (r && r.id) finalMap.set(r.id, r);
+    });
 
-    const finalRecords = records
-        .filter(original => !deletedIds.has(original.id)) // <--- FILTRAR ELIMINADOS
-        .map(original => {
-            const corrected = currentRecords.find(c => c.id === original.id);
-            const cmykFixed = cmykCorrectedMap.get(original.id);
-            return {
-                ...original,
-                ...(corrected ? {
-                    name: `${corrected.baseName} ${corrected.nk}`.trim(),
-                    baseName: corrected.baseName,
-                    nk: corrected.nk
-                } : {}),
-                ...(cmykFixed ? { cmyk: cmykFixed } : {})
-            };
-        });
-
-    return { records: finalRecords, correctionsApplied: currentRecords.length };
+    const finalRecords = Array.from(finalMap.values());
+    console.log(`%c✅ Auditoría finalizada. Registros únicos: ${finalRecords.length}`, 'color: #10b981; font-weight: bold;');
+    return { records: finalRecords, correctionsApplied: finalRecords.length };
 }
 
 function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = '') {
@@ -341,26 +283,19 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
                         ${auditRecords.map(rec => `
                             <tr data-id="${rec.id}" class="audit-row" style="background: #1e293b; border-radius: 10px;">
                                 <td style="text-align: center; font-weight: 900; color: #475569;">${rec.id}</td>
-                                <td style="padding: 15px; color: #94a3b8; font-size: 0.8rem; font-family: monospace;">${rec.name}</td>
+                                <td style="padding: 15px; color: #94a3b8; font-size: 0.8rem; font-family: monospace;">${isNameStep ? (rec.baseName || rec.name) : (rec.nk || '---')}</td>
                                 <td style="padding: 15px; position: relative;">
                                     ${isNameStep ? `
-                                        <input type="text" class="name-input" placeholder="🔍 Escribe nombre..." value="${rec.name}" 
+                                        <input type="text" class="name-input" placeholder="🔍 Escribe nombre..." value="${rec.baseName || rec.name}" 
                                                style="width: 100%; background: #0b0f1a; color: white; border: 2px solid #ef4444; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold;">
                                         <div class="suggestion-box" style="display:none; position:absolute; left:0; right:0; background:#1e293b; border:2px solid #f59e0b; z-index:1000; max-height:200px; overflow-y:auto; border-radius: 0 0 8px 8px;"></div>
                                         
-                                        <!-- UI para agregar a BD (inicialmente oculta) -->
-                                        <div class="add-to-db-container" style="display:none; margin-top:10px; padding:10px; background:rgba(245, 158, 11, 0.1); border:1px dashed #f59e0b; border-radius:8px;">
-                                            <p style="color:#f59e0b; font-size:0.75rem; margin:0 0 5px 0; font-weight:bold;">ESTE COLOR NO EXISTE. ¿AGREGAR A UN GRUPO?</p>
-                                            <div style="position:relative;">
-                                                <input type="text" class="group-search-input" placeholder="🔍 Buscar grupo por nombre o ID..." 
-                                                       style="width:100%; background:#0f172a; border:1px solid #475569; color:white; padding:8px; border-radius:6px; font-size:0.85rem;">
-                                                <div class="group-suggestion-box" style="display:none; position:absolute; left:0; right:0; background:#1e293b; border:1px solid #f59e0b; z-index:1001; max-height:150px; overflow-y:auto; border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></div>
-                                            </div>
-                                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
-                                                <button class="btn-save-to-db" style="background:#f59e0b; color:white; border:none; padding:5px 12px; border-radius:4px; font-size:0.75rem; font-weight:bold; cursor:pointer;">
-                                                    <i class="fas fa-plus"></i> AGREGAR A BD
-                                                </button>
-                                            </div>
+                                        <!-- UI para FORZAR (Sin agregar a BD) -->
+                                        <div class="force-notify-container" style="display:none; margin-top:10px; padding:10px; background:rgba(167, 139, 250, 0.1); border:1px dashed #a78bfa; border-radius:8px;">
+                                            <p style="color:#a78bfa; font-size:0.75rem; margin:0 0 5px 0; font-weight:bold;">ESTE COLOR NO EXISTE EN EL CATÁLOGO.</p>
+                                            <button class="btn-force-notify" style="width:100%; background:#a78bfa; color:white; border:none; padding:8px; border-radius:6px; font-size:0.75rem; font-weight:bold; cursor:pointer;">
+                                                <i class="fas fa-exclamation-triangle"></i> FORZAR Y NOTIFICAR AL MASTER
+                                            </button>
                                         </div>
 
                                         <input type="hidden" class="selected-family-id" value="">
@@ -369,6 +304,15 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
                                         <input type="text" class="nk-row-input" placeholder="🔍 Sugerido: ${dominantNk || 'Escribe NK...'}" value="${rec.nk || dominantNk}" 
                                                style="width: 100%; background: #0b0f1a; color: #3b82f6; border: 2px solid #3b82f6; padding: 12px; border-radius: 8px; font-family: monospace; font-weight: 900; text-align: center; font-size: 1.2rem;">
                                         <div class="suggestion-box" style="display:none; position:absolute; left:0; right:0; background:#1e293b; border:2px solid #3b82f6; z-index:1000; max-height:200px; overflow-y:auto; border-radius: 0 0 8px 8px;"></div>
+                                        
+                                        <!-- UI para FORZAR NK (Sin agregar a BD) -->
+                                        <div class="force-notify-container" style="display:none; margin-top:10px; padding:10px; background:rgba(167, 139, 250, 0.1); border:1px dashed #a78bfa; border-radius:8px;">
+                                            <p style="color:#a78bfa; font-size:0.75rem; margin:0 0 5px 0; font-weight:bold;">ESTE NK NO EXISTE EN EL MAESTRO.</p>
+                                            <button class="btn-force-notify" style="width:100%; background:#a78bfa; color:white; border:none; padding:8px; border-radius:6px; font-size:0.75rem; font-weight:bold; cursor:pointer;">
+                                                <i class="fas fa-exclamation-triangle"></i> FORZAR Y NOTIFICAR AL MASTER
+                                            </button>
+                                        </div>
+
                                         <input type="hidden" class="name-input" value="${rec.baseName}">
                                     `}
                                 </td>
@@ -403,133 +347,76 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
     const rows = Array.from(modal.querySelectorAll('#correctionTableBody tr'));
     const deletedIds = new Set();
     
-    const validateRow = (row) => {
-        if (deletedIds.has(row.dataset.id)) return;
+        const validateRow = (row) => {
+            if (deletedIds.has(row.dataset.id)) return;
 
-        const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
-        const val = input.value.trim().toUpperCase();
-        const isValid = isNameStep ? isValidColorName(val) : isValidNK(val);
-        
-        const icon = row.querySelector('.status-indicator i');
-        const text = row.querySelector('.status-indicator span');
-        
-        const addContainer = row.querySelector('.add-to-db-container');
+            const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
+            const val = input.value.trim().toUpperCase();
+            
+            // Check if it's already forced
+            const record = auditRecords.find(r => r.id === row.dataset.id);
+            const isForced = record && record.isForced;
+            
+            const isValid = isNameStep ? isValidColorName(val) : isValidNK(val);
+            
+            const icon = row.querySelector('.status-indicator i');
+            const text = row.querySelector('.status-indicator span');
+            const forceContainer = row.querySelector('.force-notify-container');
 
-        if (isValid) {
-            icon.className = 'fas fa-check-circle'; icon.style.color = '#10b981';
-            text.textContent = 'LISTO'; text.style.color = '#10b981';
-            input.style.borderColor = '#10b981';
-            if (addContainer) addContainer.style.display = 'none';
-        } else {
-            icon.className = 'fas fa-times-circle'; icon.style.color = '#ef4444';
-            text.textContent = 'BLOQUEADO'; text.style.color = '#ef4444';
-            input.style.borderColor = isNameStep ? '#ef4444' : '#3b82f6';
-            if (addContainer && val.length > 2) addContainer.style.display = 'block';
-            else if (addContainer) addContainer.style.display = 'none';
-        }
-    };
-
-    rows.forEach(row => {
-        const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
-        const sugBox = row.querySelector('.suggestion-box');
-        
-        // Botón eliminar
-        row.querySelector('.delete-row-btn').onclick = () => {
-            if (confirm('¿Eliminar este color de la carga? No se comparará ni se guardará.')) {
-                deletedIds.add(row.dataset.id);
-                row.style.opacity = '0.4';
-                row.style.pointerEvents = 'none';
-                row.querySelector('.status-indicator span').textContent = 'ELIMINADO';
-                row.querySelector('.status-indicator span').style.color = '#64748b';
-                row.querySelector('.status-indicator i').style.color = '#64748b';
+            if (isValid || isForced) {
+                icon.className = 'fas fa-check-circle'; icon.style.color = isForced ? '#a78bfa' : '#10b981';
+                text.textContent = isForced ? 'FORZADO' : 'LISTO'; text.style.color = isForced ? '#a78bfa' : '#10b981';
+                input.style.borderColor = isForced ? '#a78bfa' : '#10b981';
+                if (forceContainer) forceContainer.style.display = 'none';
+            } else {
+                icon.className = 'fas fa-times-circle'; icon.style.color = '#ef4444';
+                text.textContent = 'BLOQUEADO'; text.style.color = '#ef4444';
+                input.style.borderColor = isNameStep ? '#ef4444' : '#3b82f6';
+                // Solo mostrar botón forzar si hay texto y no es válido
+                if (forceContainer && val.length > 2) forceContainer.style.display = 'block';
+                else if (forceContainer) forceContainer.style.display = 'none';
             }
         };
 
-        if (isNameStep) {
-            const addContainer = row.querySelector('.add-to-db-container');
-            const groupInput = row.querySelector('.group-search-input');
-            const groupSugBox = row.querySelector('.group-suggestion-box');
-            const btnSave = row.querySelector('.btn-save-to-db');
+        rows.forEach(row => {
+            const input = isNameStep ? row.querySelector('.name-input') : row.querySelector('.nk-row-input');
+            const sugBox = row.querySelector('.suggestion-box');
+            const btnForce = row.querySelector('.btn-force-notify');
 
-            groupInput.oninput = () => {
-                const query = groupInput.value.trim().toUpperCase();
-                if (query.length < 2) { groupSugBox.style.display = 'none'; return; }
-
-                const families = Array.isArray(window.EQUIVALENCY_ROWS) ? window.EQUIVALENCY_ROWS : [];
-                // families es [ [nk_code, color1, color2...], [...] ]
-                const matches = families.filter(f => {
-                    const groupId = f[0].toUpperCase();
-                    const colors = f.slice(1).filter(c => c).map(c => c.toUpperCase());
-                    return groupId.includes(query) || colors.some(c => c.includes(query));
-                }).slice(0, 10);
-
-                if (matches.length > 0) {
-                    groupSugBox.innerHTML = matches.map(f => {
-                        const groupId = f[0];
-                        const colorNames = f.slice(1).filter(c => c).join(', ');
-                        return `
-                            <div class="group-sug-item" data-id="${groupId}" style="padding:8px; cursor:pointer; color:white; border-bottom:1px solid #334155; font-size:0.8rem;">
-                                <div style="font-weight:bold; color:#f59e0b;">Grupo: ${groupId}</div>
-                                <div style="font-size:0.7rem; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${colorNames}</div>
-                            </div>
-                        `;
-                    }).join('');
-                    groupSugBox.style.display = 'block';
-                    groupSugBox.querySelectorAll('.group-sug-item').forEach(item => {
-                        item.onclick = () => {
-                            groupInput.value = item.dataset.id;
-                            groupSugBox.style.display = 'none';
-                        };
-                    });
-                } else {
-                    groupSugBox.style.display = 'none';
-                }
-            };
-
-            const user = window.app?.auth?.getCurrentUser();
-            const canEdit = user?.isMaster || user?.permissions?.includes('editCatalog');
-
-            if (canEdit) {
-                btnSave.onclick = async () => {
-                    const groupToUse = groupInput.value.trim().toUpperCase();
-                    const colorToRegister = input.value.trim().toUpperCase();
+            if (btnForce) {
+                btnForce.onclick = async () => {
+                    const val = input.value.trim().toUpperCase();
+                    const reason = prompt(`⚠️ ATENCIÓN: Estás forzando el uso de "${val}" que no existe en el catálogo maestro.\n\nEscribe la JUSTIFICACIÓN para este cambio (será enviada al Master):`);
                     
-                    if (!groupToUse) { alert('Selecciona o escribe un Grupo ID.'); return; }
-                    
-                    btnSave.disabled = true; btnSave.innerHTML = '<i class="fas fa-spinner fa-spin"></i> PROCESANDO...';
-                    
-                    // Intentar agregar a grupo existente
-                    let result = await addColorNameToGroup(groupToUse, colorToRegister);
-                    
-                    // Si el grupo no existe, preguntar si desea crearlo
-                    if (!result.success && result.error.includes('no encontrado')) {
-                        if (confirm(`El grupo "${groupToUse}" no existe. ¿Deseas crear este NUEVO grupo con el color "${colorToRegister}"?`)) {
-                            result = await createNewEquivalencyGroup(groupToUse, colorToRegister);
+                    if (reason && reason.trim().length > 5) {
+                        const record = auditRecords.find(r => r.id === row.dataset.id);
+                        if (record) {
+                            record.isForced = true;
+                            record.forceReason = reason;
+                            
+                            // Notificar al Master mediante la Bandeja (inbox)
+                            const currentUser = window.app?.auth?.getCurrentUser()?.username || 'desconocido';
+                            const subject = `⚠️ COLOR FORZADO: ${val}`;
+                            const message = `El usuario **${currentUser}** ha forzado un registro durante la auditoría.\n\n` +
+                                            `**Color/NK:** ${val}\n` +
+                                            `**Paso:** ${isNameStep ? 'Validación de Nombre' : 'Validación de NK'}\n` +
+                                            `**Justificación:** ${reason}\n\n` +
+                                            `_Este registro se procesará en el TXT actual pero NO ha sido agregado a la base de datos de catálogos._`;
+
+                            await window.app?.addToInbox?.({
+                                subject: subject,
+                                content: message,
+                                type: 'system_notification'
+                            }, { skipAlert: true });
+
+                            window.showNotification?.('Forzado Registrado', 'Se ha enviado la justificación al Master.', 'info');
+                            validateRow(row);
                         }
+                    } else if (reason !== null) {
+                        alert('❌ Debes proporcionar una justificación válida (mínimo 6 caracteres) para forzar un registro.');
                     }
-
-                    if (result.success) {
-                        // Actualizar catálogo local
-                        addNameToLocalCatalog(colorToRegister);
-                        if (window.EQUIVALENCE_MAP) {
-                            const cleanName = colorToRegister.replace(/[^A-Z0-9]/gi, '');
-                            window.EQUIVALENCE_MAP.set(cleanName, groupToUse);
-                        }
-                        // Reflejar cambio en la UI
-                        validateRow(row);
-                        alert('✅ Operación exitosa. El catálogo ha sido actualizado.');
-                    } else if (result) {
-                        alert('❌ Error: ' + result.error);
-                    }
-                    
-                    btnSave.disabled = false; btnSave.innerHTML = '<i class="fas fa-plus"></i> AGREGAR A BD';
                 };
-            } else {
-                btnSave.style.display = 'none';
-                groupInput.disabled = true;
-                groupInput.placeholder = '🔒 Sin permiso para editar BD';
             }
-        }
 
         input.oninput = () => {
             const val = input.value.trim().toUpperCase();
@@ -584,11 +471,16 @@ function createCorrectionModal(auditRecords, stepType, onComplete, dominantNk = 
         const btn = modal.querySelector('#btnApplyCorrections');
         btn.disabled = true; btn.innerHTML = 'PROCESANDO...';
 
-        const corrected = remainingRows.map(row => ({
-            id: row.dataset.id,
-            baseName: row.querySelector('.name-input').value.trim().toUpperCase(),
-            nk: row.querySelector('.nk-row-input').value.trim().toUpperCase()
-        }));
+        const corrected = remainingRows.map(row => {
+            const record = auditRecords.find(r => r.id === row.dataset.id);
+            return {
+                id: row.dataset.id,
+                baseName: row.querySelector('.name-input').value.trim().toUpperCase(),
+                nk: row.querySelector('.nk-row-input').value.trim().toUpperCase(),
+                isForced: record ? record.isForced : false,
+                forceReason: record ? record.forceReason : ''
+            };
+        });
 
         // NOTA: Los registros eliminados simplemente no se incluyen en 'corrected'.
         // La lógica en validateAndCorrectRecords debe filtrar los originales.
@@ -607,8 +499,8 @@ export function revalidateRecord(name, nk) {
     const cleanNk = (nk || '').trim().toUpperCase();
 
     return {
-        isNameValid: isValidColorName(cleanName),
-        isNkValid: isValidNK(cleanNk),
+        isNameValid: isValidColorName(cleanName) || isTonalColor(cleanName),
+        isNkValid: isValidNK(cleanNk) || isTonalColor(cleanName),
         cleanBase: cleanName,
         cleanNk: cleanNk
     };

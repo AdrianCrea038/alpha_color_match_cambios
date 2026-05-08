@@ -464,17 +464,18 @@ export class DashboardView {
             { label: 'Duplicados', data: labels.map(l => rows.filter(r => r.periodo === l).reduce((s,r) => s + r.duplicates, 0)), borderColor: '#ff8c00', tension: 0.4 }
         ];
 
-        if (this.mainChart && this.mainChart.ctx) {
-            this.mainChart.data = { labels, datasets };
-            this.mainChart.update();
-        } else {
-            if (this.mainChart) this.mainChart.destroy();
-            this.mainChart = new window.Chart(mainCtx, {
+        if (this.mainChart) {
+            this.mainChart.destroy();
+            this.mainChart = null;
+        }
+        const existingMain = window.Chart.getChart(mainCtx);
+        if (existingMain) existingMain.destroy();
+
+        this.mainChart = new window.Chart(mainCtx, {
                 type: 'line',
                 data: { labels, datasets },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e2e8f0' } } } }
             });
-        }
 
         const byUser = new Map();
         rows.forEach(r => {
@@ -494,12 +495,14 @@ export class DashboardView {
             }]
         };
 
-        if (this.secondaryChart && this.secondaryChart.ctx) {
-            this.secondaryChart.data = userData;
-            this.secondaryChart.update();
-        } else {
-            if (this.secondaryChart) this.secondaryChart.destroy();
-            this.secondaryChart = new window.Chart(secCtx, {
+        if (this.secondaryChart) {
+            this.secondaryChart.destroy();
+            this.secondaryChart = null;
+        }
+        const existingSec = window.Chart.getChart(secCtx);
+        if (existingSec) existingSec.destroy();
+
+        this.secondaryChart = new window.Chart(secCtx, {
                 type: 'bar',
                 data: userData,
                 options: {
@@ -515,7 +518,6 @@ export class DashboardView {
                     }
                 }
             });
-        }
 
         const distData = {
             labels: [...byUser.keys()],
@@ -527,12 +529,14 @@ export class DashboardView {
             }]
         };
 
-        if (this.userDistChart && this.userDistChart.ctx) {
-            this.userDistChart.data = distData;
-            this.userDistChart.update();
-        } else {
-            if (this.userDistChart) this.userDistChart.destroy();
-            this.userDistChart = new window.Chart(distCtx, {
+        if (this.userDistChart) {
+            this.userDistChart.destroy();
+            this.userDistChart = null;
+        }
+        const existingDist = window.Chart.getChart(distCtx);
+        if (existingDist) existingDist.destroy();
+
+        this.userDistChart = new window.Chart(distCtx, {
                 type: 'doughnut',
                 data: distData,
                 options: {
@@ -545,7 +549,6 @@ export class DashboardView {
                     cutout: '65%'
                 }
             });
-        }
     }
 
     async render() {

@@ -1,75 +1,83 @@
 ================================================================================
-          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V4.3)
+          MANUAL DE FUNCIONAMIENTO - ALPHA COLOR MATCH 2 (V5.0)
 ================================================================================
 
-Este documento describe la arquitectura, lógica y flujo de datos del sistema
-Alpha Color Match 2 para referencia técnica y futuras modificaciones.
+Este documento define la arquitectura, lógica de programación y estándares visuales
+del sistema Alpha Color Match 2. Actualizado al 04 de Mayo, 2026.
 
-1. PROPÓSITO DEL SISTEMA
-------------------------
-Alpha Color Match 2 es una suite profesional para la gestión de desarrollo de
-colores, validación de archivos .txt maestros (NK) y monitoreo de producción
-en planta a través de un Dashboard Ejecutivo de alto rendimiento.
+1. IDENTIDAD VISUAL Y DISEÑO (AESTHETICS)
+-----------------------------------------
+El sistema utiliza una interfaz "Premium Dark Mode" con efectos de Glassmorphism.
+- Fondo Principal: Slate Dark (#0f172a / #1e293b).
+- Acentos Neón (Sombras dinámicas): box-shadow: 0 0 15px [color_rgba].
 
-2. ARQUITECTURA TÉCNICA
------------------------
-- Frontend: HTML5, CSS3 (Premium Dark Mode / Glassmorphism) y JS Vanilla (ES Modules).
-- Backend: Supabase (PostgreSQL) con conexión atómica vía API.
-- Paleta de Colores CSS (Identidad Visual):
-  * Primario (Acción): Azul Eléctrico (#3b82f6) - Sombras: 0 4px 15px rgba(59, 130, 246, 0.3)
-  * Éxito (Válido): Verde Esmeralda (#10b981)
-  * Error Crítico: Rojo Neón (#ef4444)
-  * Alerta/Catálogo: Ámbar (#fbbf24) y Naranja Vivo (#f97316)
-  * Informativo: Azul Cielo (#60a5fa)
-  * Fondo: Slate Dark (#0f172a / #1e293b) con bordes de 1px solid rgba(255,255,255,0.05).
+SISTEMA DE COLORES (Semántica de Programación):
+- ROJO NEÓN/INTENSO (#ef4444): Errores Críticos (CMYK > 100, Paréntesis, NK No Existe, Duplicados, Nombres Mal Escritos).
+- VERDE ESMERALDA (#10b981): Registros Válidos y Aprobados.
+- NARANJA VIVO (#f97316): Inconsistencias de CMYK (Diferente a la moda del grupo).
+- AZUL CIELO (#60a5fa): Información de Sistema (Sin NK).
+- BLANCO (#f1f5f9): Texto principal y títulos.
 
-3. MOTOR DE VALIDACIÓN Y AUDITORÍA (V4.3)
----------------------------------------
-Archivo: js/modules/nameValidator.js (El Corazón del Sistema)
+2. ARQUITECTURA DE DATOS (SUPABASE)
+-----------------------------------
+El sistema opera con Supabase (PostgreSQL) como "Fuente de Verdad Única".
+- Tabla 'equivalencias': Almacena grupos de nombres que comparten un mismo color.
+  * Columna 'colores' (text[]): Array de nombres normalizados.
+  * Columna 'grupo_id': Código NK que identifica al grupo.
+- Sincronización: Se utiliza un mapa global (window.EQUIVALENCE_MAP) cargado en tiempo real.
 
-A. REGLAS DE FILTRADO (IGNORAR):
-   - Todo registro que contenga la palabra "WHITE" en su nombre es ignorado por el 
-     motor de auditoría (se considera válido por defecto).
-   - Formatos Tonal: Colores que inician con "TN", "TNL" o "TONAL" no requieren NK.
+3. MOTOR DE VALIDACIÓN (V5.0 - NORMALIZACIÓN AGRESIVA)
+------------------------------------------------------
+Archivo clave: js/core/constants.js y js/modules/nameValidator.js
 
-B. VALIDACIÓN UNIFICADA DE NOMBRES:
-   - Un color es válido si existe en el catálogo de Equivalencias bajo su 
-     Nombre Base (ej: "002 BLACK") O bajo su Nombre Completo (ej: "002 BLACK NK711075").
+A. NORMALIZACIÓN ALFANUMÉRICA:
+   Antes de cualquier comparación, el sistema aplica: .replace(/[^A-Z0-9]/gi, '')
+   Esto permite que "PMS 1255C", "PMS.1255C" y "PMS1255C" sean tratados como idénticos.
 
-C. GESTIÓN DE BASE DE DATOS DESDE AUDITORÍA:
-   - Agregar a Grupo: Inserta el nombre en la columna 'colores' (text[]) de la tabla 
-     'equivalencias' en Supabase.
-   - Crear Nuevo Grupo: Permite crear una fila nueva en 'equivalencias' con un ID 
-     de grupo personalizado (ej: un nuevo NK).
-   - Detección Dinámica: El sistema detecta automáticamente si la columna de ID se 
-     llama 'nk', 'grupo_id', 'nk_code', etc., para evitar errores de esquema.
+B. TOLERANCIA TÉCNICA (Ignorar Prefijos/Sufijos):
+   El validador ignora automáticamente los siguientes términos para reducir falsos positivos:
+   - Prefijos: "TM", "TEAM", "PMS".
+   - Sufijos: "R", "REFILL", "NEW".
 
-4. MÓDULOS ESPECÍFICOS Y SU PROGRAMACIÓN
-----------------------------------------
+C. REGLA DE EXCEPCIÓN "WHITE":
+   Todo color que contenga la palabra "WHITE" se marca como válido por defecto (Regla de Planta).
 
-   A. AUDITORÍA DIRECTA (js/views/directAuditView.js)
-      - Sincronización Fresh: Al cargar un archivo, ejecuta ensureValidColorCatalogLoaded(true) 
-        para bajar los últimos cambios de Supabase (ignora el caché).
-      - Visualización: Filtra por 7 estados: Catálogo, CMYK Diferente, CMYK > 100, 
-        Sin NK, NK Inválido, Duplicados y Paréntesis.
+4. PROTOCOLOS DE AUDITORÍA Y FUNCIONES DE PROGRAMACIÓN
+------------------------------------------------------
 
-   B. COMPARADOR PRINCIPAL (js/main.js & js/modules/resultsRenderer.js)
-      - Reconciliación: Compara Master vs Secundario y asigna estados de color (Verde/Rojo/Naranja).
-      - Bulk Actions: addAllPendingItems() agrega todos los cambios propuestos de una sola vez.
+A. AUDITORÍA CÍCLICA (js/views/cyclicAuditView.js):
+   - Función formatRecord(r, other): Compara el registro actual contra su par en el 
+     otro archivo.
+   - Resaltado Selectivo: Si un canal (C, M, Y o K) difiere entre archivos, se 
+     encierra en un <span style="background:#ef4444"> (Fondo Rojo, Texto Blanco).
 
-   C. MANEJO DE DUPLICADOS (js/modules/duplicateHandler.js)
-      - Firma Única: La clave de duplicado es stricta: "NombreBase | NK".
+B. AUDITORÍA DIRECTA (js/views/directAuditView.js):
+   - Agrupamiento por NK: La tabla se ordena por .nk para que los colores equivalentes 
+     queden juntos.
+   - Filtro Inteligente y Riguroso: El filtro de "Mal Escrito" es de color ROJO y detecta CUALQUIER nombre que no exista en la base de datos (Supabase), sin importar si el NK es válido o no. Todo nombre erróneo se resalta con texto rojo en negrita.
+   - Persistencia Visual: El loader ("Procesando Auditoría...") permanece en pantalla hasta que toda la tabla termina de renderizarse, brindando seguridad visual al usuario.
+   - Resaltado por Moda: Si un color tiene un CMYK distinto al resto de su grupo 
+     (bajo el mismo NK), el valor discordante se resalta en NARANJA.
+   - Gestión de Paréntesis (Evidencia): 
+     * Función moveParenthesisToNk(uid): Limpia el nombre del color para exportar pero
+       mueve el paréntesis (ej: "(1)") al campo NK como evidencia histórica.
 
-5. REGLAS DE ORO PARA LA IA
-----------------------------
-1. NUNCA modificar la tabla 'master_nks' durante una auditoría de colores (Nombres).
-2. CMYK > 100: Es un error CORRUPTO. Bloquea exportación y se marca en ROJO NEÓN.
-3. FORMATO ARRAY: Al escribir en la columna 'colores' de Supabase, usar siempre el 
-   formato de Postgres Array: {"NOMBRE"}.
-4. NORMALIZACIÓN: Antes de comparar con mapas de constantes, limpiar el nombre 
-   quitando espacios y caracteres especiales.
+C. PANEL ADMINISTRATIVO Y SEGURIDAD MASTER (admin.html / adminView.js):
+   - Jerarquía Absoluta: Existe un único perfil MASTER. Este usuario tiene acceso total y la potestad EXCLUSIVA de ver contraseñas, crear, editar o eliminar usuarios y revocar cualquier acceso.
+   - Bloqueo de Escalado: La interfaz ha eliminado el checkbox "Convertir a MASTER". Nadie más puede obtener este rango, protegiendo al dueño del sistema.
+   - Acceso Completo Híbrido: Si el MASTER desea otorgar acceso total a alguien, puede marcarle todas las casillas de permiso manualmente. Ese usuario tendrá "acceso completo" operativo pero seguirá siendo nivel estándar.
+   - Visibilidad Transparente: El MASTER cuenta con un icono (ojo) para visualizar todas las contraseñas en texto claro de su equipo de trabajo.
+
+5. REGLAS DE ORO PARA EL DESARROLLADOR
+--------------------------------------
+1. NUNCA quitar el filtro de Paréntesis; es una validación de integridad.
+2. EXPORTACIÓN BLOQUEADA: Si hay un error de Rojo Neón, el botón EXPORTAR se deshabilita.
+3. MODA CMYK: La verdad del color se decide por la mayoría (Moda estadística). Si 3 
+   colores dicen 100/0/0/0 y uno dice 100/0/0/1, el último es el error.
+4. CONSISTENCIA: Toda corrección manual mediante el modal de edición debe actualizar
+   el estado local y disparar this.performValidation().
 
 ================================================================================
-Desarrollado por: Antigravity (AI Coding Assistant)
-Última actualización: 04 de Mayo, 2026 (V4.3 - Dynamic Group Creation & White Filter)
+Desarrollado por: Antigravity (Advanced Agentic Coding AI)
+Alpha Color Match 2 - Solución de Integridad de Color Industrial.
 ================================================================================

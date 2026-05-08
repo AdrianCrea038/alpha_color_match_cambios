@@ -26,11 +26,11 @@
         <div class="sidebar-menu">
             <div class="menu-item active" data-view="comparator" data-perm="comparator">
                 <i class="fas fa-shield-check"></i>
-                <span>Auditoría</span>
+                <span>Auditoría Directa</span>
             </div>
-            <div class="menu-item" data-view="cyclicHub" data-perm="linearization">
+            <div class="menu-item" data-view="cyclicHub" data-perm="cyclicHub">
                 <i class="fas fa-sync-alt"></i>
-                <span>Cíclico 2</span>
+                <span>Auditoría Cíclica</span>
             </div>
             <div class="menu-item" data-view="history" data-perm="history">
                 <i class="fas fa-inbox"></i>
@@ -38,11 +38,11 @@
             </div>
             <div class="menu-item" data-view="paletteValidator" data-perm="paletteValidator">
                 <i class="fas fa-palette"></i>
-                <span>Validar Paleta</span>
+                <span>Validar Paletas</span>
             </div>
-            <div class="menu-item" data-view="development" data-perm="development">
-                <i class="fas fa-paintbrush"></i>
-                <span>Desarrollo</span>
+            <div class="menu-item" data-view="catalogManagement" data-perm="editCatalog">
+                <i class="fas fa-database"></i>
+                <span>Gestión Catálogos</span>
             </div>
             <div class="menu-item" data-view="assignment" data-perm="assignment">
                 <i class="fas fa-tasks"></i>
@@ -159,6 +159,75 @@
                             <tbody id="resultsTableBody"></tbody>
                         </table>
                     </div>
+                </div> <!-- FIN comparatorView -->
+
+                <!-- Vista Gestión de Catálogos (Restaurada a Premium) -->
+                <div id="catalogManagementView" class="view-content">
+                    <div class="reports-header" style="margin-bottom: 2rem;">
+                        <h2 style="color: #00e5ff; font-size: 1.8rem; margin: 0;"><i class="fas fa-database"></i> Gestión de Catálogos Maestros</h2>
+                        <p style="color: #94a3b8; margin: 0.5rem 0 0 0;">Descarga y actualización masiva de nombres y códigos NK mediante Excel.</p>
+                    </div>
+
+                    <div class="catalog-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem;">
+                        <div class="premium-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 16px; overflow: hidden;">
+                            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; display: flex; align-items: center; gap: 15px; background: rgba(0, 229, 255, 0.05);">
+                                <div style="width: 45px; height: 45px; background: rgba(0, 229, 255, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #00e5ff;">
+                                    <i class="fas fa-tags" style="font-size: 1.4rem;"></i>
+                                </div>
+                                <div>
+                                    <h3 style="margin: 0; font-size: 1.2rem; color: #fff;">Nombres de Color</h3>
+                                    <span style="font-size: 0.8rem; color: #00e5ff; font-weight: 600;">EQUIVALENCIAS</span>
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">Gestiona grupos de nombres equivalentes y mapeos. Los cambios afectarán las auditorías en tiempo real.</p>
+                                <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+                                    <button id="downloadEquivalenciasBtn" class="premium-btn" style="width: 100%; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6; font-weight: bold; cursor: pointer;">
+                                        <i class="fas fa-download"></i> DESCARGAR EXCEL FORMATEADO
+                                    </button>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
+                                        <input type="file" id="uploadEquivalenciasInput" accept=".xlsx, .xls" style="display: none;">
+                                        <button id="triggerUploadEquivalenciasBtn" class="premium-btn" style="background: #3b82f6; color: white; border: none; padding: 12px; font-weight: bold; cursor: pointer;">
+                                            <i class="fas fa-upload"></i> CARGAR
+                                        </button>
+                                        <button id="addIndividualColorBtn" class="premium-btn" style="background: transparent; border: 1px solid #00e5ff; color: #00e5ff; padding: 12px; font-weight: bold; cursor: pointer;">
+                                            <i class="fas fa-plus"></i> AGREGAR COLOR
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="premium-card" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 16px; overflow: hidden;">
+                            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; display: flex; align-items: center; gap: 15px; background: rgba(16, 185, 129, 0.05);">
+                                <div style="width: 45px; height: 45px; background: rgba(16, 185, 129, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #10b981;">
+                                    <i class="fas fa-barcode" style="font-size: 1.4rem;"></i>
+                                </div>
+                                <div>
+                                    <h3 style="margin: 0; font-size: 1.2rem; color: #fff;">Códigos NK</h3>
+                                    <span style="font-size: 0.8rem; color: #10b981; font-weight: 600;">MASTER NKs</span>
+                                </div>
+                            </div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">Gestiona la lista oficial de códigos NK autorizados para producción y validaciones.</p>
+                                <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+                                    <button id="downloadMasterNksBtn" class="premium-btn" style="width: 100%; padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #10b981; font-weight: bold; cursor: pointer;">
+                                        <i class="fas fa-download"></i> DESCARGAR EXCEL ACTUAL
+                                    </button>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
+                                        <input type="file" id="uploadMasterNksInput" accept=".xlsx, .xls" style="display: none;">
+                                        <button id="triggerUploadMasterNksBtn" class="premium-btn" style="background: #10b981; color: white; border: none; padding: 12px; font-weight: bold; cursor: pointer;">
+                                            <i class="fas fa-upload"></i> CARGAR
+                                        </button>
+                                        <button id="addIndividualNkBtn" class="premium-btn" style="background: transparent; border: 1px solid #10b981; color: #10b981; padding: 12px; font-weight: bold; cursor: pointer;">
+                                            <i class="fas fa-plus"></i> AGREGAR NK
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="catalogStatus" style="margin-top: 1.5rem; padding: 1rem; border-radius: 8px; display: none;"></div>
                 </div>
 
                 <!-- Vista Bandeja de Entrada -->
@@ -694,6 +763,8 @@
         </div>
     </div>
 
+    <!-- Librería XLSX para manejo de Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script type="module" src="js/main.js"></script>
 </body>
 </html>

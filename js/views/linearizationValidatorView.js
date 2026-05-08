@@ -91,13 +91,17 @@ export class LinearizationValidatorView {
             <style>
                 /* Estilos mínimos necesarios que no están en el CSS global */
                 .mismatch-val {
-                    color: #f43f5e;
-                    font-weight: 900;
-                    text-decoration: underline;
-                    text-shadow: 0 0 5px rgba(244, 63, 94, 0.5);
-                    background: rgba(244, 63, 94, 0.1);
-                    padding: 0 2px;
-                    border-radius: 2px;
+                    background: #ef4444 !important;
+                    color: white !important;
+                    padding: 2px 5px !important;
+                    border-radius: 4px !important;
+                    font-weight: 900 !important;
+                    display: inline-block !important;
+                    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6) !important;
+                }
+                .cmyk-separator {
+                    opacity: 0.3;
+                    margin: 0 4px;
                 }
             </style>
             <!-- SECCIÓN 1: AUDITORÍA CÍCLICA (COMPARACIÓN) -->
@@ -368,16 +372,13 @@ export class LinearizationValidatorView {
             const s = res.secondaryData;
             
             const formatCmykWithDiff = (pData, sData, isPrimary) => {
-                if (!pData || !sData) {
-                    const data = pData || sData;
-                    return (data.cmyk || []).map(v => Number(v).toFixed(6)).join(' / ');
-                }
-                
+                if (!pData || !sData) return (pData || sData).cmyk.map(v => Number(v).toFixed(6)).join(' / ');
                 return pData.cmyk.map((v, i) => {
-                    const diff = Math.abs(v - sData.cmyk[i]) > 0.000001;
-                    const val = Number(isPrimary ? pData.cmyk[i] : sData.cmyk[i]).toFixed(6);
-                    return diff ? `<span style="color: #f43f5e; font-weight: 900; background: rgba(244,63,94,0.1); padding: 0 2px; border-radius: 2px;">${val}</span>` : val;
-                }).join(' / ');
+                    const otherVal = sData.cmyk[i];
+                    const diff = Math.abs(Number(v) - Number(otherVal)) > 0.0001;
+                    const val = Number(isPrimary ? v : otherVal).toFixed(6);
+                    return diff ? `<span class="mismatch-val">${val}</span>` : val;
+                }).join('<span class="cmyk-separator">/</span>');
             };
 
             const formatInfo = (data, otherData, isPrimary) => {
@@ -665,6 +666,31 @@ export class LinearizationValidatorView {
             });
         });
 
+        // ============================================================
+        // 5. MODA CMYK (Regla 73 - Mayoría Estadística)
+        // ============================================================
+        Object.keys(eqGroupsInFile).forEach(key => {
+            const groupRecords = eqGroupsInFile[key];
+            if (groupRecords.length <= 1) return;
+
+            const cmykCounts = {};
+            groupRecords.forEach(r => {
+                const cmykKey = r.cmyk.map(v => Number(v).toFixed(6)).join('|');
+                cmykCounts[cmykKey] = (cmykCounts[cmykKey] || 0) + 1;
+            });
+
+            const sortedCounts = Object.entries(cmykCounts).sort((a, b) => b[1] - a[1]);
+            const dominantCmykKey = sortedCounts[0][0];
+            
+            groupRecords.forEach(r => {
+                const currentKey = r.cmyk.map(v => Number(v).toFixed(6)).join('|');
+                if (currentKey !== dominantCmykKey) {
+                    r.isNameInconsistent = true;
+                    r.hasError = true;
+                }
+            });
+        });
+
         // 5. BLOQUEO DE COMPARACIÓN si hay errores
         const hasAnyFileError = this.records.some(r => r.hasError) || (this.masterRecords && this.masterRecords.some(r => r.hasError));
         const runBtn = this.container.querySelector('#btnRunCyclic');
@@ -750,7 +776,25 @@ export class LinearizationValidatorView {
                 ${counts.nk > 0 ? `<div class="stat-badge-mini blue has-count ${this.activeFilter === 'nk' ? 'active' : ''}" data-filter="nk"><i class="fas fa-fingerprint"></i> Sin NK (${counts.nk})</div>` : ''}
                 ${counts.parentheses > 0 ? `<div class="stat-badge-mini orange has-count ${this.activeFilter === 'parentheses' ? 'active' : ''}" data-filter="parentheses"><i class="fas fa-brackets-curly"></i> Paréntesis (${counts.parentheses})</div>` : ''}
                 ${errorCount === 0 && this.records.length > 0 ? '<div class="stat-badge-mini" style="background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981; color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);"><i class="fas fa-check-circle"></i> TODO CORRECTO</div>' : ''}
+                ${counts.nameInconsistent > 0 ? `
+                    <button id="btnAutoFixMajority" class="stat-badge-mini" style="background: #7c3aed; border: 2px solid #9f67ff; color: white; cursor: pointer; animation: pulse-purple 2s infinite;">
+                        <i class="fas fa-magic"></i> AUTO-CORREGIR POR MAYORÍA (${counts.nameInconsistent})
+                    </button>
+                ` : ''}
             `;
+
+            // Vincular evento de autocorrección masiva
+            const btnAutoFix = statsBadges.querySelector('#btnAutoFixMajority');
+            if (btnAutoFix) {
+                btnAutoFix.onclick = async () => {
+                    if (confirm(`Se aplicará el valor CMYK de la mayoría a los ${counts.nameInconsistent} registros inconsistentes. ¿Deseas continuar?`)) {
+                        // Re-ejecutar lógica de moda pero esta vez aplicando los cambios
+                        this.applyMajorityFixes();
+                        await this.performValidation();
+                        window.showNotification('Sincronizado', 'Se ha aplicado la moda CMYK a todos los grupos.', 'success');
+                    }
+                };
+            }
 
             // Vincular eventos de filtrado
             statsBadges.querySelectorAll('.stat-badge-mini').forEach(badge => {
@@ -807,19 +851,39 @@ export class LinearizationValidatorView {
                     rowClass = 'row-error-orange';
                 }
 
+                const formatCmykWithDiffLocal = (pData, sData, isPrimary) => {
+                    if (!pData || !sData) return (pData || sData).cmyk.map(v => Number(v).toFixed(6)).join(' / ');
+                    return pData.cmyk.map((v, i) => {
+                        const otherVal = sData.cmyk[i];
+                        const diff = Math.abs(Number(v) - Number(otherVal)) > 0.0001;
+                        const val = Number(isPrimary ? v : otherVal).toFixed(6);
+                        return diff ? `<span class="mismatch-val">${val}</span>` : val;
+                    }).join('<span class="cmyk-separator">/</span>');
+                };
+
                 tr.className = rowClass;
                 tr.innerHTML = `
                     <td>
                         <div class="comp-cell master">
-                            ${record.master ? `<div class="name">${record.master.name}</div><div class="cmyk">${record.master.cmyk.join(' / ')}</div>` : '---'}
+                            ${record.master ? `
+                                <div class="name" style="font-weight: 700; color: #94a3b8; font-size: 0.8rem;">${record.master.name}</div>
+                                <div class="cmyk" style="font-family: monospace; font-size: 0.75rem; margin-top: 5px;">
+                                    ${formatCmykWithDiffLocal(record.master, record.target, true)}
+                                </div>
+                            ` : '---'}
                         </div>
                     </td>
                     <td>
                         <div class="comp-cell target">
-                            ${record.target ? `<div class="name">${record.target.name}</div><div class="cmyk">${record.target.cmyk.join(' / ')}</div>` : '---'}
+                            ${record.target ? `
+                                <div class="name" style="font-weight: 700; color: #f1f5f9; font-size: 0.8rem;">${record.target.name}</div>
+                                <div class="cmyk" style="font-family: monospace; font-size: 0.75rem; margin-top: 5px;">
+                                    ${formatCmykWithDiffLocal(record.target, record.master, false)}
+                                </div>
+                            ` : '---'}
                         </div>
                     </td>
-                    <td><div class="diff-tags-container">${diffs.join(' ')}</div></td>
+                    <td><div class="diff-tags-container" style="display: flex; gap: 5px; flex-wrap: wrap;">${diffs.join(' ')}</div></td>
                     <td class="text-center">${comparisonStatus}</td>
                     <td class="text-center">
                         <button class="btn-icon-action edit" data-uid="${record.target?._uid || record.master?._uid}" title="Ver Detalles"><i class="fas fa-search-plus"></i></button>
@@ -848,6 +912,9 @@ export class LinearizationValidatorView {
                     rowColorClass = 'row-error-red';
                 } else if (record.isInvalidName) { 
                     statusHtml = '<div class="status-badge-solid orange"><i class="fas fa-book-dead"></i> Catálogo</div>';
+                    rowColorClass = 'row-error-orange';
+                } else if (record.isNameInconsistent) { 
+                    statusHtml = '<div class="status-badge-solid orange" style="background: #7c3aed; border-color: #9f67ff;"><i class="fas fa-sync-alt"></i> Inconsistente</div>';
                     rowColorClass = 'row-error-orange';
                 } else if (record.isMissingNk) { 
                     statusHtml = '<div class="status-badge-solid blue"><i class="fas fa-fingerprint"></i> Sin NK</div>'; 
@@ -1060,7 +1127,7 @@ export class LinearizationValidatorView {
 
                 this.records[sIdx] = {
                     ...this.records[sIdx],
-                    name: `${name} ${nk}`.trim(),
+                    name: name,
                     baseName: name,
                     nk: nk,
                     isManualValidated: section.querySelector('.inp-force').checked,
@@ -1145,13 +1212,54 @@ export class LinearizationValidatorView {
                         console.log(`✨ Sincronización: [${nk}] "${currentBase}" -> "${masterName}"`);
                         r.baseName = masterName;
                         r.officialName = masterName;
-                        r.name = `${masterName} ${nk}`.trim();
+                        r.name = masterName;
                     }
                 }
             });
         } catch (error) {
             console.error('❌ Error crítico en el protocolo de sanitización:', error);
         }
+    }
+
+    /**
+     * Aplica la regla de la Moda (Mayoría) a todos los grupos de inconsistencia
+     */
+    applyMajorityFixes() {
+        const eqMap = window.EQUIVALENCE_MAP || new Map();
+        const groups = {};
+
+        // 1. Agrupar registros por NK + GroupID
+        this.records.forEach(r => {
+            const pureBaseName = (r.baseName || '').trim().toUpperCase();
+            const eqData = eqMap.get(pureBaseName.replace(/[^A-Z0-9]/gi, ''));
+            if (eqData) {
+                const nk = (r.nk || '').trim().toUpperCase();
+                const key = `${nk}|${eqData.groupId}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(r);
+            }
+        });
+
+        // 2. Para cada grupo, encontrar la moda y aplicar
+        Object.keys(groups).forEach(key => {
+            const list = groups[key];
+            if (list.length <= 1) return;
+
+            const cmykCounts = {};
+            list.forEach(r => {
+                const cKey = r.cmyk.map(v => Number(v).toFixed(6)).join('|');
+                cmykCounts[cKey] = (cmykCounts[cKey] || 0) + 1;
+            });
+
+            const sorted = Object.entries(cmykCounts).sort((a, b) => b[1] - a[1]);
+            const dominantKey = sorted[0][0];
+            const dominantCmyk = dominantKey.split('|').map(v => parseFloat(v));
+
+            list.forEach(r => {
+                r.cmyk = [...dominantCmyk];
+                r.isNameInconsistent = false;
+            });
+        });
     }
 
     async exportCorrectedFile() {

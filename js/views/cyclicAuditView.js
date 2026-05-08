@@ -263,13 +263,26 @@ export class CyclicAuditView {
             else if (res.type === 'new') { statusHtml = '<div class="status-badge blue">Solo en Target</div>'; rowClass = 'row-error-blue'; }
             else if (res.diffCmyk) { statusHtml = '<div class="status-badge orange">CMYK Dif.</div>'; rowClass = 'row-error-orange'; }
 
-            const formatRecord = (r) => {
+            const formatRecord = (r, other) => {
                 if (!r) return '<div class="empty-cell">---</div>';
-                const cmykHtml = (r.cmyk || []).map(v => {
+                
+                const cmykHtml = (r.cmyk || []).map((v, i) => {
                     const val = Number(v);
-                    const isBad = val > 100.000001 || val < -0.000001;
-                    return isBad ? `<span style="color:#ff4444; font-weight:900; background:rgba(255,68,68,0.1); padding:0 4px; border-radius:2px; border:1px solid #ff4444;">${val.toFixed(6)}</span>` : val.toFixed(6);
-                }).join(' / ');
+                    const isCorrupted = val > 100.000001 || val < -0.000001;
+                    
+                    // Comparar con el otro registro para ver si hay diferencia
+                    let isDifferent = false;
+                    if (other && other.cmyk) {
+                        const otherVal = Number(other.cmyk[i]);
+                        isDifferent = Math.abs(val - otherVal) > 0.00001;
+                    }
+
+                    if (isCorrupted || isDifferent) {
+                        return `<span style="background: #ef4444 !important; color: white !important; padding: 1px 4px !important; border-radius: 4px !important; font-weight: 900 !important; box-shadow: 0 0 5px rgba(239, 68, 68, 0.5) !important;">${val.toFixed(6)}</span>`;
+                    }
+                    return val.toFixed(6);
+                }).join(' <span style="opacity: 0.3;">/</span> ');
+
                 return `<div class="comp-cell">
                     <div class="line-marker" style="font-size:0.65rem; color:#64748b; margin-bottom:2px;">Línea: ${r.lineNumber}</div>
                     <div class="name" style="font-weight:700;">${r.name}</div>
@@ -279,8 +292,8 @@ export class CyclicAuditView {
 
             tr.className = rowClass;
             tr.innerHTML = `
-                <td>${formatRecord(res.master)}</td>
-                <td>${formatRecord(res.target)}</td>
+                <td>${formatRecord(res.master, res.target)}</td>
+                <td>${formatRecord(res.target, res.master)}</td>
                 <td>${diffs.join(' ')}</td>
                 <td class="text-center">${statusHtml}</td>
                 <td class="text-center" style="white-space:nowrap;">

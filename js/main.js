@@ -19,16 +19,43 @@ window.FileLoader = {
     loadFile: loadFile
 };
 
+// Implementación global de carga (Loading)
+window.showLoading = (message = 'Cargando...') => {
+    let loader = document.getElementById('globalLoader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'globalLoader';
+        loader.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:20000; color:white; backdrop-filter:blur(3px);';
+        loader.innerHTML = `
+            <div class="loader-spinner" style="width:50px; height:50px; border:5px solid rgba(255,255,255,0.1); border-top-color:#00e5ff; border-radius:50%; animation:spin 1s linear infinite;"></div>
+            <p id="loaderMessage" style="margin-top:15px; font-weight:600; font-family:Rubik, sans-serif; letter-spacing:1px;"></p>
+        `;
+        document.body.appendChild(loader);
+        
+        const style = document.createElement('style');
+        style.innerHTML = '@keyframes spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    }
+    document.getElementById('loaderMessage').textContent = message.toUpperCase();
+    loader.style.display = 'flex';
+};
+
+window.hideLoading = () => {
+    const loader = document.getElementById('globalLoader');
+    if (loader) loader.style.display = 'none';
+};
+
 // Importar vistas
 import { PaletteValidatorView } from './views/paletteValidatorView.js';
-import { DevelopmentView } from './views/developmentView.js';
 import { HistoryView } from './views/historyView.js';
 import { AssignmentView } from './views/assignmentView.js';
 import { AdminView } from './views/adminView.js';
 import { ReportsView } from './views/reportsView.js';
+import { CatalogManagementView } from './views/catalogManagementView.js';
 import { DashboardView } from './views/dashboardView.js';
 import { CyclicHubView } from './views/cyclicHubView.js';
 import { supabase, getAllMasterNks } from './core/supabaseClient.js';
+// Control v2.1: Sincronización de vistas maestras
 
 class AlphaColorMatch {
     constructor() {
@@ -60,6 +87,13 @@ class AlphaColorMatch {
         // Inicializar el validador con la instancia de la app
         setAppInstance(this);
         initAuditHandler(this);
+
+        // Exponer métodos de validación para las vistas
+        this.ensureValidColorCatalogLoaded = ensureValidColorCatalogLoaded;
+        this.ensureValidNksLoaded = async () => {
+            const { ensureValidNksLoaded } = await import('./modules/nameValidator.js');
+            return await ensureValidNksLoaded();
+        };
         
         this.init();
         window.app = this;
@@ -122,9 +156,8 @@ class AlphaColorMatch {
             
             // NUEVO: Cargar todos los registros maestros (CMYK) para referencia en auditoría
             try {
-                const { getTxtVersions } = await import('./core/supabaseClient.js');
-                const versions = await getTxtVersions();
-                const activeTxts = versions.filter(v => v.activo);
+                const { getAllActiveLibraryTxts } = await import('./core/supabaseClient.js');
+                const activeTxts = await getAllActiveLibraryTxts();
                 let allMaster = [];
                 const { parseTxtContent } = await import('./modules/fileLoader.js');
                 
@@ -650,11 +683,11 @@ class AlphaColorMatch {
     
     initViews() {
         this.paletteValidatorView = new PaletteValidatorView(this);
-        this.developmentView = new DevelopmentView(this);
         this.historyView = new HistoryView(this);
         this.assignmentView = new AssignmentView(this);
         this.adminView = new AdminView(this, this.auth);
         this.reportsView = new ReportsView(this);
+        this.catalogManagementView = new CatalogManagementView(this);
         this.dashboardView = new DashboardView(this);
         this.cyclicHubView = new CyclicHubView();
     }
@@ -665,12 +698,11 @@ class AlphaColorMatch {
             comparator: document.getElementById('comparatorView'),
             history: document.getElementById('historyView'),
             paletteValidator: document.getElementById('paletteValidatorView'),
-            development: document.getElementById('developmentView'),
+            catalogManagement: document.getElementById('catalogManagementView'),
             assignment: document.getElementById('assignmentView'),
             reports: document.getElementById('reportsView'),
             dashboard: document.getElementById('dashboardView'),
             admin: document.getElementById('adminView'),
-            comparator: document.getElementById('comparatorView'),
             cyclicHub: document.getElementById('cyclicHubView')
         };
         
@@ -692,8 +724,8 @@ class AlphaColorMatch {
             if (viewName === 'paletteValidator' && this.paletteValidatorView) {
                 this.paletteValidatorView.renderTable();
             }
-            if (viewName === 'development' && this.developmentView) {
-                this.developmentView.render();
+            if (viewName === 'catalogManagement' && this.catalogManagementView) {
+                this.catalogManagementView.render();
             }
             if (viewName === 'history' && this.historyView) {
                 this.historyView.render();

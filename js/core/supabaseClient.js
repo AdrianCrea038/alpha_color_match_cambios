@@ -117,6 +117,10 @@ function generateTxtId(nk, plotter, version) {
 
 // Obtener todas las versiones de un NK + Plotter
 export async function getTxtVersions(nk, plotter) {
+    if (!nk || !plotter || nk === 'undefined' || plotter === 'undefined') {
+        console.warn('⚠️ Intento de consulta a library_txt con parámetros incompletos:', { nk, plotter });
+        return [];
+    }
     const { data, error } = await supabase
         .from('library_txt')
         .select('*')
@@ -147,6 +151,9 @@ export async function getAllActiveLibraryTxts() {
 
 // Obtener la versión activa de un NK + Plotter
 export async function getActiveTxt(nk, plotter) {
+    if (!nk || !plotter || nk === 'undefined' || plotter === 'undefined') {
+        return null;
+    }
     const { data, error } = await supabase
         .from('library_txt')
         .select('*')
@@ -496,6 +503,75 @@ export async function createNewEquivalencyGroup(newGroupId, firstColorName) {
 
     } catch (err) {
         console.error('Error en createNewEquivalencyGroup:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * REEMPLAZO MASIVO: Borra todo de 'equivalencias' e inserta nuevos datos.
+ * @param {Array} groups - Lista de { group_id, colores: [] }
+ */
+export async function replaceEquivalenciesTable(groups) {
+    try {
+        console.log(`🚀 Iniciando reemplazo masivo de EQUIVALENCIAS (${groups.length} registros)...`);
+        
+        // 1. Detectar columna de ID (nk, grupo_id, etc)
+        const { data: firstRow } = await supabase.from('equivalencias').select().limit(1).maybeSingle();
+        const idColumn = ['nk', 'grupo_id', 'nk_code', 'group_id', 'code'].find(col => col && firstRow && col in firstRow) || 'nk';
+
+        // 2. BORRAR TODO (Usamos un filtro que siempre sea true, ej: neq id a -1)
+        const { error: delError } = await supabase.from('equivalencias').delete().neq(idColumn, '___NONE___');
+        if (delError) throw delError;
+
+        // 3. INSERTAR EN LOTES (Supabase/PostgREST recomienda lotes de ~500-1000)
+        const batchSize = 200;
+        for (let i = 0; i < groups.length; i += batchSize) {
+            const batch = groups.slice(i, i + batchSize).map(g => ({
+                [idColumn]: g.group_id.toString().toUpperCase().trim(),
+                colores: g.colores.map(c => c.toString().toUpperCase().trim())
+            }));
+            const { error: insError } = await supabase.from('equivalencias').insert(batch);
+            if (insError) throw insError;
+            console.log(`✅ Lote ${Math.floor(i/batchSize) + 1} insertado...`);
+        }
+
+        return { success: true };
+    } catch (err) {
+        console.error('Error en replaceEquivalenciesTable:', err);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * REEMPLAZO MASIVO: Borra todo de 'master_nks' e inserta nuevos datos.
+ * @param {Array} nks - Lista de strings o { nk_code, created_by }
+ */
+export async function replaceMasterNksTable(nks, user = 'admin') {
+    try {
+        console.log(`🚀 Iniciando reemplazo masivo de MASTER NKs (${nks.length} registros)...`);
+        
+        // 1. BORRAR TODO
+        const { error: delError } = await supabase.from('master_nks').delete().neq('nk_code', '___NONE___');
+        if (delError) throw delError;
+
+        // 2. INSERTAR EN LOTES
+        const batchSize = 500;
+        for (let i = 0; i < nks.length; i += batchSize) {
+            const batch = nks.slice(i, i + batchSize).map(nk => {
+                const code = typeof nk === 'string' ? nk : (nk.nk_code || nk.nk);
+                return { 
+                    nk_code: code.toString().toUpperCase().trim(),
+                    created_by: user 
+                };
+            });
+            const { error: insError } = await supabase.from('master_nks').insert(batch);
+            if (insError) throw insError;
+            console.log(`✅ Lote ${Math.floor(i/batchSize) + 1} insertado...`);
+        }
+
+        return { success: true };
+    } catch (err) {
+        console.error('Error en replaceMasterNksTable:', err);
         return { success: false, error: err.message };
     }
 }
